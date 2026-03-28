@@ -1,0 +1,180 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "Tubiate",
+      "tone": "Premium, Lucid, Powerful, High-Tech",
+      "metaphor": "The Crystal Prism - Finding the signal in the noise",
+      "theme_mode": "light"
+    },
+    "typography": {
+      "font_family": {
+        "heading": "Outfit, sans-serif",
+        "body": "Manrope, sans-serif",
+        "mono": "JetBrains Mono, monospace"
+      },
+      "weights": {
+        "heading": [500, 700],
+        "body": [400, 500, 600]
+      },
+      "scale": {
+        "h1": "text-5xl md:text-7xl tracking-tight font-bold",
+        "h2": "text-4xl md:text-5xl tracking-tight font-semibold",
+        "h3": "text-2xl md:text-3xl font-semibold",
+        "body_lg": "text-lg md:text-xl leading-relaxed text-slate-600",
+        "body": "text-base leading-relaxed text-slate-600",
+        "caption": "text-sm text-slate-500",
+        "label": "text-xs font-semibold tracking-wider uppercase text-slate-400"
+      },
+      "import_url": "https://fonts.googleapis.com/css2?family=Outfit:wght@500;700&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+    },
+    "colors": {
+      "palette": {
+        "brand": {
+          "primary_gradient": "bg-gradient-to-r from-indigo-600 to-purple-600",
+          "primary_solid": "#4F46E5",
+          "secondary_accent": "#06B6D4",
+          "human_accent": "#EC4899"
+        },
+        "neutral": {
+          "bg_main": "#FFFFFF",
+          "bg_muted": "#F8FAFC",
+          "bg_surface": "#FFFFFF",
+          "text_main": "#0F172A",
+          "text_muted": "#64748B",
+          "border_subtle": "#E2E8F0",
+          "border_strong": "#CBD5E1"
+        },
+        "functional": {
+          "success": "#10B981",
+          "warning": "#F59E0B",
+          "error": "#EF4444",
+          "info": "#3B82F6"
+        }
+      },
+      "gradients": {
+        "hero_mesh": "bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-100 via-purple-50 to-transparent",
+        "card_hover": "bg-gradient-to-br from-white to-slate-50",
+        "button_primary": "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700",
+        "text_gradient": "bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600"
+      }
+    },
+    "shadows": {
+      "float": "shadow-[0_8px_30px_rgb(0,0,0,0.04)]",
+      "glow": "shadow-[0_0_20px_rgba(79,70,229,0.3)]",
+      "glass": "shadow-[0_4px_30px_rgba(0,0,0,0.1)] backdrop-blur-md border border-white/30"
+    },
+    "radius": {
+      "card": "rounded-xl",
+      "button": "rounded-full",
+      "input": "rounded-lg"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "h-11 px-8 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all hover:scale-105 active:scale-95",
+      "secondary": "h-11 px-8 rounded-full bg-white border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 hover:border-slate-300 transition-all",
+      "ghost": "h-11 px-6 rounded-full text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all"
+    },
+    "cards": {
+      "base": "bg-white rounded-xl border border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-all hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:border-indigo-100",
+      "glass": "bg-white/70 backdrop-blur-xl border border-white/50 shadow-sm"
+    },
+    "inputs": {
+      "base": "h-11 rounded-lg bg-slate-50 border-transparent focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-400"
+    },
+    "navigation": {
+      "header": "fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100/50",
+      "sidebar": "fixed left-0 h-full w-64 bg-white/90 backdrop-blur-lg border-r border-slate-100"
+    }
+  },
+  "layout_strategies": {
+    "landing_page": {
+      "grid_type": "bento",
+      "spacing": "generous",
+      "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+      "hero_section": "min-h-[80vh] flex items-center justify-center relative overflow-hidden"
+    },
+    "dashboard": {
+      "grid_type": "dense",
+      "spacing": "compact",
+      "container": "p-6 space-y-6"
+    }
+  },
+  "assets": {
+    "images": {
+      "hero_abstract": {
+        "url": "https://images.unsplash.com/photo-1647998971512-f0d123199efa?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMDNkJTIwZ2xhc3MlMjBzaGFwZXMlMjBibHVlJTIwcHVycGxlJTIwZ3JhZGllbnQlMjBjbGVhbiUyMHdoaXRlJTIwYmFja2dyb3VuZHxlbnwwfHx8fDE3NzMzMzIzOTB8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Abstract liquid glass bubbles representing data flow",
+        "usage": "Hero section background or floating element"
+      },
+      "testimonial_1": {
+        "url": "https://images.unsplash.com/photo-1733231291465-d86afc9336ac?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBtYXJrZXRpbmclMjBtYW5hZ2VyJTIwcG9ydHJhaXQlMjB3aGl0ZSUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzczMzMyMzkxfDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Professional marketing manager",
+        "usage": "Testimonial card avatar"
+      },
+      "testimonial_2": {
+        "url": "https://images.unsplash.com/photo-1617332518455-bfd5a39476f1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBtYXJrZXRpbmclMjBtYW5hZ2VyJTIwcG9ydHJhaXQlMjB3aGl0ZSUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzczMzMyMzkxfDA&ixlib=rb-4.1.0&q=85",
+        "alt": "SaaS founder",
+        "usage": "Testimonial card avatar"
+      }
+    },
+    "icons": {
+      "library": "lucide-react",
+      "style": "stroke-width-1.5"
+    }
+  },
+  "animations": {
+    "libraries": [
+      "framer-motion",
+      "lenis"
+    ],
+    "patterns": {
+      "fade_up": {
+        "initial": { "opacity": 0, "y": 20 },
+        "animate": { "opacity": 1, "y": 0 },
+        "transition": { "duration": 0.5 }
+      },
+      "stagger_children": {
+        "container": {
+          "hidden": { "opacity": 0 },
+          "show": {
+            "opacity": 1,
+            "transition": { "staggerChildren": 0.1 }
+          }
+        },
+        "item": {
+          "hidden": { "opacity": 0, "y": 20 },
+          "show": { "opacity": 1, "y": 0 }
+        }
+      },
+      "tracing_beam": "Use framer-motion to animate a gradient border around pricing/feature cards on hover"
+    }
+  },
+  "implementation_steps": [
+    "Step 1: Update Tailwind Config with new fonts (Outfit), colors (indigo/purple), and animations.",
+    "Step 2: Install dependencies: framer-motion, @studio-freight/lenis (or lenis), clsx, tailwind-merge.",
+    "Step 3: Create base layout wrappers (GlassHeader, MeshBackground).",
+    "Step 4: Redesign Landing Page (Hero, Features Bento Grid, Pricing Tracing Beam).",
+    "Step 5: Redesign Dashboard (Floating Panels, Clean Tables, Glass Sidebar).",
+    "Step 6: Update Components (Buttons, Inputs, Cards) to match the 'Crystal Prism' style."
+  ],
+  "universal_guidelines": {
+    "do": [
+      "Use 'Outfit' for all Headings (h1-h3).",
+      "Use 'Manrope' for body text and small UI elements.",
+      "Use high-quality glassmorphism for sticky elements (Header, Sidebar).",
+      "Use the Blue-to-Purple gradient SPARINGLY (Buttons, Borders, Active States) - do not use full screen gradients.",
+      "Use generous padding (py-24, py-32) for landing page sections.",
+      "Use 1px borders with slate-100 or slate-200 for definition.",
+      "Use 'sonner' for toasts.",
+      "Use 'lucide-react' for icons."
+    ],
+    "dont": [
+      "DO NOT use generic centered text for everything.",
+      "DO NOT use 'Inter' for headings.",
+      "DO NOT use dark mode by default (unless user toggles it).",
+      "DO NOT use dense layouts on the landing page (give it breath).",
+      "DO NOT use standard browser scroll (use Lenis)."
+    ]
+  }
+}

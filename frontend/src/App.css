@@ -1,0 +1,144 @@
+/* App.css — Crystal Prism Design System */
+
+/* Dashboard background */
+.dashboard-bg {
+  @apply min-h-screen bg-slate-50/80;
+  background-image:
+    radial-gradient(ellipse at 0% 0%, rgba(99,102,241,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 100% 100%, rgba(139,92,246,0.04) 0%, transparent 50%);
+}
+
+/* Glass header */
+.glass-header {
+  @apply sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100/50;
+}
+
+/* Glass card */
+.glass-card {
+  @apply bg-white/70 backdrop-blur-xl border border-white/60 shadow-[0_2px_10px_rgb(0,0,0,0.03)] rounded-xl;
+}
+.glass-card:hover {
+  @apply shadow-[0_8px_30px_rgb(0,0,0,0.06)] border-indigo-100/50;
+}
+
+/* Primary gradient button override */
+.btn-gradient {
+  @apply rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all hover:scale-[1.02] active:scale-95;
+}
+
+/* Score badges */
+.score-high {
+  @apply bg-gradient-to-r from-emerald-500 to-emerald-600 text-white border-0;
+}
+.score-medium {
+  @apply bg-gradient-to-r from-amber-400 to-amber-500 text-white border-0;
+}
+.score-low {
+  @apply bg-slate-200 text-slate-600 border-0;
+}
+
+/* Tags */
+.tag {
+  @apply inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border;
+}
+.tag-topic {
+  @apply bg-indigo-50 text-indigo-600 border-indigo-100;
+}
+.tag-signal {
+  @apply bg-purple-50 text-purple-600 border-purple-100;
+}
+
+/* Table row hover */
+.table-row-hover {
+  @apply cursor-pointer transition-colors hover:bg-indigo-50/40;
+}
+
+/* Quota meter */
+.quota-meter {
+  @apply relative h-2.5 rounded-full bg-slate-100 overflow-hidden;
+}
+.quota-fill {
+  @apply absolute left-0 top-0 h-full rounded-full transition-all duration-500;
+}
+.quota-safe {
+  @apply bg-gradient-to-r from-emerald-400 to-emerald-500;
+}
+.quota-warning {
+  @apply bg-gradient-to-r from-amber-400 to-amber-500;
+}
+.quota-danger {
+  @apply bg-gradient-to-r from-red-400 to-red-500;
+}
+
+/* Filter bar */
+.filter-bar {
+  @apply flex flex-wrap items-center gap-3 px-5 py-3 border-b bg-slate-50/60;
+}
+
+/* Search panel */
+.search-panel {
+  @apply rounded-xl border bg-card p-6 space-y-6;
+}
+
+/* Results section */
+.results-section {
+  @apply rounded-xl border bg-card overflow-hidden;
+}
+
+/* Detail panel */
+.detail-panel {
+  @apply fixed inset-y-0 right-0 w-full max-w-lg bg-background border-l shadow-xl z-50 overflow-y-auto;
+}
+
+/* Score breakdown */
+.score-breakdown {
+  @apply grid grid-cols-2 gap-2.5;
+}
+.score-item {
+  @apply flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100;
+}
+
+/* Video list */
+.video-list {
+  @apply space-y-2;
+}
+.video-item {
+  @apply p-3 rounded-lg bg-slate-50 border border-slate-100 hover:bg-indigo-50/30 transition-colors;
+}
+
+/* Shortlist counter */
+.shortlist-counter {
+  @apply inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full bg-primary text-primary-foreground text-xs font-medium;
+}
+
+/* Empty state */
+.empty-state {
+  @apply flex flex-col items-center justify-center py-16 text-center;
+}
+
+/* Progress bar */
+.progress-bar {
+  @apply h-2 rounded-full bg-muted overflow-hidden;
+}
+.progress-fill {
+  @apply h-full rounded-full transition-all duration-300;
+}
+
+/* Skeleton loading */
+.skeleton {
+  @apply bg-muted animate-pulse rounded;
+}
+
+/* Legal pages */
+.legal-prose h2 {
+  @apply text-lg font-heading font-semibold text-slate-900 mt-10 mb-3;
+}
+.legal-prose p {
+  @apply text-slate-600 leading-relaxed mb-4;
+}
+.legal-prose ul {
+  @apply list-disc pl-6 space-y-1.5 text-slate-600 mb-4;
+}
+.legal-prose a {
+  @apply text-indigo-600 hover:text-indigo-700 hover:underline;
+}

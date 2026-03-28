@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --background: 0 0% 100%;
+        --foreground: 240 10% 3.9%;
+        --card: 0 0% 100%;
+        --card-foreground: 240 10% 3.9%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 240 10% 3.9%;
+        --primary: 243 57% 34%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 240 4.8% 95.9%;
+        --secondary-foreground: 240 5.9% 10%;
+        --muted: 240 4.8% 95.9%;
+        --muted-foreground: 240 3.8% 46.1%;
+        --accent: 226 100% 97%;
+        --accent-foreground: 243 57% 34%;
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 240 5.9% 90%;
+        --input: 240 5.9% 90%;
+        --ring: 243 57% 34%;
+        --radius: 0.5rem;
+
+        --success: 160 84% 39%;
+        --warning: 38 92% 50%;
+        --error: 0 84% 60%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+        font-family: 'Hanken Grotesk', sans-serif;
+    }
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Manrope', sans-serif;
+    }
+    .font-mono, code, pre, .data-cell {
+        font-family: 'JetBrains Mono', monospace;
+    }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Score badge colors */
+.score-high {
+    @apply bg-emerald-100 text-emerald-700 border-emerald-200;
+}
+
+.score-medium {
+    @apply bg-amber-100 text-amber-700 border-amber-200;
+}
+
+.score-low {
+    @apply bg-red-100 text-red-700 border-red-200;
+}
+
+/* Loading animation */
+@keyframes pulse-subtle {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+.animate-pulse-subtle {
+    animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* Table row hover effect */
+.table-row-hover {
+    @apply transition-colors hover:bg-muted/50 cursor-pointer;
+}
+
+/* Tag styles */
+.tag {
+    @apply inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium transition-colors;
+}
+
+.tag-topic {
+    @apply bg-indigo-50 text-indigo-700 border-indigo-200;
+}
+
+.tag-signal {
+    @apply bg-purple-50 text-purple-700 border-purple-200;
+}
+
+/* Data table specific styles */
+.data-table-cell {
+    @apply p-3 align-middle text-sm;
+}
+
+.data-table-header {
+    @apply h-11 px-3 text-left align-middle font-medium text-muted-foreground;
+}
+
+@layer base {
+    [data-debug-wrapper="true"] {
+        display: contents !important;
+    }
+}
