@@ -33,7 +33,7 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ.get('DB_NAME', 'affilitube_db')]
 
 # Auth config
 JWT_SECRET = os.environ.get("JWT_SECRET", str(uuid.uuid4()))
@@ -42,7 +42,7 @@ JWT_EXPIRY_HOURS = 72
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
-# Encryption for API keys at rest
+# Encryption for API keys at rest (kept for any future encrypted data)
 ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY", JWT_SECRET)
 _fernet_key = base64.urlsafe_b64encode(hashlib.sha256(ENCRYPTION_KEY.encode()).digest())
 fernet = Fernet(_fernet_key)
@@ -68,6 +68,256 @@ logger = logging.getLogger(__name__)
 
 # Pacific timezone for quota reset
 PACIFIC_TZ = ZoneInfo("America/Los_Angeles")
+
+# ==================== TIER SYSTEM ====================
+
+# User tiers
+TIERS = {
+    "free": {
+        "name": "Free",
+        "searches_per_month": 3,
+        "max_results_per_search": 10,
+        "csv_export": False,
+        "saved_searches": False,
+        "saved_reports": False
+    },
+    "pro": {
+        "name": "Pro",
+        "searches_per_month": None,  # Unlimited
+        "max_results_per_search": None,  # No limit
+        "csv_export": True,
+        "saved_searches": True,
+        "saved_reports": True
+    },
+    "appsumo": {
+        "name": "AppSumo",
+        "searches_per_month": None,  # Unlimited
+        "max_results_per_search": None,  # No limit
+        "csv_export": True,
+        "saved_searches": True,
+        "saved_reports": True
+    }
+}
+
+def get_user_tier(user: dict) -> str:
+    """Get user's tier, defaulting to free"""
+    return user.get("tier", "free")
+
+def get_tier_config(tier: str) -> dict:
+    """Get tier configuration"""
+    return TIERS.get(tier, TIERS["free"])
+
+async def check_search_limit(user: dict) -> dict:
+    """Check if user can perform a search based on their tier limits"""
+    tier = get_user_tier(user)
+    tier_config = get_tier_config(tier)
+    
+    # Pro and AppSumo have unlimited searches
+    if tier_config["searches_per_month"] is None:
+        return {"can_search": True, "searches_remaining": None, "tier": tier}
+    
+    # Get current month's search count
+    user_id = user["id"]
+    now = datetime.now(timezone.utc)
+    current_month = now.strftime("%Y-%m")
+    
+    # Check if we need to reset the count
+    user_data = await db.users.find_one({"id": user_id})
+    reset_date = user_data.get("search_count_reset_date", "")
+    
+    if not reset_date or not reset_date.startswith(current_month):
+        # Reset count for new month
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {"monthly_search_count": 0, "search_count_reset_date": current_month}}
+        )
+        search_count = 0
+    else:
+        search_count = user_data.get("monthly_search_count", 0)
+    
+    max_searches = tier_config["searches_per_month"]
+    can_search = search_count < max_searches
+    searches_remaining = max(0, max_searches - search_count)
+    
+    return {
+        "can_search": can_search,
+        "searches_used": search_count,
+        "searches_remaining": searches_remaining,
+        "max_searches": max_searches,
+        "tier": tier
+    }
+
+async def increment_search_count(user_id: str):
+    """Increment user's monthly search count"""
+    await db.users.update_one(
+        {"id": user_id},
+        {"$inc": {"monthly_search_count": 1}}
+    )
+
+# ==================== NICHE CONFIGURATION ====================
+
+NICHE_CONFIGS = {
+    "saas_software": {
+        "name": "SaaS & Software",
+        "icon": "💻",
+        "description": "Software tools, automation, no-code, integrations, app reviews",
+        "topic_keywords": [
+            'automation', 'workflow', 'zapier', 'make', 'n8n', 'no-code', 'nocode', 
+            'ai tools', 'integrations', 'api', 'saas', 'software', 'app review',
+            'productivity', 'tool review', 'notion', 'airtable', 'clickup'
+        ],
+        "affiliate_signal_keywords": [
+            'best tools', 'top tools', 'review', 'vs', 'comparison', 'automation tools', 
+            'ai tools', 'software review', 'tool stack', 'my tools', 'alternatives'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'discount code', 'coupon',
+            'deal', 'lifetime deal', 'appsumo', 'review', 'comparison', 'vs',
+            'best tools', 'top tools', 'my tech stack', 'tools i use'
+        ],
+        "commercial_keywords": [
+            'course', 'coaching', 'consulting', 'templates', 'download',
+            'training', 'community', 'gumroad', 'udemy', 'academy',
+            'masterclass', 'workshop', 'ebook', 'free guide', 'newsletter'
+        ],
+        "placeholder_examples": "automation tutorial\nbest no-code tools\nzapier alternative\nsaas review"
+    },
+    "fitness_health": {
+        "name": "Fitness & Health",
+        "icon": "💪",
+        "description": "Workouts, nutrition, supplements, fitness gear, health products",
+        "topic_keywords": [
+            'workout', 'fitness', 'gym', 'exercise', 'nutrition', 'diet', 'protein',
+            'supplements', 'weight loss', 'muscle', 'strength training', 'cardio',
+            'yoga', 'hiit', 'calisthenics', 'bodybuilding', 'health', 'wellness'
+        ],
+        "affiliate_signal_keywords": [
+            'best supplements', 'top protein', 'review', 'vs', 'comparison', 
+            'fitness gear', 'workout equipment', 'my supplements', 'what i eat'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'discount code', 'coupon',
+            'deal', 'my supplements', 'gear i use', 'review', 'comparison',
+            'best products', 'top picks', 'my stack'
+        ],
+        "commercial_keywords": [
+            'program', 'coaching', 'meal plan', 'training plan', 'download',
+            'ebook', 'community', 'challenge', 'transformation',
+            'online coaching', 'personal training', 'free guide'
+        ],
+        "placeholder_examples": "home workout routine\nbest protein powder\nfitness gear review\nweight loss tips"
+    },
+    "finance_investing": {
+        "name": "Finance & Investing",
+        "icon": "💰",
+        "description": "Investing, personal finance, crypto, trading, budgeting tools",
+        "topic_keywords": [
+            'investing', 'stocks', 'crypto', 'bitcoin', 'trading', 'finance',
+            'money', 'budget', 'passive income', 'dividend', 'real estate',
+            'wealth', 'retirement', 'savings', 'side hustle', 'financial freedom'
+        ],
+        "affiliate_signal_keywords": [
+            'best brokers', 'top apps', 'review', 'vs', 'comparison', 
+            'trading platform', 'budgeting app', 'my portfolio', 'how i invest'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'sign up bonus', 'free stock',
+            'deal', 'review', 'comparison', 'vs', 'best apps', 'top platforms',
+            'my broker', 'tools i use'
+        ],
+        "commercial_keywords": [
+            'course', 'coaching', 'community', 'mastermind', 'download',
+            'ebook', 'trading group', 'signals', 'newsletter',
+            'membership', 'patreon', 'free guide'
+        ],
+        "placeholder_examples": "passive income ideas\nstock market beginner\nbest budgeting app\ncrypto explained"
+    },
+    "ecommerce_amazon": {
+        "name": "Ecommerce & Amazon",
+        "icon": "🛒",
+        "description": "Product reviews, Amazon finds, dropshipping, online shopping",
+        "topic_keywords": [
+            'amazon', 'product review', 'unboxing', 'haul', 'dropshipping',
+            'ecommerce', 'shopify', 'online shopping', 'gadgets', 'tech review',
+            'best products', 'amazon finds', 'wish list', 'must haves'
+        ],
+        "affiliate_signal_keywords": [
+            'best products', 'top finds', 'review', 'vs', 'comparison', 
+            'amazon haul', 'unboxing', 'my favorites', 'must buy', 'worth it'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'amazon affiliate', 'links below',
+            'deal', 'review', 'comparison', 'best finds', 'top picks',
+            'my favorites', 'must haves'
+        ],
+        "commercial_keywords": [
+            'course', 'coaching', 'dropshipping course', 'ecommerce course',
+            'community', 'mentorship', 'download', 'ebook',
+            'free guide', 'shopify store'
+        ],
+        "placeholder_examples": "amazon finds\nbest products under $50\ndropshipping tutorial\nproduct review"
+    },
+    "online_courses": {
+        "name": "Online Courses & Education",
+        "icon": "📚",
+        "description": "Online learning, courses, skills, tutorials, certifications",
+        "topic_keywords": [
+            'online course', 'learn', 'tutorial', 'education', 'skillshare',
+            'udemy', 'coursera', 'programming', 'coding', 'design', 'language',
+            'certification', 'study', 'free course', 'masterclass'
+        ],
+        "affiliate_signal_keywords": [
+            'best courses', 'top platforms', 'review', 'vs', 'comparison', 
+            'course review', 'worth it', 'my experience', 'honest review'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'discount code', 'free trial',
+            'deal', 'review', 'comparison', 'best courses', 'top platforms',
+            'my recommendation'
+        ],
+        "commercial_keywords": [
+            'my course', 'coaching', 'mentorship', 'community', 'download',
+            'ebook', 'free guide', 'newsletter', 'patreon',
+            'membership', 'exclusive content'
+        ],
+        "placeholder_examples": "best online courses\nlearn python free\nskillshare review\nudemy vs coursera"
+    },
+    "marketing_tools": {
+        "name": "Marketing Tools",
+        "icon": "📈",
+        "description": "SEO, email marketing, social media tools, marketing software",
+        "topic_keywords": [
+            'seo', 'marketing', 'email marketing', 'social media', 'content marketing',
+            'digital marketing', 'facebook ads', 'google ads', 'copywriting',
+            'conversion', 'analytics', 'growth hacking', 'affiliate marketing'
+        ],
+        "affiliate_signal_keywords": [
+            'best seo tools', 'top marketing tools', 'review', 'vs', 'comparison', 
+            'email platform', 'my tools', 'marketing stack', 'how i rank'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'discount code', 'coupon',
+            'deal', 'review', 'comparison', 'vs', 'best tools', 'top platforms',
+            'my tech stack', 'tools i use'
+        ],
+        "commercial_keywords": [
+            'course', 'coaching', 'consulting', 'agency', 'download',
+            'templates', 'community', 'ebook', 'free guide', 'newsletter',
+            'masterclass', 'workshop'
+        ],
+        "placeholder_examples": "best SEO tools\nemail marketing tutorial\nsocial media strategy\nahrefs review"
+    }
+}
+
+def get_niche_config(niche: str) -> dict:
+    """Get niche configuration, defaulting to SaaS if not found"""
+    return NICHE_CONFIGS.get(niche, NICHE_CONFIGS["saas_software"])
 
 # ==================== QUOTA TRACKING ====================
 
@@ -179,11 +429,9 @@ class BugReportInput(BaseModel):
     steps_to_reproduce: str = ""
     severity: str = "medium"
 
-class ApiKeyInput(BaseModel):
-    api_key: str
-
 class SearchFilters(BaseModel):
     keywords: List[str]
+    niche: str = "saas_software"  # NEW: Niche parameter
     min_subscribers: int = 2000
     max_subscribers: int = 100000
     uploaded_within_days: int = 90
@@ -198,6 +446,7 @@ class SearchFilters(BaseModel):
 class EnrichRequest(BaseModel):
     channel_ids: List[str]
     channel_metadata: Dict[str, Dict] = {}
+    niche: str = "saas_software"  # NEW: Niche parameter
     min_subscribers: int = 2000
     max_subscribers: int = 100000
     videos_to_scan: int = 5
@@ -354,16 +603,21 @@ class SearchReport(BaseModel):
 
 # ==================== YOUTUBE SERVICE ====================
 
-def get_youtube_service(api_key: str):
+def get_youtube_service():
+    """Get YouTube service using the backend API key"""
+    api_key = os.environ.get("YOUTUBE_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="YouTube API key not configured on server")
     return build("youtube", "v3", developerKey=api_key, cache_discovery=False)
 
 # ==================== SCORING ENGINE ====================
 
+# Default keywords (SaaS niche) - kept for backwards compatibility
 TOPIC_KEYWORDS = ['automation', 'workflow', 'zapier', 'make', 'n8n', 'no-code', 'nocode', 'ai tools', 'integrations', 'api']
 TUTORIAL_KEYWORDS = ['tutorial', 'how to', 'build', 'setup', 'guide', 'learn', 'step by step', 'beginner']
 AFFILIATE_SIGNAL_KEYWORDS = ['best tools', 'top tools', 'review', 'vs', 'comparison', 'automation tools', 'ai tools', 'software review']
 
-# Extended affiliate detection keywords
+# Extended affiliate detection keywords (default)
 AFFILIATE_LANGUAGE_KEYWORDS = [
     'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
     'use my link', 'link in description', 'discount code', 'coupon',
@@ -397,11 +651,12 @@ BRAND_CONTACT_KEYWORDS = [
 # Email regex pattern
 EMAIL_PATTERN = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 
-def calculate_topic_score(channel_name: str, description: str, video_titles: List[str]) -> tuple:
+def calculate_topic_score(channel_name: str, description: str, video_titles: List[str], niche_keywords: List[str] = None) -> tuple:
     """Calculate topic relevance score (0-30) and return matched tags"""
+    keywords = niche_keywords if niche_keywords else TOPIC_KEYWORDS
     text = f"{channel_name} {description} {' '.join(video_titles)}".lower()
     matched = []
-    for keyword in TOPIC_KEYWORDS:
+    for keyword in keywords:
         if keyword in text:
             matched.append(keyword)
     score = min(30, len(matched) * 6)
@@ -465,24 +720,26 @@ def calculate_contactability_score(public_links: Dict[str, str]) -> int:
         score += 2
     return min(10, score)
 
-def detect_affiliate_signals(channel_name: str, description: str, video_titles: List[str]) -> List[str]:
+def detect_affiliate_signals(channel_name: str, description: str, video_titles: List[str], niche_keywords: List[str] = None) -> List[str]:
     """Detect affiliate likelihood signals"""
+    keywords = niche_keywords if niche_keywords else AFFILIATE_SIGNAL_KEYWORDS
     text = f"{channel_name} {description} {' '.join(video_titles)}".lower()
     signals = []
-    for keyword in AFFILIATE_SIGNAL_KEYWORDS:
+    for keyword in keywords:
         if keyword in text:
             signals.append(keyword)
     return signals
 
-def detect_affiliate_language(description: str, video_titles: List[str], notes: str = "") -> tuple:
+def detect_affiliate_language(description: str, video_titles: List[str], notes: str = "", niche_keywords: List[str] = None) -> tuple:
     """
     Detect affiliate/review intent keywords.
     Returns: (matched_keywords, count, has_affiliate_language, does_reviews, has_link_in_bio)
     """
+    keywords = niche_keywords if niche_keywords else AFFILIATE_LANGUAGE_KEYWORDS
     text = f"{description} {' '.join(video_titles)} {notes}".lower()
     matched = []
     
-    for keyword in AFFILIATE_LANGUAGE_KEYWORDS:
+    for keyword in keywords:
         if keyword in text:
             matched.append(keyword)
     
@@ -493,15 +750,16 @@ def detect_affiliate_language(description: str, video_titles: List[str], notes: 
     
     return matched, len(matched), has_affiliate, does_reviews, has_link_in_bio
 
-def detect_commercial_signals(description: str, notes: str = "") -> tuple:
+def detect_commercial_signals(description: str, notes: str = "", niche_keywords: List[str] = None) -> tuple:
     """
     Detect commercial/product signals.
     Returns: (matched_keywords, count, product_monetization)
     """
+    keywords = niche_keywords if niche_keywords else COMMERCIAL_KEYWORDS
     text = f"{description} {notes}".lower()
     matched = []
     
-    for keyword in COMMERCIAL_KEYWORDS:
+    for keyword in keywords:
         if keyword in text:
             matched.append(keyword)
     
@@ -710,11 +968,23 @@ async def register(data: AuthRegister):
         "email": data.email.lower(),
         "password_hash": pwd_context.hash(data.password),
         "role": "user",
+        "tier": "free",  # NEW: Default tier
+        "monthly_search_count": 0,
+        "search_count_reset_date": datetime.now(timezone.utc).strftime("%Y-%m"),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user)
     token = create_token(user_id, data.email.lower())
-    return {"token": token, "user": {"id": user_id, "email": data.email.lower(), "role": "user", "has_paid": False}}
+    return {
+        "token": token, 
+        "user": {
+            "id": user_id, 
+            "email": data.email.lower(), 
+            "role": "user", 
+            "tier": "free",
+            "has_paid": False  # Keep for backwards compatibility
+        }
+    }
 
 @api_router.post("/auth/login")
 async def login(data: AuthLogin):
@@ -722,11 +992,25 @@ async def login(data: AuthLogin):
     if not user or not pwd_context.verify(data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_token(user["id"], user["email"])
-    return {"token": token, "user": {"id": user["id"], "email": user["email"], "role": user.get("role", "user"), "has_paid": user.get("has_paid", False)}}
+    tier = user.get("tier", "free")
+    # Backwards compatibility: has_paid = true if tier is pro or appsumo
+    has_paid = tier in ["pro", "appsumo"]
+    return {
+        "token": token, 
+        "user": {
+            "id": user["id"], 
+            "email": user["email"], 
+            "role": user.get("role", "user"), 
+            "tier": tier,
+            "has_paid": has_paid
+        }
+    }
 
 @api_router.get("/auth/me")
 async def get_me(user=Depends(get_current_user)):
-    user["has_paid"] = user.get("has_paid", False)
+    tier = user.get("tier", "free")
+    user["tier"] = tier
+    user["has_paid"] = tier in ["pro", "appsumo"]  # Backwards compatibility
     return user
 
 @api_router.post("/auth/request-password-reset")
@@ -760,17 +1044,17 @@ async def request_password_reset(data: PasswordResetRequest):
         msg = MIMEMultipart()
         msg["From"] = smtp_user
         msg["To"] = data.email.lower()
-        msg["Subject"] = "Tubiate — Password Reset Code"
+        msg["Subject"] = "Affilitube — Password Reset Code"
 
         body = f"""Hi,
 
-You requested a password reset for your Tubiate account.
+You requested a password reset for your Affilitube account.
 
 Your reset code is: {reset_code}
 
 This code expires in 15 minutes. If you didn't request this, you can safely ignore this email.
 
-— Tubiate"""
+— Affilitube"""
         msg.attach(MIMEText(body, "plain"))
 
         with smtplib.SMTP(smtp_host, smtp_port) as server:
@@ -809,7 +1093,7 @@ async def reset_password(data: PasswordResetConfirm):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Tubiate API"}
+    return {"message": "Affilitube API"}
 
 # Bug report endpoint
 def send_bug_report_email(user_email: str, subject: str, description: str, steps: str, severity: str):
@@ -822,9 +1106,9 @@ def send_bug_report_email(user_email: str, subject: str, description: str, steps
     msg = MIMEMultipart()
     msg["From"] = smtp_user
     msg["To"] = to_email
-    msg["Subject"] = f"[Tubiate Bug] [{severity.upper()}] {subject}"
+    msg["Subject"] = f"[Affilitube Bug] [{severity.upper()}] {subject}"
 
-    body = f"""Bug Report from Tubiate Dashboard
+    body = f"""Bug Report from Affilitube Dashboard
 
 Reported by: {user_email}
 Severity: {severity}
@@ -872,51 +1156,41 @@ async def submit_bug_report(report: BugReportInput, user=Depends(get_current_use
 
     return {"success": True, "message": "Bug report submitted. Thank you!"}
 
-# Settings endpoints
-@api_router.post("/settings/api-key")
-async def save_api_key(input: ApiKeyInput, skip_validation: bool = False, user=Depends(get_current_user)):
-    """Save YouTube API key"""
-    validated = False
-    
-    if not skip_validation and input.api_key.startswith("AIza"):
-        try:
-            youtube = get_youtube_service(input.api_key)
-            youtube.channels().list(part="snippet", id="UC_x5XG1OV2P6uZZ5FSM9Ttw").execute()
-            validated = True
-        except HttpError as e:
-            if "keyInvalid" in str(e) or "API key not valid" in str(e):
-                raise HTTPException(status_code=400, detail="Invalid API key. Please check your key and try again.")
-            validated = True
-        except Exception as e:
-            logger.warning(f"API key validation error: {e}")
-    
-    await db.settings.update_one(
-        {"key": "youtube_api_key", "user_id": user["id"]},
-        {"$set": {
-            "value": encrypt_value(input.api_key),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "validated": validated,
-            "user_id": user["id"]
-        }},
-        upsert=True
-    )
-    return {"success": True, "message": "API key saved successfully", "validated": validated}
+# Niche endpoints
+@api_router.get("/niches")
+async def get_niches():
+    """Get all available niches with their configurations"""
+    niches = []
+    for key, config in NICHE_CONFIGS.items():
+        niches.append({
+            "key": key,
+            "name": config["name"],
+            "icon": config["icon"],
+            "description": config["description"],
+            "placeholder_examples": config["placeholder_examples"]
+        })
+    return {"niches": niches}
 
-@api_router.get("/settings/api-key")
-async def get_api_key_status(user=Depends(get_current_user)):
-    """Check if API key exists"""
-    setting = await db.settings.find_one({"key": "youtube_api_key", "user_id": user["id"]}, {"_id": 0})
-    if setting and setting.get("value"):
-        return {"exists": True, "updated_at": setting.get("updated_at")}
-    return {"exists": False}
-
-@api_router.get("/settings/api-key/value")
-async def get_api_key_value(user=Depends(get_current_user)):
-    """Get the actual API key value"""
-    setting = await db.settings.find_one({"key": "youtube_api_key", "user_id": user["id"]}, {"_id": 0})
-    if setting and setting.get("value"):
-        return {"api_key": decrypt_value(setting["value"])}
-    raise HTTPException(status_code=404, detail="API key not configured")
+# User tier/usage endpoint
+@api_router.get("/user/usage")
+async def get_user_usage(user=Depends(get_current_user)):
+    """Get user's tier and usage information"""
+    tier = get_user_tier(user)
+    tier_config = get_tier_config(tier)
+    search_limit_info = await check_search_limit(user)
+    
+    return {
+        "tier": tier,
+        "tier_name": tier_config["name"],
+        "searches_used": search_limit_info.get("searches_used", 0),
+        "searches_remaining": search_limit_info.get("searches_remaining"),
+        "max_searches": search_limit_info.get("max_searches"),
+        "max_results_per_search": tier_config["max_results_per_search"],
+        "csv_export": tier_config["csv_export"],
+        "saved_searches": tier_config["saved_searches"],
+        "saved_reports": tier_config["saved_reports"],
+        "is_unlimited": tier_config["searches_per_month"] is None
+    }
 
 # Quota estimation endpoint
 @api_router.post("/quota/estimate", response_model=QuotaEstimate)
@@ -1004,13 +1278,23 @@ async def reset_quota_tracking(user=Depends(get_current_user)):
 @api_router.post("/search")
 async def search_channels(filters: SearchFilters, user=Depends(get_current_user)):
     """Search for YouTube channels based on keywords"""
-    # Get user's API key
-    setting = await db.settings.find_one({"key": "youtube_api_key", "user_id": user["id"]}, {"_id": 0})
-    if not setting or not setting.get("value"):
-        raise HTTPException(status_code=400, detail="YouTube API key not configured")
+    # Check tier-based search limits
+    search_limit = await check_search_limit(user)
+    if not search_limit["can_search"]:
+        tier_config = get_tier_config(search_limit["tier"])
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Monthly search limit reached ({tier_config['searches_per_month']} searches). Upgrade to Pro for unlimited searches."
+        )
     
-    api_key = decrypt_value(setting["value"])
-    youtube = get_youtube_service(api_key)
+    # Get YouTube service with backend API key
+    try:
+        youtube = get_youtube_service()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"YouTube service error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to initialize YouTube service")
     
     # Track channels with their sources
     channels_map = {}  # channel_id -> {keywords: [], sources: set()}
@@ -1081,9 +1365,18 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
                             detail=f"YouTube API daily quota exceeded. Resets in {reset_info['hours']}h {reset_info['minutes']}m at midnight Pacific Time."
                         )
         
+        # Apply free tier result limit
+        tier = get_user_tier(user)
+        tier_config = get_tier_config(tier)
+        channel_ids = list(channels_map.keys())
+        
+        if tier_config["max_results_per_search"] is not None:
+            channel_ids = channel_ids[:tier_config["max_results_per_search"]]
+        
         # Determine search source for each channel
         channel_metadata = {}
-        for ch_id, data in channels_map.items():
+        for ch_id in channel_ids:
+            data = channels_map[ch_id]
             sources = data["sources"]
             if "channel_search" in sources and "video_search" in sources:
                 source = "both"
@@ -1096,10 +1389,15 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
                 "search_source": source
             }
         
+        # Increment search count for free tier users
+        await increment_search_count(user["id"])
+        
         return {
-            "channel_ids": list(channels_map.keys()),
+            "channel_ids": channel_ids,
             "channel_metadata": channel_metadata,
-            "total_found": len(channels_map)
+            "total_found": len(channel_ids),
+            "total_before_limit": len(channels_map),
+            "niche": filters.niche
         }
     
     except HTTPException:
@@ -1112,12 +1410,21 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
 @api_router.post("/channels/enrich")
 async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
     """Enrich channels with statistics and scoring"""
-    setting = await db.settings.find_one({"key": "youtube_api_key", "user_id": user["id"]}, {"_id": 0})
-    if not setting or not setting.get("value"):
-        raise HTTPException(status_code=400, detail="YouTube API key not configured")
+    # Get YouTube service with backend API key
+    try:
+        youtube = get_youtube_service()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"YouTube service error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to initialize YouTube service")
     
-    api_key = decrypt_value(setting["value"])
-    youtube = get_youtube_service(api_key)
+    # Get niche-specific keywords
+    niche_config = get_niche_config(req.niche)
+    niche_topic_keywords = niche_config["topic_keywords"]
+    niche_affiliate_signal_keywords = niche_config["affiliate_signal_keywords"]
+    niche_affiliate_language_keywords = niche_config["affiliate_language_keywords"]
+    niche_commercial_keywords = niche_config["commercial_keywords"]
     
     channel_ids = req.channel_ids
     channel_metadata = req.channel_metadata
@@ -1277,11 +1584,12 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     # Extract public links
                     public_links = extract_public_links(snippet.get("description", ""), branding_links)
                     
-                    # Calculate scores
+                    # Calculate scores using niche-specific keywords
                     score_topic, topic_tags = calculate_topic_score(
                         snippet.get("title", ""),
                         snippet.get("description", ""),
-                        video_titles
+                        video_titles,
+                        niche_topic_keywords
                     )
                     score_tutorial = calculate_tutorial_score(
                         snippet.get("title", ""),
@@ -1296,31 +1604,32 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     score_total = (score_topic + score_tutorial + score_activity + 
                                    score_subscriber + score_engagement + score_contactability)
                     
-                    # Detect affiliate signals (original)
+                    # Detect affiliate signals using niche-specific keywords
                     affiliate_signals = detect_affiliate_signals(
                         snippet.get("title", ""),
                         snippet.get("description", ""),
-                        video_titles
+                        video_titles,
+                        niche_affiliate_signal_keywords
                     )
                     
-                    # NEW: Extended affiliate language detection
+                    # Extended affiliate language detection with niche keywords
                     description = snippet.get("description", "")
                     aff_keywords, aff_count, has_affiliate_language, does_reviews, has_link_in_bio = detect_affiliate_language(
-                        description, video_titles, ""
+                        description, video_titles, "", niche_affiliate_language_keywords
                     )
                     
-                    # NEW: Commercial signals detection
+                    # Commercial signals detection with niche keywords
                     commercial_signals, commercial_count, product_monetization = detect_commercial_signals(
-                        description, ""
+                        description, "", niche_commercial_keywords
                     )
                     
-                    # NEW: Brand contact signals detection
+                    # Brand contact signals detection
                     brand_contact_signals, brand_contact_count = detect_brand_contact_signals(description)
                     
-                    # NEW: Business email detection
+                    # Business email detection
                     has_business_email, business_email = detect_business_email(description)
                     
-                    # NEW: Affiliate platform link detection
+                    # Affiliate platform link detection
                     # Combine channel description + video descriptions for scanning
                     full_text_to_scan = description + " " + video_descriptions_text
                     affiliate_platform_links = {}
@@ -1461,6 +1770,12 @@ async def update_notes(channel_id: str, input: UpdateNotesInput, user=Depends(ge
 @api_router.post("/search-history")
 async def save_search_history(input: SaveSearchInput, user=Depends(get_current_user)):
     """Save a search to history"""
+    # Check tier permissions
+    tier = get_user_tier(user)
+    tier_config = get_tier_config(tier)
+    if not tier_config["saved_searches"]:
+        raise HTTPException(status_code=403, detail="Upgrade to Pro to save searches")
+    
     item = SearchHistoryItem(
         name=input.name,
         keywords=input.keywords,
@@ -1500,6 +1815,12 @@ async def mark_search_used(search_id: str, results_count: Optional[int] = None, 
 @api_router.post("/search-reports")
 async def save_search_report(input: SaveReportInput, user=Depends(get_current_user)):
     """Save a complete search report with all results"""
+    # Check tier permissions
+    tier = get_user_tier(user)
+    tier_config = get_tier_config(tier)
+    if not tier_config["saved_reports"]:
+        raise HTTPException(status_code=403, detail="Upgrade to Pro to save reports")
+    
     report = SearchReport(
         name=input.name,
         keywords=input.keywords,
@@ -1540,6 +1861,12 @@ async def delete_search_report(report_id: str, user=Depends(get_current_user)):
 @api_router.post("/export/csv")
 async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
     """Export channels to CSV"""
+    # Check tier permissions
+    tier = get_user_tier(user)
+    tier_config = get_tier_config(tier)
+    if not tier_config["csv_export"]:
+        raise HTTPException(status_code=403, detail="Upgrade to Pro to export CSV")
+    
     channels = await db.channels.find(
         {"channel_id": {"$in": channel_ids}, "user_id": user["id"]},
         {"_id": 0}
@@ -1631,30 +1958,36 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=youtube_prospects_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+        headers={"Content-Disposition": f"attachment; filename=affilitube_prospects_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
     )
 
 class CheckoutRequest(BaseModel):
-    pass
+    plan: str = "pro_monthly"  # pro_monthly or pro_yearly
 
 # ==================== STRIPE CHECKOUT ====================
 
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY")
-STRIPE_PRICE_ID = "price_1TBCOiPnblls1SrQj1rGEBJP"
-LIFETIME_DEAL_CURRENCY = "usd"
+
+# Placeholder Stripe Price IDs - Replace with actual IDs once created
+STRIPE_PRICE_IDS = {
+    "pro_monthly": "price_PLACEHOLDER_PRO_MONTHLY_39",  # $39/month
+    "pro_yearly": "price_PLACEHOLDER_PRO_YEARLY_299",   # $299/year
+}
 
 @api_router.post("/checkout/create-session")
 async def create_checkout_session(data: CheckoutRequest, request: Request, user=Depends(get_current_user)):
     if not STRIPE_API_KEY:
         raise HTTPException(status_code=500, detail="Stripe not configured")
 
-    # Check if user already paid
-    existing_payment = await db.payment_transactions.find_one({
-        "user_id": user["id"],
-        "payment_status": "paid"
-    })
-    if existing_payment:
-        raise HTTPException(status_code=400, detail="You already have lifetime access")
+    # Get price ID for selected plan
+    price_id = STRIPE_PRICE_IDS.get(data.plan)
+    if not price_id:
+        raise HTTPException(status_code=400, detail="Invalid plan selected")
+
+    # Check if user already has Pro access
+    tier = get_user_tier(user)
+    if tier in ["pro", "appsumo"]:
+        raise HTTPException(status_code=400, detail="You already have Pro access")
 
     origin = request.headers.get("origin") or str(request.base_url).rstrip("/")
     webhook_url = f"{str(request.base_url).rstrip('/')}/api/webhook/stripe"
@@ -1664,14 +1997,15 @@ async def create_checkout_session(data: CheckoutRequest, request: Request, user=
     cancel_url = f"{origin}/pricing"
 
     checkout_request = CheckoutSessionRequest(
-        stripe_price_id=STRIPE_PRICE_ID,
+        stripe_price_id=price_id,
         quantity=1,
         success_url=success_url,
         cancel_url=cancel_url,
         metadata={
             "user_id": user["id"],
             "user_email": user["email"],
-            "product": "tubiate_lifetime",
+            "product": f"affilitube_{data.plan}",
+            "plan": data.plan
         }
     )
 
@@ -1682,10 +2016,10 @@ async def create_checkout_session(data: CheckoutRequest, request: Request, user=
         "session_id": session.session_id,
         "user_id": user["id"],
         "user_email": user["email"],
-        "stripe_price_id": STRIPE_PRICE_ID,
-        "currency": LIFETIME_DEAL_CURRENCY,
+        "stripe_price_id": price_id,
+        "plan": data.plan,
         "payment_status": "pending",
-        "product": "tubiate_lifetime",
+        "product": f"affilitube_{data.plan}",
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
@@ -1714,11 +2048,16 @@ async def get_checkout_status(session_id: str, request: Request, user=Depends(ge
         {"$set": {"payment_status": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
 
-    # If paid, mark user as having lifetime access (only once)
+    # If paid, upgrade user to Pro tier
     if new_status == "paid":
         await db.users.update_one(
-            {"id": user["id"], "has_paid": {"$ne": True}},
-            {"$set": {"has_paid": True, "paid_at": datetime.now(timezone.utc).isoformat()}}
+            {"id": user["id"], "tier": {"$ne": "pro"}},
+            {"$set": {
+                "tier": "pro", 
+                "has_paid": True,  # Backwards compatibility
+                "paid_at": datetime.now(timezone.utc).isoformat(),
+                "subscription_plan": txn.get("plan", "pro_monthly")
+            }}
         )
 
     return {
@@ -1750,10 +2089,16 @@ async def stripe_webhook(request: Request):
                     {"$set": {"payment_status": "paid", "updated_at": datetime.now(timezone.utc).isoformat()}}
                 )
                 user_id = webhook_response.metadata.get("user_id") or txn.get("user_id")
+                plan = webhook_response.metadata.get("plan") or txn.get("plan", "pro_monthly")
                 if user_id:
                     await db.users.update_one(
-                        {"id": user_id, "has_paid": {"$ne": True}},
-                        {"$set": {"has_paid": True, "paid_at": datetime.now(timezone.utc).isoformat()}}
+                        {"id": user_id, "tier": {"$ne": "pro"}},
+                        {"$set": {
+                            "tier": "pro", 
+                            "has_paid": True,
+                            "paid_at": datetime.now(timezone.utc).isoformat(),
+                            "subscription_plan": plan
+                        }}
                     )
         return {"status": "ok"}
     except Exception as e:
@@ -1777,13 +2122,16 @@ async def seed_admin():
     if not admin:
         admin_user = {
             "id": str(uuid.uuid4()),
-            "email": "admin@tubiate.com",
+            "email": "admin@affilitube.com",
             "password_hash": pwd_context.hash("admin123!"),
             "role": "admin",
+            "tier": "pro",  # Admin gets pro tier
+            "monthly_search_count": 0,
+            "search_count_reset_date": datetime.now(timezone.utc).strftime("%Y-%m"),
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(admin_user)
-        logger.info("Admin user seeded: admin@tubiate.com")
+        logger.info("Admin user seeded: admin@affilitube.com")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

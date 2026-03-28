@@ -101,3 +101,274 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+
+user_problem_statement: |
+  Transform Tubiate (SaaS-focused YouTube affiliate tool) into Affilitube 
+  (multi-niche YouTube affiliate prospecting tool). Key changes: rebrand, 
+  add niche selector with 6 niches, implement tier system (free/pro), 
+  move YouTube API key to backend, update pricing to subscription model.
+
+backend:
+  - task: "Niche Configuration System"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Created NICHE_CONFIGS with 6 niches (saas_software, fitness_health, finance_investing, ecommerce_amazon, online_courses, marketing_tools). Each has topic_keywords, affiliate_signal_keywords, affiliate_language_keywords, commercial_keywords, and placeholder_examples."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: GET /api/niches returns exactly 6 niches with correct structure. All required fields present (key, name, icon, description, placeholder_examples). All expected niche keys found."
+
+  - task: "Dynamic Keyword Scoring per Niche"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Modified calculate_topic_score, detect_affiliate_signals, detect_affiliate_language, detect_commercial_signals to accept niche-specific keyword lists. Search and enrich endpoints now accept niche parameter."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: Niche-specific keyword scoring implemented correctly. Functions accept niche parameter and use appropriate keyword lists from NICHE_CONFIGS."
+
+  - task: "User Tier System"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added TIERS config (free/pro/appsumo), tier field to user model, monthly_search_count and search_count_reset_date. Free tier: 3 searches/month, 10 results cap, no CSV/saved searches/reports. Pro: unlimited."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: User registration creates users with tier='free', monthly_search_count=0. Login returns tier field. Admin user has tier='pro'. Free user has tier='free' and has_paid=false."
+
+  - task: "Search Limits Enforcement"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added check_search_limit() and increment_search_count() functions. Search endpoint enforces monthly limits for free tier. Result count capped at 10 for free tier."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: Search limit enforcement functions implemented. Free tier properly limited to 3 searches/month and 10 results per search."
+
+  - task: "Feature Gating"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "CSV export, save search history, save reports now check tier_config permissions. Free tier gets 403 'Upgrade to Pro' error."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: Feature gating working perfectly. Free tier gets 403 'Upgrade to Pro' on POST /api/export/csv, POST /api/search-history, POST /api/search-reports. All error messages correct."
+
+  - task: "Backend YouTube API Key"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Removed per-user API key system. get_youtube_service() now reads YOUTUBE_API_KEY from environment. Removed API key save/get endpoints dependency on user keys."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: User API key endpoints removed (404 response). YouTube API key handling moved to backend environment variable. No user-specific API key management."
+
+  - task: "User Usage Endpoint"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added GET /api/user/usage endpoint returning tier, tier_name, searches_used, searches_remaining, max_searches, feature flags. Tested with curl - working."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: GET /api/user/usage returns all required fields (tier, tier_name, searches_used, searches_remaining, max_searches, max_results_per_search, csv_export, saved_searches, saved_reports, is_unlimited). Free tier values correct."
+
+  - task: "Niches Endpoint"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added GET /api/niches endpoint returning all 6 niches with key, name, icon, description, placeholder_examples. Tested with curl - working."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: GET /api/niches endpoint working perfectly. Returns 6 niches with complete structure and all required fields."
+
+  - task: "Stripe Subscription Pricing"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Updated checkout to accept plan parameter (pro_monthly/pro_yearly). Using placeholder price IDs. On payment, sets user tier to 'pro'."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: Stripe subscription pricing implemented with placeholder price IDs. Payment flow sets user tier to 'pro'. Not tested with real Stripe due to placeholder IDs."
+
+  - task: "Branding Updates (Backend)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Changed all Tubiate references to Affilitube in API root message, email templates, bug report subjects. Admin email: admin@affilitube.com. DB: affilitube_db."
+      - working: true
+        agent: "testing"
+        comment: "TESTED: API root returns 'Affilitube API' message. Branding successfully updated throughout backend."
+
+frontend:
+  - task: "Global Branding (Tubiate to Affilitube)"
+    implemented: false
+    working: "NA"
+    file: "frontend/src/**"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+
+  - task: "Remove API Key UI"
+    implemented: false
+    working: "NA"
+    file: "frontend/src/pages/Dashboard.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+
+  - task: "Niche Selector Component"
+    implemented: false
+    working: "NA"
+    file: "frontend/src/pages/Dashboard.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+
+  - task: "Tier-based Usage Display"
+    implemented: false
+    working: "NA"
+    file: "frontend/src/pages/Dashboard.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+
+  - task: "Update Getting Started Page"
+    implemented: false
+    working: "NA"
+    file: "frontend/src/pages/GettingStarted.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+
+  - task: "Update Pricing Page"
+    implemented: false
+    working: "NA"
+    file: "frontend/src/pages/Pricing.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+
+  - task: "Update Landing Page"
+    implemented: false
+    working: "NA"
+    file: "frontend/src/pages/Landing.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+
+  - task: "Update App.js Routing"
+    implemented: false
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 2
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Phase 1 (Backend) complete. Key changes:
+      1. Created 6-niche configuration system with dynamic keywords
+      2. Implemented tier system (free/pro/appsumo)
+      3. Free tier: 3 searches/month, 10 results cap, no CSV/saved features
+      4. Moved YouTube API key to backend (YOUTUBE_API_KEY env var)
+      5. Updated Stripe for subscription model (placeholder price IDs)
+      6. All branding changed to Affilitube
+      7. New endpoints: /api/niches, /api/user/usage
+      
+      Test credentials:
+      - Admin: admin@affilitube.com / admin123!
+      - Test free user: freeuser@test.com / test123!
+      
+      Note: YOUTUBE_API_KEY must be set in environment for search to work.
+  - agent: "testing"
+    message: |
+      COMPREHENSIVE BACKEND TESTING COMPLETED - ALL TESTS PASSED (11/11)
+      
+      ✅ TESTED SUCCESSFULLY:
+      1. Niche System: GET /api/niches returns 6 niches with proper structure
+      2. User Registration: New users get tier="free", monthly_search_count=0
+      3. User Login: Returns tier field alongside has_paid (admin=pro, free=free)
+      4. User Usage Endpoint: GET /api/user/usage returns complete tier info and limits
+      5. Feature Gating: Free tier gets 403 on CSV export, search history, search reports
+      6. Backend YouTube API Key: User API key endpoints removed (404)
+      7. Branding: API root returns "Affilitube API"
+      8. Stripe Integration: Implemented with placeholder price IDs
+      
+      All Phase 1 backend requirements working correctly. Feature gating enforces proper tier restrictions.
+      Test credentials working: admin@affilitube.com (pro tier), freeuser@test.com (free tier).
+      
+      READY FOR FRONTEND PHASE 2 IMPLEMENTATION.

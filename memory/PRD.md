@@ -1,15 +1,15 @@
-# Tubiate — YouTube Affiliate Prospect Finder PRD
+# Affilitube — YouTube Affiliate Prospect Finder PRD
 
 ## Original Problem Statement
-Build a web app that identifies YouTube channels likely to be good affiliates for an automation/AI workflow product.
+Build a multi-niche web app that identifies YouTube channels likely to be good affiliates for any brand, marketer, or founder.
 
 ## Architecture
 ```
 Frontend (React + Tailwind + Shadcn UI + Framer Motion)
   ├── Landing (/)
-  ├── Pricing (/pricing) — Stripe checkout
+  ├── Pricing (/pricing) — Stripe checkout (Free/Pro tiers)
   ├── Auth (/login, /signup, /forgot-password)
-  ├── Dashboard (/dashboard) — Prospect Finder tool
+  ├── Dashboard (/dashboard) — Prospect Finder tool with Niche Selector
   ├── Outreach (/dashboard/outreach) — Email templates
   ├── Getting Started (/dashboard/getting-started) — Tutorials & guides
   ├── Checkout Success (/checkout/success)
@@ -17,44 +17,81 @@ Frontend (React + Tailwind + Shadcn UI + Framer Motion)
 
 Backend (FastAPI + Motor/MongoDB)
   ├── Auth (JWT, password reset)
-  ├── Stripe Checkout
-  ├── YouTube Search & Enrichment (24hr caching)
-  ├── Scoring, History, Reports, Quota, Bug Reports, CSV Export
+  ├── Tier System (free/pro/appsumo with limits)
+  ├── Stripe Checkout (Pro subscription: $39/mo or $299/yr)
+  ├── YouTube Search & Enrichment (24hr caching, backend API key)
+  ├── Niche-based Scoring (6 niches with dynamic keyword configs)
+  ├── History, Reports, Quota, Bug Reports, CSV Export
 ```
 
-## What's Been Implemented
+## Transformation from Tubiate
+This app was transformed from Tubiate (SaaS-focused) to Affilitube (multi-niche).
 
-### Getting Started Page (March 15, 2026)
-- Quick Start guide (4 steps)
-- Tutorial Videos section (5 video placeholders ready for YouTube embeds)
-- Tips & FAQ section
+### Key Changes Made
+1. **Branding**: Tubiate → Affilitube throughout
+2. **API Key**: Removed per-user API key system; now uses backend YOUTUBE_API_KEY
+3. **Niche System**: 6 niches with dynamic keyword configurations
+4. **Tier System**: Free (3 searches/mo, 10 results) / Pro (unlimited) / AppSumo
+5. **Pricing**: Changed from $99 lifetime to $39/mo or $299/yr subscription
 
-### Outreach Templates (March 15, 2026)
-- 5 email templates: Initial Introduction, Affiliate Pitch, Product Review, Follow-Up, Video Collaboration
-- Variable filling ({{CHANNEL_NAME}}, {{YOUR_PRODUCT}}, etc.) with live preview
-- Copy Subject / Body / Full Email to clipboard
-- Template gallery with category badges
+### Supported Niches
+1. SaaS & Software — automation, no-code, integrations
+2. Fitness & Health — workouts, supplements, gear
+3. Finance & Investing — stocks, crypto, budgeting
+4. Ecommerce & Amazon — product reviews, dropshipping
+5. Online Courses & Education — learning platforms, tutorials
+6. Marketing Tools — SEO, email marketing, social media
 
-### Dashboard Navigation (March 15, 2026)
-- 3-tab nav: Prospect Finder, Outreach, Getting Started
-- Consistent header with bug report + logout across all tabs
-- Mobile responsive tab bar
+## Current Status
 
-### Earlier Features
-- P1: Password reset, pagination (25/page), result caching (24hr)
-- Stripe: Checkout flow with user's sandbox key, payment gating
-- Crystal Prism UI: Glassmorphism, gradient buttons, Outfit/Manrope fonts
-- Core: Search, enrichment, scoring, shortlisting, CSV export, API key encryption
+### Phase 1 Complete (Backend)
+- ✅ Niche configuration system with 6 niches
+- ✅ Dynamic keyword scoring per niche
+- ✅ Tier system (free/pro/appsumo)
+- ✅ Search limits enforcement (3/month free, 10 results cap)
+- ✅ Feature gating (CSV, saved searches/reports)
+- ✅ Backend YouTube API key (YOUTUBE_API_KEY env var)
+- ✅ Updated Stripe for subscription model
+- ✅ New endpoints: /api/niches, /api/user/usage
+- ✅ Updated admin email: admin@affilitube.com
+- ✅ Database renamed to affilitube_db
 
-## Testing
-- Iteration 2: Auth (9/9), 3: UI (33/33), 4: Stripe (18/18), 5: P1 (12/12), 6: Getting Started + Outreach (20/20)
+### Phase 2 Pending (Frontend)
+- [ ] Global Tubiate → Affilitube branding
+- [ ] Remove API Key button/dialog
+- [ ] Add Niche Selector UI in Dashboard
+- [ ] Update keyword placeholder per niche
+- [ ] Update usage display (tier-based, not quota-based)
+- [ ] Update Getting Started page
+- [ ] Update Pricing page (Free vs Pro)
+- [ ] Update Landing page copy
+- [ ] Update App.js routing (allow free tier access)
 
 ## Credentials
-- Admin: admin@tubiate.com / admin123!
-- Stripe price ID: price_1TBCOiPnblls1SrQj1rGEBJP
+- Admin: admin@affilitube.com / admin123!
+- Stripe Price IDs (placeholders):
+  - Pro Monthly: price_PLACEHOLDER_PRO_MONTHLY_39
+  - Pro Yearly: price_PLACEHOLDER_PRO_YEARLY_299
 
-## Backlog
-- P2: Channel comparison view, engagement trend analysis
-- Google Sheets export (deferred — needs OAuth)
-- Refactor server.py + Dashboard.jsx into smaller modules
-- Add actual YouTube video IDs to Getting Started tutorials
+## API Endpoints (New/Changed)
+- GET /api/niches — List all niches with configs
+- GET /api/user/usage — Get tier and usage info
+- POST /api/search — Now requires niche parameter
+- POST /api/channels/enrich — Now requires niche parameter
+
+## Environment Variables
+- YOUTUBE_API_KEY — Backend YouTube Data API v3 key (required)
+- MONGO_URL — MongoDB connection
+- DB_NAME — Database name (affilitube_db)
+- STRIPE_API_KEY — Stripe API key for payments
+
+## Unchanged Features
+- Core scoring engine (score_total, affiliate_score)
+- Two-step search → enrich flow
+- Shortlist functionality
+- Saved searches/reports (Pro only)
+- JWT authentication
+- Password reset flow
+- Bug report functionality
+- Affiliate platform link detection
+- Search presets (Quick/Balanced/Deep/Custom)
