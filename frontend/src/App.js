@@ -9,6 +9,7 @@ import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import OutreachPage from "@/pages/OutreachPage";
 import GettingStartedPage from "@/pages/GettingStartedPage";
+import AdminPanel from "@/pages/AdminPanel";
 import Terms from "@/pages/Terms";
 import Privacy from "@/pages/Privacy";
 import CheckoutSuccess from "@/pages/CheckoutSuccess";
@@ -19,6 +20,14 @@ function ProtectedRoute({ children }) {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>;
   if (!user) return <Navigate to="/login" />;
   // Allow all authenticated users (free tier gets limited access in the dashboard)
+  return children;
+}
+
+function AdminRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>;
+  if (!user) return <Navigate to="/login" />;
+  if (user.role !== "admin") return <Navigate to="/dashboard" />;
   return children;
 }
 
@@ -59,6 +68,14 @@ function App() {
                 <ProtectedRoute>
                   <GettingStartedPage />
                 </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <AdminPanel />
+                </AdminRoute>
               }
             />
           </Routes>

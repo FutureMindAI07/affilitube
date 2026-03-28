@@ -32,6 +32,7 @@ import {
   Gauge,
   SlidersHorizontal,
   Wrench,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -801,6 +802,20 @@ export default function Dashboard() {
                   </>
                 )}
               </Badge>
+            )}
+
+            {/* Admin Link - only visible to admins */}
+            {user?.role === "admin" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/admin")}
+                className="rounded-full gap-2 border-purple-200 bg-purple-50/50 text-purple-700 hover:bg-purple-100"
+                data-testid="admin-link"
+              >
+                <Shield className="h-3.5 w-3.5" />
+                Admin
+              </Button>
             )}
           
           {/* Search History Button */}

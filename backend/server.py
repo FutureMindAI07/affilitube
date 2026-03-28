@@ -1600,6 +1600,17 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
         # Increment search count for free tier users
         await increment_search_count(user["id"])
         
+        # Log search activity for admin panel
+        await db.search_activity.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "user_email": user["email"],
+            "niche": filters.niche,
+            "keywords": [k.strip() for k in filters.keywords if k.strip()],
+            "results_count": len(channel_ids),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        
         return {
             "channel_ids": channel_ids,
             "channel_metadata": channel_metadata,
@@ -2171,6 +2182,305 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
 
 class CheckoutRequest(BaseModel):
     plan: str = "pro_monthly"  # pro_monthly or pro_yearly
+
+# ==================== ADMIN ENDPOINTS ====================
+
+async def get_admin_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current user and verify admin role"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        if user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Admin access required")
+        return user
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+@api_router.get("/admin/overview")
+async def admin_overview(admin=Depends(get_admin_user)):
+    """Get admin dashboard overview stats"""
+    now = datetime.now(timezone.utc)
+    week_ago = (now - timedelta(days=7)).isoformat()
+    month_ago = (now - timedelta(days=30)).isoformat()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    
+    # User counts by tier
+    total_users = await db.users.count_documents({})
+    free_users = await db.users.count_documents({"tier": "free"})
+    pro_users = await db.users.count_documents({"tier": "pro"})
+    appsumo_users = await db.users.count_documents({"tier": "appsumo"})
+    # Count users without tier field as free
+    no_tier_users = await db.users.count_documents({"tier": {"$exists": False}})
+    free_users += no_tier_users
+    
+    # Search counts
+    searches_today = await db.search_activity.count_documents({"timestamp": {"$gte": today_start}})
+    searches_week = await db.search_activity.count_documents({"timestamp": {"$gte": week_ago}})
+    searches_month = await db.search_activity.count_documents({"timestamp": {"$gte": month_ago}})
+    
+    # API quota usage today (across all users)
+    today_pacific = await get_today_pacific()
+    quota_docs = await db.quota_usage.find({"date": today_pacific}).to_list(1000)
+    total_quota_used = sum(doc.get("total_units", 0) for doc in quota_docs)
+    
+    # New signups in last 7 days
+    new_signups = await db.users.count_documents({"created_at": {"$gte": week_ago}})
+    
+    # Revenue estimate (Pro subscribers * $39/month as baseline)
+    monthly_revenue = pro_users * 39
+    
+    return {
+        "users": {
+            "total": total_users,
+            "free": free_users,
+            "pro": pro_users,
+            "appsumo": appsumo_users,
+        },
+        "searches": {
+            "today": searches_today,
+            "this_week": searches_week,
+            "this_month": searches_month,
+        },
+        "quota": {
+            "used_today": total_quota_used,
+            "daily_limit": 10000,
+            "percentage": round((total_quota_used / 10000) * 100, 1) if total_quota_used else 0,
+        },
+        "new_signups_7d": new_signups,
+        "revenue": {
+            "monthly_estimate": monthly_revenue,
+            "pro_subscribers": pro_users,
+        }
+    }
+
+class UpdateUserTierRequest(BaseModel):
+    tier: str
+
+@api_router.get("/admin/users")
+async def admin_list_users(
+    search: str = Query(default="", description="Search by email"),
+    tier_filter: str = Query(default="", description="Filter by tier"),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, le=100),
+    admin=Depends(get_admin_user)
+):
+    """List all users with filtering"""
+    query = {}
+    
+    if search:
+        query["email"] = {"$regex": search, "$options": "i"}
+    
+    if tier_filter and tier_filter != "all":
+        query["tier"] = tier_filter
+    
+    # Get users
+    users = await db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    total = await db.users.count_documents(query)
+    
+    # Enrich with search stats
+    enriched_users = []
+    for user in users:
+        user_id = user.get("id")
+        
+        # Total searches all time
+        total_searches = await db.search_activity.count_documents({"user_id": user_id})
+        
+        # Last activity (most recent search)
+        last_search = await db.search_activity.find_one(
+            {"user_id": user_id}, 
+            sort=[("timestamp", -1)]
+        )
+        last_active = last_search.get("timestamp") if last_search else user.get("created_at")
+        
+        enriched_users.append({
+            **user,
+            "tier": user.get("tier", "free"),
+            "searches_this_month": user.get("monthly_search_count", 0),
+            "total_searches": total_searches,
+            "last_active": last_active,
+        })
+    
+    return {
+        "users": enriched_users,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
+
+@api_router.put("/admin/users/{user_id}/tier")
+async def admin_update_user_tier(user_id: str, data: UpdateUserTierRequest, admin=Depends(get_admin_user)):
+    """Update a user's tier"""
+    if data.tier not in ["free", "pro", "appsumo"]:
+        raise HTTPException(status_code=400, detail="Invalid tier. Must be free, pro, or appsumo")
+    
+    result = await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"tier": data.tier, "has_paid": data.tier in ["pro", "appsumo"]}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"success": True, "message": f"User tier updated to {data.tier}"}
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, admin=Depends(get_admin_user)):
+    """Delete a user and their associated data"""
+    # Don't allow deleting yourself
+    if user_id == admin["id"]:
+        raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
+    
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Delete user and associated data
+    await db.users.delete_one({"id": user_id})
+    await db.search_activity.delete_many({"user_id": user_id})
+    await db.channels.delete_many({"user_id": user_id})
+    await db.shortlist.delete_many({"user_id": user_id})
+    await db.search_history.delete_many({"user_id": user_id})
+    await db.search_reports.delete_many({"user_id": user_id})
+    await db.quota_usage.delete_many({"user_id": user_id})
+    
+    return {"success": True, "message": f"User {user['email']} deleted"}
+
+@api_router.get("/admin/quota")
+async def admin_quota_monitor(admin=Depends(get_admin_user)):
+    """Get detailed quota usage for admin monitoring"""
+    today_pacific = await get_today_pacific()
+    
+    # Get all quota usage for today
+    quota_docs = await db.quota_usage.find({"date": today_pacific}).to_list(1000)
+    
+    # Aggregate totals
+    totals = {
+        "search_calls": 0,
+        "channel_calls": 0,
+        "playlist_calls": 0,
+        "video_calls": 0,
+        "total_units": 0,
+    }
+    
+    user_usage = []
+    for doc in quota_docs:
+        totals["search_calls"] += doc.get("search_calls", 0)
+        totals["channel_calls"] += doc.get("channel_calls", 0)
+        totals["playlist_calls"] += doc.get("playlist_calls", 0)
+        totals["video_calls"] += doc.get("video_calls", 0)
+        totals["total_units"] += doc.get("total_units", 0)
+        
+        if doc.get("user_id"):
+            user = await db.users.find_one({"id": doc["user_id"]}, {"email": 1})
+            user_usage.append({
+                "user_id": doc.get("user_id"),
+                "user_email": user.get("email") if user else "Unknown",
+                "total_units": doc.get("total_units", 0),
+                "search_calls": doc.get("search_calls", 0),
+                "channel_calls": doc.get("channel_calls", 0),
+            })
+    
+    # Sort by usage
+    user_usage.sort(key=lambda x: x["total_units"], reverse=True)
+    
+    # Get hourly breakdown from search activity
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    hourly_data = []
+    for hour in range(24):
+        hour_start = (today_start + timedelta(hours=hour)).isoformat()
+        hour_end = (today_start + timedelta(hours=hour + 1)).isoformat()
+        
+        count = await db.search_activity.count_documents({
+            "timestamp": {"$gte": hour_start, "$lt": hour_end}
+        })
+        hourly_data.append({
+            "hour": hour,
+            "searches": count,
+        })
+    
+    return {
+        "date": today_pacific,
+        "totals": totals,
+        "daily_limit": 10000,
+        "percentage_used": round((totals["total_units"] / 10000) * 100, 1),
+        "top_users": user_usage[:10],
+        "hourly_searches": hourly_data,
+    }
+
+@api_router.get("/admin/search-activity")
+async def admin_search_activity(
+    limit: int = Query(default=100, le=500),
+    admin=Depends(get_admin_user)
+):
+    """Get recent search activity log"""
+    searches = await db.search_activity.find(
+        {}, 
+        {"_id": 0}
+    ).sort("timestamp", -1).limit(limit).to_list(limit)
+    
+    return {"searches": searches, "total": len(searches)}
+
+@api_router.get("/admin/revenue")
+async def admin_revenue(admin=Depends(get_admin_user)):
+    """Get revenue overview"""
+    # Get all paid users
+    paid_users = await db.users.find(
+        {"tier": {"$in": ["pro", "appsumo"]}},
+        {"_id": 0, "password_hash": 0}
+    ).sort("paid_at", -1).to_list(1000)
+    
+    # Calculate MRR
+    pro_monthly = 0
+    pro_yearly = 0
+    appsumo = 0
+    
+    for user in paid_users:
+        tier = user.get("tier")
+        plan = user.get("subscription_plan", "pro_monthly")
+        
+        if tier == "pro":
+            if plan == "pro_yearly":
+                pro_yearly += 1
+            else:
+                pro_monthly += 1
+        elif tier == "appsumo":
+            appsumo += 1
+    
+    # MRR calculation
+    # Monthly: $39/mo, Yearly: $299/yr = ~$25/mo
+    mrr = (pro_monthly * 39) + (pro_yearly * 25)
+    
+    # Get payment transactions
+    transactions = await db.payment_transactions.find(
+        {"payment_status": "paid"},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(50).to_list(50)
+    
+    return {
+        "subscribers": {
+            "pro_monthly": pro_monthly,
+            "pro_yearly": pro_yearly,
+            "appsumo": appsumo,
+            "total": pro_monthly + pro_yearly + appsumo,
+        },
+        "mrr": mrr,
+        "arr": mrr * 12,
+        "paid_users": [{
+            "email": u.get("email"),
+            "tier": u.get("tier"),
+            "plan": u.get("subscription_plan", "pro_monthly"),
+            "paid_at": u.get("paid_at"),
+            "created_at": u.get("created_at"),
+        } for u in paid_users],
+        "recent_transactions": transactions,
+    }
 
 # ==================== STRIPE CHECKOUT ====================
 
