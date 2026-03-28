@@ -86,7 +86,7 @@ const steps = [
   {
     num: "01",
     title: "Select Your Niche",
-    desc: "Choose from 6 niches — SaaS, fitness, finance, ecommerce, education, or marketing. Each has tailored scoring keywords.",
+    desc: "Choose from 14 niches — SaaS, fitness, finance, ecommerce, education, marketing, beauty, travel, gaming, home & DIY, pets, personal development, food, or tech. Each has tailored scoring keywords.",
   },
   {
     num: "02",
@@ -244,7 +244,7 @@ export default function Landing() {
             </motion.h1>
 
             <motion.p variants={fadeUp} className="mt-8 text-lg md:text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto">
-              Search, score, and shortlist YouTube creators across 6 niches who already promote products
+              Search, score, and shortlist YouTube creators across 14 niches who already promote products
               with affiliate links. Find channels that match your niche, size, and buyer intent —
               in minutes, not weeks of manual research.
             </motion.p>
@@ -252,7 +252,7 @@ export default function Landing() {
             {/* Benefit Bullets */}
             <motion.div variants={stagger} className="mt-12 max-w-2xl mx-auto space-y-3">
               {[
-                { icon: LayoutGrid, color: "indigo", title: "6 niches, one tool", desc: "From SaaS to fitness to finance — choose your niche and get tailored scoring keywords automatically." },
+                { icon: LayoutGrid, color: "indigo", title: "14 niches, one tool", desc: "From SaaS to beauty to gaming — choose your niche and get tailored scoring keywords automatically." },
                 { icon: Target, color: "purple", title: "See real affiliate intent", desc: "Spot creators who use affiliate language, list \"tools I use\", and link to platforms like AppSumo, Amazon, and PartnerStack." },
                 { icon: Download, color: "emerald", title: "Get outreach-ready data", desc: "Export a clean CSV with scores, contact info, platform links, and notes so you can start outreach immediately." },
               ].map((b) => (

@@ -20,7 +20,7 @@ Backend (FastAPI + Motor/MongoDB)
   ├── Tier System (free/pro/appsumo with limits)
   ├── Stripe Checkout (Pro subscription: $39/mo or $299/yr)
   ├── YouTube Search & Enrichment (24hr caching, backend API key)
-  ├── Niche-based Scoring (6 niches with dynamic keyword configs)
+  ├── Niche-based Scoring (14 niches with dynamic keyword configs)
   ├── History, Reports, Quota, Bug Reports, CSV Export
 ```
 
@@ -30,7 +30,7 @@ This app was transformed from Tubiate (SaaS-focused) to Affilitube (multi-niche)
 ### Key Changes Made
 1. **Branding**: Tubiate → Affilitube throughout
 2. **API Key**: Removed per-user API key system; now uses backend YOUTUBE_API_KEY
-3. **Niche System**: 6 niches with dynamic keyword configurations
+3. **Niche System**: 14 niches with dynamic keyword configurations
 4. **Tier System**: Free (3 searches/mo, 10 results) / Pro (unlimited) / AppSumo
 5. **Pricing**: Changed from $99 lifetime to $39/mo or $299/yr subscription
 
@@ -41,11 +41,19 @@ This app was transformed from Tubiate (SaaS-focused) to Affilitube (multi-niche)
 4. Ecommerce & Amazon — product reviews, dropshipping
 5. Online Courses & Education — learning platforms, tutorials
 6. Marketing Tools — SEO, email marketing, social media
+7. Beauty & Skincare — makeup, skincare routines, cosmetics
+8. Travel — travel gear, booking tools, credit cards
+9. Gaming — peripherals, game reviews, streaming setup
+10. Home & DIY — home improvement, tools, smart home
+11. Pet Care — pet food, accessories, training
+12. Personal Development — productivity tools, books, coaching
+13. Food & Cooking — kitchen equipment, meal kits, recipes
+14. Tech & Gadgets — consumer electronics, gadget reviews
 
 ## Current Status
 
 ### Phase 1 Complete (Backend)
-- ✅ Niche configuration system with 6 niches
+- ✅ Niche configuration system with 14 niches
 - ✅ Dynamic keyword scoring per niche
 - ✅ Tier system (free/pro/appsumo)
 - ✅ Search limits enforcement (3/month free, 10 results cap)

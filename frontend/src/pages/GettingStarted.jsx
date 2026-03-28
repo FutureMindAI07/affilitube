@@ -121,7 +121,7 @@ export default function GettingStarted() {
         <div className="text-center">
           <h1 className="font-heading text-3xl md:text-4xl font-bold text-slate-900">Welcome to Affilitube</h1>
           <p className="mt-3 text-slate-600 max-w-xl mx-auto">
-            Find YouTube creators ready to promote your brand across 6 niches. Follow the quick start below to run your first search.
+            Find YouTube creators ready to promote your brand across 14 niches. Follow the quick start below to run your first search.
           </p>
         </div>
 
