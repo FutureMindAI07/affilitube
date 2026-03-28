@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 class YouTubeAffiliateFinder_APITester:
-    def __init__(self, base_url="https://creator-connect-178.preview.emergentagent.com"):
+    def __init__(self, base_url="https://creator-qualify-hub.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.tests_run = 0
