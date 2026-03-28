@@ -72,6 +72,14 @@ const niches = [
   { icon: "🛒", name: "Ecommerce & Amazon", desc: "Product reviews, dropshipping" },
   { icon: "📚", name: "Online Courses", desc: "Learning platforms, tutorials" },
   { icon: "📈", name: "Marketing Tools", desc: "SEO, email, social media" },
+  { icon: "💄", name: "Beauty & Skincare", desc: "Makeup, skincare, cosmetics" },
+  { icon: "✈️", name: "Travel", desc: "Travel gear, cards, destinations" },
+  { icon: "🎮", name: "Gaming", desc: "Peripherals, reviews, streaming" },
+  { icon: "🏠", name: "Home & DIY", desc: "Tools, decor, smart home" },
+  { icon: "🐾", name: "Pet Care", desc: "Pet food, accessories, training" },
+  { icon: "🧠", name: "Personal Development", desc: "Productivity, books, mindset" },
+  { icon: "🍳", name: "Food & Cooking", desc: "Kitchen gear, recipes, meal kits" },
+  { icon: "📱", name: "Tech & Gadgets", desc: "Electronics, gadget reviews" },
 ];
 
 const steps = [
@@ -104,7 +112,7 @@ const faqs = [
   },
   {
     q: "What niches are supported?",
-    a: "Affilitube supports 6 niches: SaaS & Software, Fitness & Health, Finance & Investing, Ecommerce & Amazon, Online Courses & Education, and Marketing Tools. Each niche has its own tailored keyword sets for accurate scoring.",
+    a: "Affilitube supports 14 niches: SaaS & Software, Fitness & Health, Finance & Investing, Ecommerce & Amazon, Online Courses & Education, Marketing Tools, Beauty & Skincare, Travel, Gaming, Home & DIY, Pet Care, Personal Development, Food & Cooking, and Tech & Gadgets. Each niche has its own tailored keyword sets for accurate scoring.",
   },
   {
     q: "How does the scoring work?",
@@ -316,10 +324,10 @@ export default function Landing() {
               Multi-Niche Support
             </motion.p>
             <motion.h2 variants={fadeUp} className="mt-3 font-heading text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">
-              One tool, six niches
+              One tool, 14 niches
             </motion.h2>
             <motion.p variants={fadeUp} className="mt-4 text-slate-600 max-w-xl mx-auto">
-              Each niche comes with tailored scoring keywords, so you get accurate affiliate potential scores whether you're in software or supplements.
+              Each niche comes with tailored scoring keywords, so you get accurate affiliate potential scores whether you're in software, beauty, gaming, or cooking.
             </motion.p>
           </motion.div>
           
@@ -328,17 +336,17 @@ export default function Landing() {
             whileInView="show"
             viewport={{ once: true }}
             variants={stagger}
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3"
           >
             {niches.map((n) => (
               <motion.div
                 key={n.name}
                 variants={fadeUp}
-                className="p-5 rounded-2xl bg-slate-50/80 border border-slate-100 text-center hover:shadow-lg hover:border-indigo-100 transition-all duration-300"
+                className="p-4 rounded-2xl bg-slate-50/80 border border-slate-100 text-center hover:shadow-lg hover:border-indigo-100 transition-all duration-300"
               >
-                <div className="text-4xl mb-3">{n.icon}</div>
-                <h3 className="font-heading font-semibold text-slate-900 text-sm">{n.name}</h3>
-                <p className="text-xs text-slate-500 mt-1">{n.desc}</p>
+                <div className="text-3xl mb-2">{n.icon}</div>
+                <h3 className="font-heading font-semibold text-slate-900 text-xs">{n.name}</h3>
+                <p className="text-[10px] text-slate-500 mt-1 line-clamp-2">{n.desc}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -438,7 +446,7 @@ export default function Landing() {
             className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center"
           >
             {[
-              { val: "6", label: "Supported Niches" },
+              { val: "14", label: "Supported Niches" },
               { val: "10+", label: "Affiliate Platforms" },
               { val: "16+", label: "Tool Stack Phrases" },
               { val: "CSV", label: "One-Click Export" },

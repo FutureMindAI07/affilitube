@@ -312,6 +312,214 @@ NICHE_CONFIGS = {
             'masterclass', 'workshop'
         ],
         "placeholder_examples": "best SEO tools\nemail marketing tutorial\nsocial media strategy\nahrefs review"
+    },
+    "beauty_skincare": {
+        "name": "Beauty & Skincare",
+        "icon": "💄",
+        "description": "Makeup, skincare routines, beauty products, cosmetics reviews",
+        "topic_keywords": [
+            'makeup', 'skincare', 'beauty', 'cosmetics', 'skincare routine', 'foundation',
+            'moisturizer', 'serum', 'cleanser', 'anti-aging', 'acne', 'sunscreen',
+            'hair care', 'nails', 'lipstick', 'eyeshadow', 'contour', 'glow up'
+        ],
+        "affiliate_signal_keywords": [
+            'best skincare', 'top makeup', 'review', 'vs', 'comparison',
+            'holy grail products', 'my routine', 'drugstore vs high end', 'dupes'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'discount code', 'coupon',
+            'deal', 'review', 'comparison', 'vs', 'best products', 'favorites',
+            'my routine', 'products i use', 'holy grail'
+        ],
+        "commercial_keywords": [
+            'course', 'masterclass', 'ebook', 'free guide', 'newsletter',
+            'my brand', 'shop my', 'affiliate links', 'discount',
+            'promo code', 'collab'
+        ],
+        "placeholder_examples": "skincare routine for beginners\nbest drugstore makeup\nthe ordinary review\nmorning skincare routine"
+    },
+    "travel": {
+        "name": "Travel",
+        "icon": "✈️",
+        "description": "Travel gear, booking tools, travel credit cards, destination guides",
+        "topic_keywords": [
+            'travel', 'vacation', 'trip', 'destination', 'flight', 'hotel', 'airbnb',
+            'backpacking', 'travel hack', 'travel tips', 'packing', 'luggage',
+            'travel credit card', 'miles', 'points', 'budget travel', 'luxury travel'
+        ],
+        "affiliate_signal_keywords": [
+            'best travel gear', 'top travel cards', 'review', 'vs', 'comparison',
+            'travel essentials', 'packing list', 'my travel setup', 'how i book'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'sign up bonus', 'referral bonus',
+            'deal', 'review', 'comparison', 'best cards', 'travel hack',
+            'gear i use', 'travel essentials'
+        ],
+        "commercial_keywords": [
+            'course', 'ebook', 'travel guide', 'itinerary', 'download',
+            'presets', 'lightroom', 'community', 'patreon',
+            'membership', 'exclusive content'
+        ],
+        "placeholder_examples": "best travel credit cards\ncarry on packing tips\ntravel hack tutorial\nbudget travel guide"
+    },
+    "gaming": {
+        "name": "Gaming",
+        "icon": "🎮",
+        "description": "Gaming peripherals, game reviews, streaming setup, game keys",
+        "topic_keywords": [
+            'gaming', 'game review', 'gameplay', 'walkthrough', 'streaming', 'twitch',
+            'gaming setup', 'gaming chair', 'gaming mouse', 'keyboard', 'headset',
+            'pc build', 'console', 'playstation', 'xbox', 'nintendo', 'esports'
+        ],
+        "affiliate_signal_keywords": [
+            'best gaming', 'top peripherals', 'review', 'vs', 'comparison',
+            'my setup', 'gaming gear', 'streaming setup', 'pc build guide'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'discount code', 'coupon',
+            'deal', 'review', 'comparison', 'vs', 'best gear', 'my setup',
+            'gear i use', 'amazon affiliate'
+        ],
+        "commercial_keywords": [
+            'merch', 'membership', 'patreon', 'discord', 'community',
+            'coaching', 'boosting', 'download', 'stream overlay',
+            'emotes', 'sub goal'
+        ],
+        "placeholder_examples": "best gaming mouse 2024\nstreaming setup tour\ngame review\npc build guide"
+    },
+    "home_diy": {
+        "name": "Home & DIY",
+        "icon": "🏠",
+        "description": "Home improvement, tools, interior design, smart home products",
+        "topic_keywords": [
+            'diy', 'home improvement', 'renovation', 'interior design', 'decor',
+            'smart home', 'tools', 'woodworking', 'painting', 'flooring',
+            'furniture', 'organization', 'cleaning', 'garden', 'landscaping'
+        ],
+        "affiliate_signal_keywords": [
+            'best tools', 'top products', 'review', 'vs', 'comparison',
+            'my tools', 'home tour', 'room makeover', 'amazon finds'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'discount code', 'coupon',
+            'deal', 'review', 'comparison', 'vs', 'best products', 'tools i use',
+            'amazon affiliate', 'home depot'
+        ],
+        "commercial_keywords": [
+            'plans', 'blueprints', 'templates', 'ebook', 'course',
+            'workshop', 'community', 'patreon', 'membership',
+            'free guide', 'download'
+        ],
+        "placeholder_examples": "smart home setup\nbest power tools\nroom makeover on a budget\ndiy furniture build"
+    },
+    "pet_care": {
+        "name": "Pet Care",
+        "icon": "🐾",
+        "description": "Pet food, accessories, vet products, pet training",
+        "topic_keywords": [
+            'dog', 'cat', 'pet', 'puppy', 'kitten', 'pet food', 'dog food', 'cat food',
+            'pet training', 'dog training', 'pet toys', 'pet accessories', 'grooming',
+            'vet', 'pet health', 'aquarium', 'fish', 'bird', 'reptile'
+        ],
+        "affiliate_signal_keywords": [
+            'best pet food', 'top pet products', 'review', 'vs', 'comparison',
+            'my pet routine', 'pet essentials', 'what i feed', 'pet haul'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'discount code', 'coupon',
+            'deal', 'review', 'comparison', 'vs', 'best products', 'favorites',
+            'chewy affiliate', 'amazon affiliate'
+        ],
+        "commercial_keywords": [
+            'course', 'training program', 'ebook', 'free guide', 'community',
+            'patreon', 'membership', 'merch', 'shop',
+            'download', 'printable'
+        ],
+        "placeholder_examples": "best dog food brands\npuppy training tips\ncat toy review\npet grooming tutorial"
+    },
+    "personal_development": {
+        "name": "Personal Development",
+        "icon": "🧠",
+        "description": "Productivity tools, books, coaching programs, mindset",
+        "topic_keywords": [
+            'productivity', 'self improvement', 'mindset', 'motivation', 'habits',
+            'goal setting', 'time management', 'morning routine', 'journaling',
+            'meditation', 'book summary', 'book review', 'stoicism', 'success'
+        ],
+        "affiliate_signal_keywords": [
+            'best books', 'top productivity apps', 'review', 'vs', 'comparison',
+            'my routine', 'tools i use', 'book recommendations', 'habit tracker'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'discount code', 'coupon',
+            'deal', 'review', 'comparison', 'vs', 'best apps', 'books i recommend',
+            'audible affiliate', 'amazon affiliate'
+        ],
+        "commercial_keywords": [
+            'course', 'coaching', 'mentorship', 'community', 'ebook',
+            'planner', 'templates', 'notion templates', 'free guide',
+            'masterclass', 'workshop', 'program'
+        ],
+        "placeholder_examples": "morning routine for success\nbest productivity apps\nbook summary\nhabit building tips"
+    },
+    "food_cooking": {
+        "name": "Food & Cooking",
+        "icon": "🍳",
+        "description": "Kitchen equipment, meal kits, recipe apps, cooking tools",
+        "topic_keywords": [
+            'cooking', 'recipe', 'kitchen', 'meal prep', 'baking', 'air fryer',
+            'instant pot', 'kitchen gadgets', 'meal kit', 'food review',
+            'restaurant', 'chef', 'healthy eating', 'vegan', 'keto'
+        ],
+        "affiliate_signal_keywords": [
+            'best kitchen gadgets', 'top cookware', 'review', 'vs', 'comparison',
+            'my kitchen', 'kitchen tour', 'must have tools', 'meal kit review'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'discount code', 'coupon',
+            'deal', 'review', 'comparison', 'vs', 'best products', 'kitchen essentials',
+            'amazon affiliate', 'my favorites'
+        ],
+        "commercial_keywords": [
+            'cookbook', 'recipe ebook', 'meal plan', 'course', 'community',
+            'patreon', 'membership', 'merch', 'shop',
+            'download', 'printable recipes'
+        ],
+        "placeholder_examples": "air fryer recipes\nbest kitchen gadgets\nmeal prep for beginners\nmeal kit review"
+    },
+    "tech_gadgets": {
+        "name": "Tech & Gadgets",
+        "icon": "📱",
+        "description": "Consumer electronics, gadget reviews, tech comparisons",
+        "topic_keywords": [
+            'tech', 'gadget', 'smartphone', 'iphone', 'android', 'laptop', 'tablet',
+            'earbuds', 'headphones', 'smartwatch', 'camera', 'drone', 'unboxing',
+            'tech review', 'apple', 'samsung', 'google', 'wireless'
+        ],
+        "affiliate_signal_keywords": [
+            'best tech', 'top gadgets', 'review', 'vs', 'comparison',
+            'unboxing', 'first impressions', 'my setup', 'tech i use'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in description', 'discount code', 'coupon',
+            'deal', 'review', 'comparison', 'vs', 'best products', 'my gear',
+            'amazon affiliate', 'check links below'
+        ],
+        "commercial_keywords": [
+            'merch', 'membership', 'patreon', 'community', 'discord',
+            'wallpapers', 'presets', 'course', 'workshop',
+            'exclusive content', 'newsletter'
+        ],
+        "placeholder_examples": "best smartphones 2024\niphone vs android\ntech gadget review\nwireless earbuds comparison"
     }
 }
 

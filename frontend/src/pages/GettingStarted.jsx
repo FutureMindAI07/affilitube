@@ -8,7 +8,7 @@ const quickStartSteps = [
   {
     num: "1",
     title: "Select Your Niche",
-    desc: "Choose from 6 niches — SaaS & Software, Fitness & Health, Finance & Investing, Ecommerce & Amazon, Online Courses, or Marketing Tools. Each niche uses tailored scoring keywords.",
+    desc: "Choose from 14 niches — SaaS & Software, Fitness, Finance, Ecommerce, Education, Marketing, Beauty, Travel, Gaming, Home & DIY, Pet Care, Personal Development, Food & Cooking, or Tech & Gadgets. Each uses tailored scoring keywords.",
     icon: LayoutGrid,
   },
   {
@@ -169,7 +169,7 @@ export default function GettingStarted() {
           </h2>
           <div className="grid md:grid-cols-3 gap-4">
             {[
-              { title: "6 Niches", desc: "SaaS, Fitness, Finance, Ecommerce, Education, Marketing — each with tailored scoring keywords.", icon: LayoutGrid },
+              { title: "14 Niches", desc: "SaaS, Fitness, Finance, Ecommerce, Education, Marketing, Beauty, Travel, Gaming, Home, Pet, Personal Dev, Food, Tech — each with tailored scoring keywords.", icon: LayoutGrid },
               { title: "Dual Scoring", desc: "Every channel gets a Total Score (0-100) and separate Affiliate Score for outreach prioritization.", icon: Target },
               { title: "CSV Export", desc: "Export all data including scores, signals, contact info, and your notes (Pro plan).", icon: Download },
             ].map((f) => (
