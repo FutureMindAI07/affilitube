@@ -3,7 +3,6 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   Search,
-  Settings,
   Download,
   RefreshCw,
   ChevronRight,
@@ -11,7 +10,6 @@ import {
   X,
   ExternalLink,
   Youtube,
-  Key,
   AlertCircle,
   CheckCircle2,
   Loader2,
@@ -33,8 +31,6 @@ import {
   Zap,
   Gauge,
   SlidersHorizontal,
-  Timer,
-  AlertTriangle,
   Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -149,7 +145,7 @@ const SEARCH_PRESETS = {
   }
 };
 
-const KEYWORD_PLACEHOLDER = `e.g. automation tutorial\nworkflow automation tools\nbest SaaS tools 2026\nzapier vs make.com`;
+const DEFAULT_KEYWORD_PLACEHOLDER = `Select a niche above to see example keywords`;
 
 export default function Dashboard() {
   const { user, token, logout } = useAuth();
@@ -161,11 +157,13 @@ export default function Dashboard() {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
-  // State
-  const [apiKeyExists, setApiKeyExists] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [savingKey, setSavingKey] = useState(false);
+  // Niche state
+  const [niches, setNiches] = useState([]);
+  const [selectedNiche, setSelectedNiche] = useState(null);
+  const [keywordPlaceholder, setKeywordPlaceholder] = useState(DEFAULT_KEYWORD_PLACEHOLDER);
+
+  // User usage/tier state
+  const [userUsage, setUserUsage] = useState(null);
 
   const [keywords, setKeywords] = useState("");
   const [minSubs, setMinSubs] = useState(2000);
@@ -229,65 +227,43 @@ export default function Dashboard() {
   const [viewingReport, setViewingReport] = useState(null);
   const [loadingReport, setLoadingReport] = useState(false);
 
-  // Quota usage state
-  const [quotaUsage, setQuotaUsage] = useState(null);
-  const [quotaCountdown, setQuotaCountdown] = useState(null);
-
-  // Check API key on mount
+  // Load niches and user usage on mount
   useEffect(() => {
-    checkApiKey();
+    loadNiches();
+    loadUserUsage();
     loadShortlist();
     loadSearchHistory();
     loadSavedReports();
     loadAffiliatePlatforms();
-    loadQuotaUsage();
   }, []);
 
-  // Quota countdown timer
+  // Refresh user usage periodically
   useEffect(() => {
-    if (!quotaUsage?.quota_exceeded_at) {
-      setQuotaCountdown(null);
-      return;
-    }
-    
-    const updateCountdown = () => {
-      if (quotaUsage?.reset_info) {
-        const resetAt = new Date(quotaUsage.reset_info.reset_at);
-        const now = new Date();
-        const diff = resetAt - now;
-        
-        if (diff <= 0) {
-          setQuotaCountdown(null);
-          loadQuotaUsage(); // Refresh quota after reset
-          return;
-        }
-        
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-        
-        setQuotaCountdown({ hours, minutes, seconds });
-      }
-    };
-    
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, [quotaUsage]);
-
-  // Refresh quota usage periodically
-  useEffect(() => {
-    const interval = setInterval(loadQuotaUsage, 30000); // Every 30 seconds
+    const interval = setInterval(loadUserUsage, 30000); // Every 30 seconds
     return () => clearInterval(interval);
   }, []);
 
-  const checkApiKey = async () => {
+  const loadNiches = async () => {
     try {
-      const res = await api.get("/settings/api-key");
-      setApiKeyExists(res.data.exists);
+      const res = await api.get("/niches");
+      setNiches(res.data.niches || []);
     } catch (e) {
-      console.error("Error checking API key:", e);
+      console.error("Error loading niches:", e);
     }
+  };
+
+  const loadUserUsage = async () => {
+    try {
+      const res = await api.get("/user/usage");
+      setUserUsage(res.data);
+    } catch (e) {
+      console.error("Error loading user usage:", e);
+    }
+  };
+
+  const selectNiche = (niche) => {
+    setSelectedNiche(niche);
+    setKeywordPlaceholder(niche.placeholder_examples || DEFAULT_KEYWORD_PLACEHOLDER);
   };
 
   const loadAffiliatePlatforms = async () => {
@@ -299,14 +275,7 @@ export default function Dashboard() {
     }
   };
 
-  const loadQuotaUsage = async () => {
-    try {
-      const res = await api.get("/quota/usage");
-      setQuotaUsage(res.data);
-    } catch (e) {
-      console.error("Error loading quota usage:", e);
-    }
-  };
+  // Remove loadQuotaUsage - no longer needed for tier-based system
 
   // Apply preset settings
   const applyPreset = (presetKey) => {
@@ -352,25 +321,6 @@ export default function Dashboard() {
     }
   };
 
-  const saveApiKey = async () => {
-    if (!apiKeyInput.trim()) {
-      toast.error("Please enter an API key");
-      return;
-    }
-    setSavingKey(true);
-    try {
-      await api.post("/settings/api-key", { api_key: apiKeyInput });
-      setApiKeyExists(true);
-      setSettingsOpen(false);
-      setApiKeyInput("");
-      toast.success("API key saved successfully");
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Failed to save API key");
-    } finally {
-      setSavingKey(false);
-    }
-  };
-
   const loadShortlist = async () => {
     try {
       const res = await api.get("/shortlist");
@@ -410,15 +360,20 @@ export default function Dashboard() {
   }, [estimateQuota]);
 
   const runSearch = async () => {
-    if (!apiKeyExists) {
-      toast.error("Please configure your YouTube API key first");
-      setSettingsOpen(true);
+    if (!selectedNiche) {
+      toast.error("Please select a niche first");
       return;
     }
 
     const keywordList = keywords.split("\n").filter((k) => k.trim());
     if (keywordList.length === 0) {
       toast.error("Please enter at least one keyword");
+      return;
+    }
+
+    // Check tier limits
+    if (userUsage && !userUsage.is_unlimited && userUsage.searches_remaining <= 0) {
+      toast.error("Monthly search limit reached. Upgrade to Pro for unlimited searches.");
       return;
     }
 
@@ -431,6 +386,7 @@ export default function Dashboard() {
     try {
       const searchRes = await api.post("/search", {
         keywords: keywordList,
+        niche: selectedNiche.key,
         min_subscribers: minSubs,
         max_subscribers: maxSubs,
         uploaded_within_days: uploadedWithin,
@@ -440,16 +396,21 @@ export default function Dashboard() {
 
       setSearchProgress(100);
       setRawSearchResults(searchRes.data);
+      
+      // Show different message for free tier result limiting
+      const limitMessage = searchRes.data.total_before_limit > searchRes.data.total_found 
+        ? ` (limited from ${searchRes.data.total_before_limit} - upgrade for full results)`
+        : "";
       setSearchStatus(
-        `Found ${searchRes.data.total_found} channels. Ready to enrich.`
+        `Found ${searchRes.data.total_found} channels${limitMessage}. Ready to enrich.`
       );
       toast.success(`Found ${searchRes.data.total_found} channels`);
-      loadQuotaUsage();
+      loadUserUsage();
     } catch (e) {
       const detail = e.response?.data?.detail || "Search failed";
       toast.error(detail);
       setSearchStatus(`Error: ${detail}`);
-      loadQuotaUsage();
+      loadUserUsage();
     } finally {
       setIsSearching(false);
     }
@@ -472,6 +433,7 @@ export default function Dashboard() {
       const enrichRes = await api.post("/channels/enrich", {
         channel_ids: rawSearchResults.channel_ids,
         channel_metadata: rawSearchResults.channel_metadata,
+        niche: selectedNiche?.key || "saas_software",
         min_subscribers: minSubs,
         max_subscribers: maxSubs,
         videos_to_scan: videosToScan,
@@ -484,12 +446,10 @@ export default function Dashboard() {
       setEnrichStatus(`Complete! ${enrichRes.data.total} channels processed.`);
       setChannels(enrichRes.data.channels);
       toast.success(`Enriched ${enrichRes.data.total} channels with scores`);
-      loadQuotaUsage();
     } catch (e) {
       const detail = e.response?.data?.detail || "Enrichment failed";
       toast.error(detail);
       setEnrichStatus(`Error: ${detail}`);
-      loadQuotaUsage();
     } finally {
       setIsEnriching(false);
     }
@@ -798,7 +758,7 @@ export default function Dashboard() {
               <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
                 <Youtube className="h-4 w-4 text-white" />
               </div>
-              <span className="font-heading font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 hidden sm:inline">Tubiate</span>
+              <span className="font-heading font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 hidden sm:inline">Affilitube</span>
             </a>
           </div>
 
@@ -819,15 +779,27 @@ export default function Dashboard() {
           </nav>
 
           <div className="flex items-center gap-2">
-            {apiKeyExists ? (
-              <Badge variant="outline" className="gap-1.5 text-xs rounded-full border-emerald-200 bg-emerald-50/50 text-emerald-700">
-                <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                API Key
-              </Badge>
-            ) : (
-              <Badge variant="destructive" className="gap-1.5 text-xs rounded-full">
-                <AlertCircle className="h-3 w-3" />
-                API Key Required
+            {/* Tier Badge */}
+            {userUsage && (
+              <Badge 
+                variant="outline" 
+                className={`gap-1.5 text-xs rounded-full ${
+                  userUsage.is_unlimited 
+                    ? 'border-emerald-200 bg-emerald-50/50 text-emerald-700' 
+                    : 'border-indigo-200 bg-indigo-50/50 text-indigo-700'
+                }`}
+              >
+                {userUsage.is_unlimited ? (
+                  <>
+                    <Zap className="h-3 w-3" />
+                    Pro Plan
+                  </>
+                ) : (
+                  <>
+                    <Gauge className="h-3 w-3" />
+                    {userUsage.searches_remaining}/{userUsage.max_searches} searches
+                  </>
+                )}
               </Badge>
             )}
           
@@ -1014,65 +986,6 @@ export default function Dashboard() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-            <DialogTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                data-testid="settings-btn"
-                className="rounded-full"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
-              </Button>
-            </DialogTrigger>
-            <DialogContent data-testid="settings-dialog">
-              <DialogHeader>
-                <DialogTitle>Settings</DialogTitle>
-                <DialogDescription>
-                  Configure your YouTube Data API key to enable searching.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="api-key">YouTube Data API Key</Label>
-                  <Input
-                    id="api-key"
-                    type="password"
-                    placeholder="AIza..."
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    data-testid="api-key-input"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Get your API key from{" "}
-                    <a
-                      href="https://console.cloud.google.com/apis/credentials"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary underline"
-                    >
-                      Google Cloud Console
-                    </a>
-                  </p>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  onClick={saveApiKey}
-                  disabled={savingKey}
-                  data-testid="save-api-key-btn"
-                  className="btn-gradient"
-                >
-                  {savingKey && (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  )}
-                  Save API Key
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
             {/* User Menu */}
             <Separator orientation="vertical" className="h-5" />
             <div className="flex items-center gap-2">
@@ -1122,6 +1035,30 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-6">
+        {/* User Usage Display for Free Tier */}
+        {userUsage && !userUsage.is_unlimited && (
+          <Card className="bg-gradient-to-r from-indigo-50/60 to-purple-50/60 border-indigo-100/50">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Gauge className="h-5 w-5 text-indigo-600" />
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">Free Plan — {userUsage.searches_remaining} of {userUsage.max_searches} searches remaining this month</p>
+                    <p className="text-xs text-slate-500">Results limited to 10 channels per search. Upgrade for unlimited.</p>
+                  </div>
+                </div>
+                <Button 
+                  size="sm" 
+                  className="btn-gradient"
+                  onClick={() => navigate("/pricing")}
+                >
+                  Upgrade to Pro
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Search Panel */}
         <Card className="glass-card" data-testid="search-panel">
           <CardHeader>
@@ -1130,10 +1067,42 @@ export default function Dashboard() {
               Search Configuration
             </CardTitle>
             <CardDescription>
-              Enter keywords and configure filters to find YouTube channels
+              Select your niche, enter keywords, and find YouTube affiliate prospects
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Niche Selector */}
+            <div className="space-y-3">
+              <Label className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-500" />
+                Select Your Niche
+              </Label>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                {niches.map((niche) => (
+                  <button
+                    key={niche.key}
+                    onClick={() => selectNiche(niche)}
+                    className={`p-4 rounded-xl border-2 transition-all text-left hover:shadow-md ${
+                      selectedNiche?.key === niche.key
+                        ? 'border-indigo-500 bg-indigo-50/80 shadow-md'
+                        : 'border-slate-200 bg-white hover:border-indigo-200'
+                    }`}
+                    data-testid={`niche-${niche.key}`}
+                  >
+                    <div className="text-2xl mb-2">{niche.icon}</div>
+                    <div className="font-medium text-sm text-slate-900">{niche.name}</div>
+                    <div className="text-xs text-slate-500 mt-1 line-clamp-2">{niche.description}</div>
+                  </button>
+                ))}
+              </div>
+              {!selectedNiche && (
+                <p className="text-sm text-amber-600 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Please select a niche to continue
+                </p>
+              )}
+            </div>
+
             {/* Keywords */}
             <div className="space-y-2">
               <Label htmlFor="keywords">Keywords (one per line)</Label>
@@ -1142,10 +1111,16 @@ export default function Dashboard() {
                 value={keywords}
                 onChange={(e) => setKeywords(e.target.value)}
                 rows={6}
-                className="font-mono text-sm"
-                placeholder={KEYWORD_PLACEHOLDER}
+                className={`font-mono text-sm ${!selectedNiche ? 'bg-slate-50' : ''}`}
+                placeholder={keywordPlaceholder}
+                disabled={!selectedNiche}
                 data-testid="keywords-input"
               />
+              {selectedNiche && (
+                <p className="text-xs text-slate-500">
+                  Searching in <span className="font-medium text-indigo-600">{selectedNiche.name}</span> niche
+                </p>
+              )}
             </div>
 
             {/* Filters Grid */}
@@ -1358,114 +1333,12 @@ export default function Dashboard() {
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Actual Quota Usage */}
-            {quotaUsage && (
-              <Card 
-                className={`rounded-xl ${quotaUsage.quota_exceeded_at ? 'bg-red-50/80 border-red-200/60' : 'bg-gradient-to-r from-indigo-50/60 to-purple-50/60 border-indigo-100/50'}`}
-                data-testid="quota-usage"
-              >
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium flex items-center gap-2">
-                      <Gauge className="h-4 w-4" />
-                      API Quota Usage Today
-                    </span>
-                    <span className="font-mono text-sm font-semibold">
-                      {quotaUsage.total_units?.toLocaleString() || 0} / 10,000 units
-                    </span>
-                  </div>
-                  <div className="quota-meter">
-                    <div
-                      className={`quota-fill ${
-                        quotaUsage.percentage_used < 50
-                          ? "quota-safe"
-                          : quotaUsage.percentage_used < 80
-                          ? "quota-warning"
-                          : "quota-danger"
-                      }`}
-                      style={{
-                        width: `${Math.min(100, quotaUsage.percentage_used || 0)}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                    <span>
-                      Search: {(quotaUsage.search_calls || 0) * 100} | 
-                      Channels: {quotaUsage.channel_calls || 0} | 
-                      Playlists: {quotaUsage.playlist_calls || 0} | 
-                      Videos: {quotaUsage.video_calls || 0}
-                    </span>
-                    <span className={quotaUsage.percentage_used > 80 ? "text-red-500 font-medium" : ""}>
-                      {quotaUsage.percentage_used || 0}% used
-                    </span>
-                  </div>
-                  
-                  {/* Quota Exceeded Warning with Countdown */}
-                  {quotaUsage.quota_exceeded_at && quotaCountdown && (
-                    <div className="mt-3 p-3 rounded-md bg-red-100 border border-red-200">
-                      <div className="flex items-center gap-2 text-red-700">
-                        <AlertTriangle className="h-4 w-4" />
-                        <span className="text-sm font-medium">Quota Exceeded</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Timer className="h-4 w-4 text-red-600" />
-                        <span className="font-mono text-lg font-bold text-red-700">
-                          {String(quotaCountdown.hours).padStart(2, '0')}:
-                          {String(quotaCountdown.minutes).padStart(2, '0')}:
-                          {String(quotaCountdown.seconds).padStart(2, '0')}
-                        </span>
-                        <span className="text-sm text-red-600">until reset (midnight PT)</span>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Quota Estimate (for next search) */}
-            {quotaEstimate && (
-              <Card className="bg-slate-50/60 border-slate-200/50 rounded-xl" data-testid="quota-estimate">
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium">
-                      Estimated Cost for This Search
-                    </span>
-                    <span className="font-mono text-sm font-semibold">
-                      +{quotaEstimate.total_units.toLocaleString()} units
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>
-                      Search: {quotaEstimate.search_calls * 100} | Channels:{" "}
-                      {quotaEstimate.channel_enrichment_calls} | Playlists:{" "}
-                      {quotaEstimate.playlist_calls} | Videos:{" "}
-                      {quotaEstimate.video_calls}
-                      {quotaEstimate.video_description_calls > 0 && (
-                        <> | Descriptions: {quotaEstimate.video_description_calls}</>
-                      )}
-                    </span>
-                    <span
-                      className={
-                        (quotaUsage?.total_units || 0) + quotaEstimate.total_units > 10000
-                          ? "text-red-500 font-medium"
-                          : "text-emerald-600"
-                      }
-                    >
-                      {(quotaUsage?.total_units || 0) + quotaEstimate.total_units > 10000
-                        ? "Will exceed quota!"
-                        : "Within budget"}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Search Button */}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <Button
                   onClick={runSearch}
-                  disabled={isSearching || !apiKeyExists}
+                  disabled={isSearching || !selectedNiche}
                   className="gap-2 btn-gradient"
                   data-testid="search-btn"
                 >
@@ -2030,18 +1903,14 @@ export default function Dashboard() {
                 No channels found yet
               </h3>
               <p className="text-muted-foreground text-sm max-w-md">
-                Configure your search keywords and filters above, then click
-                "Search Channels" to find YouTube creators in your niche.
+                Select a niche above, add your keywords, then click
+                "Search Channels" to find YouTube creators.
               </p>
-              {!apiKeyExists && (
-                <Button
-                  variant="outline"
-                  className="mt-4 rounded-full"
-                  onClick={() => setSettingsOpen(true)}
-                >
-                  <Key className="h-4 w-4 mr-2" />
-                  Configure API Key First
-                </Button>
+              {!selectedNiche && (
+                <p className="mt-3 text-sm text-amber-600 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Select a niche to get started
+                </p>
               )}
             </CardContent>
           </Card>

@@ -21,7 +21,6 @@ export default function Signup() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
-  const [agreedApiKey, setAgreedApiKey] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
 
@@ -33,7 +32,7 @@ export default function Signup() {
     setLoading(true);
     try {
       await register(email, password);
-      navigate("/pricing");
+      navigate("/dashboard");
     } catch (err) {
       setError(err.response?.data?.detail || "Registration failed");
     } finally {
@@ -51,7 +50,7 @@ export default function Signup() {
           <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
             <Youtube className="h-5 w-5 text-white" />
           </div>
-          <span className="font-heading font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Tubiate</span>
+          <span className="font-heading font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Affilitube</span>
         </a>
       </nav>
 
@@ -60,7 +59,7 @@ export default function Signup() {
           <motion.div variants={fadeUp} className="bg-white/80 backdrop-blur-xl rounded-3xl border border-white/50 shadow-xl shadow-slate-200/30 p-10">
             <div className="text-center mb-8">
               <h1 className="font-heading text-2xl font-bold text-slate-900">Create your account</h1>
-              <p className="mt-2 text-sm text-slate-500">Get instant access to your dashboard</p>
+              <p className="mt-2 text-sm text-slate-500">Start with 3 free searches — no credit card required</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -86,15 +85,9 @@ export default function Signup() {
                     I agree to the <Link to="/terms" target="_blank" className="text-indigo-600 hover:underline font-medium">Terms of Service</Link>
                   </Label>
                 </div>
-                <div className="flex items-start gap-2.5">
-                  <Checkbox id="agree-api-key" checked={agreedApiKey} onCheckedChange={setAgreedApiKey} data-testid="agree-api-key-checkbox" className="mt-0.5" />
-                  <Label htmlFor="agree-api-key" className="text-sm text-slate-600 leading-snug cursor-pointer">
-                    I understand I need to provide my own YouTube API key to use this tool
-                  </Label>
-                </div>
               </div>
 
-              <Button type="submit" className="w-full rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 h-11 font-semibold shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all" disabled={loading || !agreedTerms || !agreedApiKey} data-testid="signup-submit-btn">
+              <Button type="submit" className="w-full rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 h-11 font-semibold shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all" disabled={loading || !agreedTerms} data-testid="signup-submit-btn">
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Create Account<ArrowRight className="h-4 w-4 ml-2" /></>}
               </Button>
             </form>

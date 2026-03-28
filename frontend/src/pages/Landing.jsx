@@ -8,11 +8,9 @@ import {
   ChevronDown,
   Wrench,
   Link2,
-  Timer,
   Youtube,
   ArrowRight,
   Sparkles,
-  Shield,
   LayoutGrid,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -67,21 +65,30 @@ const features = [
   },
 ];
 
+const niches = [
+  { icon: "💻", name: "SaaS & Software", desc: "No-code, automation, app reviews" },
+  { icon: "💪", name: "Fitness & Health", desc: "Workouts, supplements, gear" },
+  { icon: "💰", name: "Finance & Investing", desc: "Stocks, crypto, budgeting" },
+  { icon: "🛒", name: "Ecommerce & Amazon", desc: "Product reviews, dropshipping" },
+  { icon: "📚", name: "Online Courses", desc: "Learning platforms, tutorials" },
+  { icon: "📈", name: "Marketing Tools", desc: "SEO, email, social media" },
+];
+
 const steps = [
   {
     num: "01",
-    title: "Enter Keywords",
-    desc: "Add your niche keywords — like 'zapier tutorial' or 'best automation tools'. Set subscriber range and search mode.",
+    title: "Select Your Niche",
+    desc: "Choose from 6 niches — SaaS, fitness, finance, ecommerce, education, or marketing. Each has tailored scoring keywords.",
   },
   {
     num: "02",
-    title: "Search & Enrich",
-    desc: "The tool searches YouTube, finds matching channels, then enriches each one with stats, recent videos, and contact info.",
+    title: "Enter Keywords",
+    desc: "Add your topic keywords — like 'best protein powder' or 'automation tutorial'. Set subscriber range and search mode.",
   },
   {
     num: "03",
-    title: "Review Scored Results",
-    desc: "See every channel scored and ranked. Filter by affiliate potential, platform links, or minimum score.",
+    title: "Search & Enrich",
+    desc: "The tool searches YouTube, finds matching channels, then enriches each with stats, recent videos, and contact info.",
   },
   {
     num: "04",
@@ -93,11 +100,11 @@ const steps = [
 const faqs = [
   {
     q: "What does this tool actually do?",
-    a: "It helps you find YouTube channels that are likely to promote products as affiliates. You enter keywords, and the tool searches YouTube, pulls channel data, then scores each one on multiple factors — topic relevance, affiliate signals, commercial intent, and more. You get a ranked list of prospects ready for outreach.",
+    a: "It helps you find YouTube channels that are likely to promote products as affiliates. You select a niche, enter keywords, and the tool searches YouTube, pulls channel data, then scores each one on multiple factors — topic relevance, affiliate signals, commercial intent, and more. You get a ranked list of prospects ready for outreach.",
   },
   {
-    q: "Do I need a YouTube API key?",
-    a: "Yes. You'll need a YouTube Data API v3 key from Google Cloud Console. It's free to create and comes with 10,000 units per day — enough for hundreds of channel lookups. Using your own key means you keep full control over quota and billing, and we never touch your YouTube account. We include a short step‑by‑step video, so you'll be up and running in under 5 minutes, and the app tracks your quota usage in real time with a countdown to reset.",
+    q: "What niches are supported?",
+    a: "Affilitube supports 6 niches: SaaS & Software, Fitness & Health, Finance & Investing, Ecommerce & Amazon, Online Courses & Education, and Marketing Tools. Each niche has its own tailored keyword sets for accurate scoring.",
   },
   {
     q: "How does the scoring work?",
@@ -112,12 +119,12 @@ const faqs = [
     a: "Many affiliate creators have sections in their video descriptions listing tools they use — like 'My Tech Stack', 'Tools I Use', or 'Resources Mentioned'. The tool detects 16+ variations of these phrases and flags channels as 'Likely Affiliate Creators' when found.",
   },
   {
-    q: "How many API credits does each search use?",
-    a: "It depends on your settings. A quick scan of 3 keywords might use ~400 units. A deep scan with video description scanning could use ~2,000. The tool shows you the estimated cost before every search, and you can choose from Quick, Balanced, or Deep Scan presets.",
+    q: "What's the difference between Free and Pro?",
+    a: "Free gives you 3 searches per month with 10 results per search — great for trying the tool. Pro ($39/month or $299/year) gives unlimited searches, full results, CSV export, and saved searches/reports.",
   },
   {
     q: "Can I save my results and come back later?",
-    a: "Yes. You can save search configurations to re-run them anytime, and save full result sets as named reports. Your shortlists, notes, and all channel data persist between sessions.",
+    a: "Yes (Pro plan). You can save search configurations to re-run them anytime, and save full result sets as named reports. Your shortlists, notes, and all channel data persist between sessions.",
   },
   {
     q: "What data is included in the CSV export?",
@@ -126,10 +133,6 @@ const faqs = [
   {
     q: "Does the tool contact YouTube channels for me?",
     a: "No. This is a research and scoring tool. It identifies the best prospects and gives you their public contact information. However, we do include a library of pre-built outreach email templates — just fill in your details, preview the email, and copy it ready to send.",
-  },
-  {
-    q: "Is there a limit on how many channels I can analyze?",
-    a: "The only limit is your YouTube API daily quota (10,000 units). Within that, you can search, enrich, and score as many channels as you like. The Advanced Settings let you control exactly how many API units each search consumes.",
   },
 ];
 
@@ -177,10 +180,11 @@ export default function Landing() {
             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
               <Youtube className="h-5 w-5 text-white" />
             </div>
-            <span className="font-heading font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Tubiate</span>
+            <span className="font-heading font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Affilitube</span>
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-500">
             <a href="#features" className="hover:text-slate-900 transition-colors">Features</a>
+            <a href="#niches" className="hover:text-slate-900 transition-colors">Niches</a>
             <a href="#how-it-works" className="hover:text-slate-900 transition-colors">How It Works</a>
             <a href="#faq" className="hover:text-slate-900 transition-colors">FAQ</a>
             <a href="/pricing" className="hover:text-slate-900 transition-colors">Pricing</a>
@@ -195,11 +199,11 @@ export default function Landing() {
               Log In
             </Button>
             <Button
-              onClick={() => navigate("/pricing")}
+              onClick={() => navigate("/signup")}
               className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all hover:scale-105 active:scale-95"
               data-testid="nav-get-started-btn"
             >
-              Get Started
+              Start Free
             </Button>
           </div>
         </div>
@@ -221,18 +225,18 @@ export default function Landing() {
           >
             <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 backdrop-blur border border-indigo-100 text-indigo-700 text-sm font-medium mb-8 shadow-sm">
               <Sparkles className="h-4 w-4" />
-              Find high-converting YouTube affiliates in minutes
+              Find high-converting YouTube affiliates in any niche
             </motion.div>
 
             <motion.h1 variants={fadeUp} className="font-heading text-5xl md:text-7xl font-bold text-slate-900 tracking-tight leading-[1.1]">
-              Discover YouTube Channels
+              Discover YouTube Creators
               <span className="block bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 mt-2">
-                Ready to Promote Your SaaS
+                Ready to Promote Your Brand
               </span>
             </motion.h1>
 
             <motion.p variants={fadeUp} className="mt-8 text-lg md:text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto">
-              Search, score, and shortlist YouTube creators who already promote SaaS and online tools
+              Search, score, and shortlist YouTube creators across 6 niches who already promote products
               with affiliate links. Find channels that match your niche, size, and buyer intent —
               in minutes, not weeks of manual research.
             </motion.p>
@@ -240,7 +244,7 @@ export default function Landing() {
             {/* Benefit Bullets */}
             <motion.div variants={stagger} className="mt-12 max-w-2xl mx-auto space-y-3">
               {[
-                { icon: Search, color: "indigo", title: "Find SaaS-focused creators fast", desc: 'Turn your niche keywords into a ranked list of YouTube channels already reviewing software and "best tools" for your audience.' },
+                { icon: LayoutGrid, color: "indigo", title: "6 niches, one tool", desc: "From SaaS to fitness to finance — choose your niche and get tailored scoring keywords automatically." },
                 { icon: Target, color: "purple", title: "See real affiliate intent", desc: "Spot creators who use affiliate language, list \"tools I use\", and link to platforms like AppSumo, Amazon, and PartnerStack." },
                 { icon: Download, color: "emerald", title: "Get outreach-ready data", desc: "Export a clean CSV with scores, contact info, platform links, and notes so you can start outreach immediately." },
               ].map((b) => (
@@ -263,11 +267,11 @@ export default function Landing() {
             <motion.div variants={fadeUp} className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button
                 size="lg"
-                onClick={handleCTA}
+                onClick={() => navigate("/signup")}
                 className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-base px-10 h-12 shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all hover:scale-105 active:scale-95"
                 data-testid="hero-cta-btn"
               >
-                Get Lifetime Access
+                Start Free — 3 Searches/Month
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
               <Button
@@ -283,46 +287,60 @@ export default function Landing() {
             <motion.div variants={fadeUp} className="mt-8 flex items-center justify-center gap-6 text-sm text-slate-500">
               <span className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                One-time payment
+                Free tier available
               </span>
               <span className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                Lifetime updates
+                No credit card required
               </span>
               <span className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                No recurring fees
+                Pro from $39/mo
               </span>
             </motion.div>
           </motion.div>
         </div>
       </section>
 
-      {/* Demo Video */}
-      <section className="py-20 bg-white">
-        <div className="max-w-4xl mx-auto px-6">
+      {/* Niche Showcase */}
+      <section id="niches" className="py-20 bg-white">
+        <div className="max-w-6xl mx-auto px-6">
           <motion.div
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, margin: "-100px" }}
             variants={stagger}
-            className="text-center"
+            className="text-center mb-14"
           >
             <motion.p variants={fadeUp} className="text-sm font-semibold tracking-wider uppercase bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
-              See it in action
+              Multi-Niche Support
             </motion.p>
-            <motion.h2 variants={fadeUp} className="mt-3 font-heading text-3xl md:text-4xl font-bold text-slate-900 tracking-tight mb-10">
-              Watch a quick demo
+            <motion.h2 variants={fadeUp} className="mt-3 font-heading text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">
+              One tool, six niches
             </motion.h2>
-            <motion.div variants={fadeUp} className="relative rounded-2xl overflow-hidden shadow-2xl shadow-slate-300/30 border border-slate-200/60 aspect-video" data-testid="demo-video">
-              <iframe
-                src="https://www.youtube.com/embed/uVNMhYAgMak"
-                title="Tubiate Demo"
-                className="absolute inset-0 w-full h-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </motion.div>
+            <motion.p variants={fadeUp} className="mt-4 text-slate-600 max-w-xl mx-auto">
+              Each niche comes with tailored scoring keywords, so you get accurate affiliate potential scores whether you're in software or supplements.
+            </motion.p>
+          </motion.div>
+          
+          <motion.div
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true }}
+            variants={stagger}
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4"
+          >
+            {niches.map((n) => (
+              <motion.div
+                key={n.name}
+                variants={fadeUp}
+                className="p-5 rounded-2xl bg-slate-50/80 border border-slate-100 text-center hover:shadow-lg hover:border-indigo-100 transition-all duration-300"
+              >
+                <div className="text-4xl mb-3">{n.icon}</div>
+                <h3 className="font-heading font-semibold text-slate-900 text-sm">{n.name}</h3>
+                <p className="text-xs text-slate-500 mt-1">{n.desc}</p>
+              </motion.div>
+            ))}
           </motion.div>
         </div>
       </section>
@@ -384,7 +402,7 @@ export default function Landing() {
               How It Works
             </motion.p>
             <motion.h2 variants={fadeUp} className="mt-3 font-heading text-4xl md:text-5xl font-bold text-slate-900 tracking-tight">
-              From keyword to prospect list
+              From niche selection to prospect list
               <br className="hidden sm:block" /> in 4 steps
             </motion.h2>
           </motion.div>
@@ -420,7 +438,7 @@ export default function Landing() {
             className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center"
           >
             {[
-              { val: "6+", label: "Scoring Criteria" },
+              { val: "6", label: "Supported Niches" },
               { val: "10+", label: "Affiliate Platforms" },
               { val: "16+", label: "Tool Stack Phrases" },
               { val: "CSV", label: "One-Click Export" },
@@ -475,17 +493,27 @@ export default function Landing() {
             Ready to find your next YouTube affiliates?
           </h2>
           <p className="mt-5 text-indigo-100 text-lg leading-relaxed">
-            Get lifetime access today. One payment, no recurring fees, unlimited searches.
+            Start with 3 free searches. Upgrade to Pro for unlimited access.
           </p>
-          <Button
-            size="lg"
-            onClick={handleCTA}
-            className="mt-10 rounded-full bg-white text-indigo-600 hover:bg-indigo-50 text-base px-10 h-12 font-semibold shadow-xl shadow-black/10 hover:scale-105 active:scale-95 transition-all"
-            data-testid="footer-cta-btn"
-          >
-            Get Lifetime Access — $99
-            <ArrowRight className="h-4 w-4 ml-2" />
-          </Button>
+          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Button
+              size="lg"
+              onClick={() => navigate("/signup")}
+              className="rounded-full bg-white text-indigo-600 hover:bg-indigo-50 text-base px-10 h-12 font-semibold shadow-xl shadow-black/10 hover:scale-105 active:scale-95 transition-all"
+              data-testid="footer-cta-btn"
+            >
+              Start Free
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={handleCTA}
+              className="rounded-full border-white/30 text-white hover:bg-white/10 text-base px-10 h-12"
+            >
+              View Pricing
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -497,14 +525,14 @@ export default function Landing() {
               <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
                 <Youtube className="h-4 w-4 text-white" />
               </div>
-              <span className="text-slate-300 font-heading font-semibold">Tubiate</span>
+              <span className="text-slate-300 font-heading font-semibold">Affilitube</span>
             </div>
             <div className="flex items-center gap-6">
               <a href="/terms" className="hover:text-white transition-colors">Terms</a>
               <a href="/privacy" className="hover:text-white transition-colors">Privacy</a>
               <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
             </div>
-            <p>&copy; {new Date().getFullYear()} Tubiate. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} Affilitube. All rights reserved.</p>
           </div>
         </div>
       </footer>

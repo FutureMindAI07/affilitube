@@ -52,7 +52,7 @@ export default function GettingStartedPage() {
             <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
               <Youtube className="h-4 w-4 text-white" />
             </div>
-            <span className="font-heading font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 hidden sm:inline">Tubiate</span>
+            <span className="font-heading font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 hidden sm:inline">Affilitube</span>
           </a>
           <nav className="hidden md:flex items-center gap-1" data-testid="dashboard-nav">
             {navItems.map((item) => {
