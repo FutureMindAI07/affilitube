@@ -2,6 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { SearchResultsProvider } from "@/contexts/SearchResultsContext";
 import Landing from "@/pages/Landing";
 import Pricing from "@/pages/Pricing";
 import Signup from "@/pages/Signup";
@@ -35,6 +36,7 @@ function AdminRoute({ children }) {
 function App() {
   return (
     <AuthProvider>
+      <SearchResultsProvider>
       <BrowserRouter>
         <div className="min-h-screen">
           <Toaster position="top-right" richColors />
@@ -90,6 +92,7 @@ function App() {
           </Routes>
         </div>
       </BrowserRouter>
+      </SearchResultsProvider>
     </AuthProvider>
   );
 }

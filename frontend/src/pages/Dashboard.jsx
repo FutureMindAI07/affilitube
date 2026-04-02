@@ -102,7 +102,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle } from "lucide-react";
+import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus } from "lucide-react";
+import { useSearchResults } from "@/contexts/SearchResultsContext";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -162,6 +163,7 @@ const OUTREACH_STATUS_CONFIG = {
 export default function Dashboard() {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
+  const searchResults = useSearchResults();
 
   // Create authenticated axios instance
   const api = axios.create({
@@ -199,8 +201,12 @@ export default function Dashboard() {
   const [searchProgress, setSearchProgress] = useState(0);
   const [searchStatus, setSearchStatus] = useState("");
 
-  const [channels, setChannels] = useState([]);
-  const [rawSearchResults, setRawSearchResults] = useState(null); // {channel_ids, channel_metadata, total_found}
+  // Channels state from shared context (persists across navigation)
+  const channels = searchResults.channels;
+  const setChannels = searchResults.setChannels;
+  const rawSearchResults = searchResults.rawSearchResults;
+  const setRawSearchResults = searchResults.setRawSearchResults;
+
   const [isEnriching, setIsEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState(0);
   const [enrichStatus, setEnrichStatus] = useState("");
@@ -231,6 +237,14 @@ export default function Dashboard() {
   // Follow-ups due count
   const [followUpsDueCount, setFollowUpsDueCount] = useState(0);
 
+  // Add to Pipeline dialog state
+  const [pipelineDialogOpen, setPipelineDialogOpen] = useState(false);
+  const [pipelineChannel, setPipelineChannel] = useState(null);
+  const [pipelineProjectName, setPipelineProjectName] = useState("");
+  const [pipelineStatus, setPipelineStatus] = useState("not_contacted");
+  const [userProjects, setUserProjects] = useState([]);
+  const [pipelineAdding, setPipelineAdding] = useState(false);
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 25;
@@ -257,6 +271,13 @@ export default function Dashboard() {
     loadSavedReports();
     loadAffiliatePlatforms();
     loadFollowUpsDue();
+    // Restore search results: first try session, then autosave
+    if (channels.length === 0) {
+      const restored = searchResults.restoreFromSession();
+      if (!restored) {
+        loadAutoSaved();
+      }
+    }
   }, []);
 
   // Refresh user usage periodically
@@ -346,6 +367,86 @@ export default function Dashboard() {
     } finally {
       setFollowUpDateUpdating(false);
     }
+  };
+
+  const loadUserProjects = async () => {
+    try {
+      const res = await api.get("/pipeline/projects");
+      setUserProjects(res.data.projects || []);
+    } catch (e) {
+      console.error("Error loading projects:", e);
+    }
+  };
+
+  const openPipelineDialog = (channel) => {
+    setPipelineChannel(channel);
+    setPipelineProjectName("");
+    setPipelineStatus("not_contacted");
+    setPipelineDialogOpen(true);
+    loadUserProjects();
+  };
+
+  const addToPipeline = async () => {
+    if (!pipelineChannel) return;
+    setPipelineAdding(true);
+    try {
+      await api.patch(`/channels/${pipelineChannel.channel_id}/outreach-status`, {
+        status: pipelineStatus,
+        project_name: pipelineProjectName.trim() || null,
+        note: "Added to pipeline"
+      });
+      toast.success(`${pipelineChannel.channel_name} added to pipeline`);
+      setChannels(channels.map(ch =>
+        ch.channel_id === pipelineChannel.channel_id
+          ? { ...ch, outreach_status: pipelineStatus, project_name: pipelineProjectName.trim() || null }
+          : ch
+      ));
+      if (selectedChannel?.channel_id === pipelineChannel.channel_id) {
+        setSelectedChannel(prev => ({ ...prev, outreach_status: pipelineStatus, project_name: pipelineProjectName.trim() || null }));
+      }
+      setPipelineDialogOpen(false);
+      loadFollowUpsDue();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to add to pipeline");
+    } finally {
+      setPipelineAdding(false);
+    }
+  };
+
+  const autoSaveResults = async (channelData, rawData, metadata) => {
+    try {
+      await api.post("/search-results/autosave", {
+        channels: channelData,
+        raw_search_results: rawData,
+        search_metadata: metadata
+      });
+    } catch (e) {
+      console.error("Auto-save failed:", e);
+    }
+  };
+
+  const loadAutoSaved = async () => {
+    try {
+      const res = await api.get("/search-results/autosave");
+      if (res.data.exists && res.data.channels?.length) {
+        setChannels(res.data.channels);
+        if (res.data.raw_search_results) setRawSearchResults(res.data.raw_search_results);
+        if (res.data.search_metadata) searchResults.setSearchMetadata(res.data.search_metadata);
+        return true;
+      }
+    } catch (e) {
+      console.error("Auto-load failed:", e);
+    }
+    return false;
+  };
+
+  const clearSearchResults = async () => {
+    setChannels([]);
+    setRawSearchResults(null);
+    searchResults.setSearchMetadata(null);
+    searchResults.clearResults();
+    try { await api.delete("/search-results/autosave"); } catch {}
+    toast.info("Search results cleared");
   };
 
   // Remove loadQuotaUsage - no longer needed for tier-based system
@@ -519,6 +620,16 @@ export default function Dashboard() {
       setEnrichStatus(`Complete! ${enrichRes.data.total} channels processed.`);
       setChannels(enrichRes.data.channels);
       toast.success(`Enriched ${enrichRes.data.total} channels with scores`);
+      
+      // Auto-save results for persistence
+      const meta = {
+        niche: selectedNiche?.key,
+        keywords: keywords.split("\n").filter(k => k.trim()),
+        timestamp: new Date().toISOString(),
+        total: enrichRes.data.total
+      };
+      searchResults.setSearchMetadata(meta);
+      autoSaveResults(enrichRes.data.channels, rawSearchResults, meta);
     } catch (e) {
       const detail = e.response?.data?.detail || "Enrichment failed";
       toast.error(detail);
@@ -1179,6 +1290,31 @@ export default function Dashboard() {
                   onClick={() => navigate("/pricing")}
                 >
                   Upgrade to Pro
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Loaded Results Indicator */}
+        {channels.length > 0 && !isSearching && !isEnriching && (
+          <Card className="bg-gradient-to-r from-indigo-50/60 to-purple-50/60 border-indigo-100/50" data-testid="results-loaded-indicator">
+            <CardContent className="pt-3 pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-indigo-600" />
+                  <span className="text-sm text-indigo-700 font-medium">
+                    {channels.length} channels loaded{searchResults.searchMetadata?.niche ? ` from ${searchResults.searchMetadata.niche.replace(/_/g, " ")} search` : " from last search"}
+                  </span>
+                  {searchResults.searchMetadata?.timestamp && (
+                    <span className="text-xs text-indigo-400">
+                      ({new Date(searchResults.searchMetadata.timestamp).toLocaleString()})
+                    </span>
+                  )}
+                </div>
+                <Button variant="ghost" size="sm" onClick={clearSearchResults} className="text-slate-400 hover:text-red-500 h-7 px-2 gap-1" data-testid="clear-results-btn">
+                  <X className="h-3.5 w-3.5" />
+                  Clear
                 </Button>
               </div>
             </CardContent>
@@ -2000,11 +2136,26 @@ export default function Dashboard() {
                           <TableCell onClick={(e) => e.stopPropagation()}>
                             {(() => {
                               const st = channel.outreach_status || "not_contacted";
+                              const inPipeline = st !== "not_contacted";
                               const cfg = OUTREACH_STATUS_CONFIG[st] || OUTREACH_STATUS_CONFIG.not_contacted;
+                              if (inPipeline) {
+                                return (
+                                  <Badge className={`${cfg.color} text-[10px] px-1.5 py-0.5 whitespace-nowrap cursor-default`} data-testid={`status-badge-${channel.channel_id}`}>
+                                    {cfg.label}
+                                  </Badge>
+                                );
+                              }
                               return (
-                                <Badge className={`${cfg.color} text-[10px] px-1.5 py-0.5 whitespace-nowrap`} data-testid={`status-badge-${channel.channel_id}`}>
-                                  {cfg.label}
-                                </Badge>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                                  onClick={() => openPipelineDialog(channel)}
+                                  data-testid={`add-pipeline-btn-${channel.channel_id}`}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                  Pipeline
+                                </Button>
                               );
                             })()}
                           </TableCell>
@@ -2698,7 +2849,27 @@ export default function Dashboard() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 pt-4">
+                <div className="space-y-2 pt-4">
+                  {/* Add to Pipeline - prominent CTA */}
+                  {(selectedChannel.outreach_status || "not_contacted") === "not_contacted" ? (
+                    <Button
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 gap-2"
+                      onClick={() => openPipelineDialog(selectedChannel)}
+                      data-testid="detail-add-pipeline-btn"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add to Pipeline
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-indigo-50 border border-indigo-100">
+                      <Handshake className="h-4 w-4 text-indigo-600" />
+                      <span className="text-sm font-medium text-indigo-700">In Pipeline</span>
+                      {selectedChannel.project_name && (
+                        <Badge variant="outline" className="text-xs border-indigo-200 text-indigo-600">{selectedChannel.project_name}</Badge>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
                   <Button
                     variant={
                       shortlist.has(selectedChannel.channel_id)
@@ -2736,6 +2907,7 @@ export default function Dashboard() {
                       View Channel
                     </a>
                   </Button>
+                  </div>
                 </div>
               </div>
             </>
@@ -2941,6 +3113,87 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Add to Pipeline Dialog */}
+      <Dialog open={pipelineDialogOpen} onOpenChange={setPipelineDialogOpen}>
+        <DialogContent className="sm:max-w-md" data-testid="add-pipeline-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Handshake className="h-5 w-5 text-indigo-500" />
+              Add to Pipeline
+            </DialogTitle>
+            <DialogDescription>
+              Add {pipelineChannel?.channel_name} to your outreach pipeline
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Project / Campaign</Label>
+              <div className="relative">
+                <Input
+                  placeholder="e.g. Q1 Outreach, SaaS Partners..."
+                  value={pipelineProjectName}
+                  onChange={(e) => setPipelineProjectName(e.target.value)}
+                  list="project-suggestions"
+                  className="pr-8"
+                  data-testid="pipeline-project-input"
+                />
+                <FolderOpen className="absolute right-2.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                <datalist id="project-suggestions">
+                  {userProjects.map(p => <option key={p} value={p} />)}
+                </datalist>
+              </div>
+              {userProjects.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {userProjects.slice(0, 5).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setPipelineProjectName(p)}
+                      className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                        pipelineProjectName === p
+                          ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                          : "bg-slate-50 border-slate-200 text-slate-600 hover:border-indigo-200"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Initial Status</Label>
+              <Select value={pipelineStatus} onValueChange={setPipelineStatus}>
+                <SelectTrigger data-testid="pipeline-status-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(OUTREACH_STATUS_CONFIG).map(([key, cfg]) => (
+                    <SelectItem key={key} value={key}>
+                      <span className="flex items-center gap-2">
+                        <span className={`inline-block w-2 h-2 rounded-full ${cfg.color.split(" ")[0]}`}></span>
+                        {cfg.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPipelineDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={addToPipeline}
+              disabled={pipelineAdding}
+              className="bg-indigo-600 hover:bg-indigo-700 gap-2"
+              data-testid="pipeline-confirm-btn"
+            >
+              {pipelineAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Add to Pipeline
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

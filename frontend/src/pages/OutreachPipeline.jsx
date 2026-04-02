@@ -34,6 +34,9 @@ import {
   ArrowRight,
   Handshake,
   Shield,
+  FolderOpen,
+  Pencil,
+  Check,
 } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -66,14 +69,35 @@ export default function OutreachPipeline() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showOverdueOnly, setShowOverdueOnly] = useState(searchParams.get("overdue") === "true");
   
+  // Project filter
+  const [projects, setProjects] = useState([]);
+  const [projectFilter, setProjectFilter] = useState("all");
+  
+  // Inline project editing
+  const [editingProjectId, setEditingProjectId] = useState(null);
+  const [editProjectValue, setEditProjectValue] = useState("");
+
   // Quick status update dialog
   const [updatingChannel, setUpdatingChannel] = useState(null);
   const [newStatus, setNewStatus] = useState("");
   const [statusNote, setStatusNote] = useState("");
 
   useEffect(() => {
+    loadProjects();
+  }, []);
+
+  useEffect(() => {
     loadChannels();
-  }, [statusFilter, showOverdueOnly]);
+  }, [statusFilter, showOverdueOnly, projectFilter]);
+
+  const loadProjects = async () => {
+    try {
+      const res = await api.get("/pipeline/projects");
+      setProjects(res.data.projects || []);
+    } catch (e) {
+      console.error("Error loading projects:", e);
+    }
+  };
 
   const loadChannels = async () => {
     setLoading(true);
@@ -84,7 +108,10 @@ export default function OutreachPipeline() {
         setStatusCounts({});
       } else {
         const res = await api.get("/channels/by-outreach-status", {
-          params: { status: statusFilter !== "all" ? statusFilter : undefined }
+          params: {
+            status: statusFilter !== "all" ? statusFilter : undefined,
+            project: projectFilter !== "all" ? projectFilter : undefined
+          }
         });
         setChannels(res.data.channels);
         setStatusCounts(res.data.status_counts);
@@ -110,6 +137,20 @@ export default function OutreachPipeline() {
       loadChannels();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to update status");
+    }
+  };
+
+  const saveProjectName = async (channelId) => {
+    try {
+      await api.patch(`/channels/${channelId}/project-name`, {
+        project_name: editProjectValue.trim() || null
+      });
+      toast.success("Project updated");
+      setEditingProjectId(null);
+      loadChannels();
+      loadProjects();
+    } catch (e) {
+      toast.error("Failed to update project");
     }
   };
 
@@ -259,6 +300,19 @@ export default function OutreachPipeline() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="w-48">
+                <Select value={projectFilter} onValueChange={setProjectFilter}>
+                  <SelectTrigger data-testid="pipeline-project-filter">
+                    <SelectValue placeholder="Filter by project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Projects</SelectItem>
+                    {projects.map(p => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 variant={showOverdueOnly ? "default" : "outline"}
                 onClick={() => { setShowOverdueOnly(!showOverdueOnly); setStatusFilter("all"); }}
@@ -328,6 +382,35 @@ export default function OutreachPipeline() {
                           <span>Affiliate Score: {channel.affiliate_score || 0}</span>
                           {channel.business_email && (
                             <span className="text-indigo-600">{channel.business_email}</span>
+                          )}
+                        </div>
+                        {/* Project Label */}
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {editingProjectId === channel.channel_id ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                value={editProjectValue}
+                                onChange={(e) => setEditProjectValue(e.target.value)}
+                                placeholder="Project name..."
+                                className="h-6 text-xs w-36 px-1.5"
+                                autoFocus
+                                onKeyDown={(e) => { if (e.key === "Enter") saveProjectName(channel.channel_id); if (e.key === "Escape") setEditingProjectId(null); }}
+                                data-testid={`edit-project-input-${channel.channel_id}`}
+                              />
+                              <button onClick={() => saveProjectName(channel.channel_id)} className="text-emerald-600 hover:text-emerald-700">
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setEditingProjectId(channel.channel_id); setEditProjectValue(channel.project_name || ""); }}
+                              className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600 transition-colors"
+                              data-testid={`project-label-${channel.channel_id}`}
+                            >
+                              <FolderOpen className="h-3 w-3" />
+                              {channel.project_name || "No project"}
+                              <Pencil className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100" />
+                            </button>
                           )}
                         </div>
                       </div>

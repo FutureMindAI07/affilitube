@@ -2000,6 +2000,7 @@ OUTREACH_STATUSES = [
 class UpdateOutreachStatusInput(BaseModel):
     status: str
     note: Optional[str] = None
+    project_name: Optional[str] = None
 
 class UpdateFollowUpDateInput(BaseModel):
     follow_up_date: Optional[str] = None  # ISO date string or null to clear
@@ -2022,16 +2023,21 @@ async def update_outreach_status(channel_id: str, input: UpdateOutreachStatusInp
         "note": input.note or ""
     }
     
+    # Build the $set dict
+    set_fields = {"outreach_status": input.status}
+    if input.project_name is not None:
+        set_fields["project_name"] = input.project_name
+
     # Update status and add to contact log
     await db.channels.update_one(
         {"channel_id": channel_id, "user_id": user["id"]},
         {
-            "$set": {"outreach_status": input.status},
+            "$set": set_fields,
             "$push": {"contact_log": log_entry}
         }
     )
     
-    return {"success": True, "status": input.status, "log_entry": log_entry}
+    return {"success": True, "status": input.status, "log_entry": log_entry, "project_name": input.project_name}
 
 @api_router.patch("/channels/{channel_id}/follow-up-date")
 async def update_follow_up_date(channel_id: str, input: UpdateFollowUpDateInput, user=Depends(get_current_user)):
@@ -2069,9 +2075,10 @@ async def get_due_follow_ups(user=Depends(get_current_user)):
 @api_router.get("/channels/by-outreach-status")
 async def get_channels_by_outreach_status(
     status: Optional[str] = Query(default=None, description="Filter by outreach status"),
+    project: Optional[str] = Query(default=None, description="Filter by project name"),
     user=Depends(get_current_user)
 ):
-    """Get all channels that have been contacted (have outreach_status set), optionally filtered by status"""
+    """Get all channels that have been contacted (have outreach_status set), optionally filtered by status and project"""
     query = {
         "user_id": user["id"],
         "outreach_status": {"$exists": True, "$ne": "not_contacted"}
@@ -2081,6 +2088,9 @@ async def get_channels_by_outreach_status(
         if status not in OUTREACH_STATUSES:
             raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(OUTREACH_STATUSES)}")
         query["outreach_status"] = status
+    
+    if project and project != "all":
+        query["project_name"] = project
     
     channels = await db.channels.find(query, {"_id": 0}).sort("enriched_at", -1).to_list(500)
     
@@ -2100,6 +2110,69 @@ async def get_channels_by_outreach_status(
 async def get_outreach_statuses():
     """Get list of valid outreach statuses"""
     return {"statuses": OUTREACH_STATUSES}
+
+@api_router.get("/pipeline/projects")
+async def get_pipeline_projects(user=Depends(get_current_user)):
+    """Get list of unique project names for the current user's pipeline channels"""
+    pipeline = db.channels.find(
+        {"user_id": user["id"], "project_name": {"$exists": True, "$nin": [None, ""]}},
+        {"project_name": 1, "_id": 0}
+    )
+    items = await pipeline.to_list(1000)
+    projects = sorted(set(item["project_name"] for item in items if item.get("project_name")))
+    return {"projects": projects}
+
+class UpdateProjectNameInput(BaseModel):
+    project_name: Optional[str] = None
+
+@api_router.patch("/channels/{channel_id}/project-name")
+async def update_channel_project_name(channel_id: str, input: UpdateProjectNameInput, user=Depends(get_current_user)):
+    """Update the project name for a channel"""
+    channel = await db.channels.find_one({"channel_id": channel_id, "user_id": user["id"]})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    await db.channels.update_one(
+        {"channel_id": channel_id, "user_id": user["id"]},
+        {"$set": {"project_name": input.project_name or ""}}
+    )
+    return {"success": True, "project_name": input.project_name}
+
+class AutoSaveInput(BaseModel):
+    channels: List[Dict[str, Any]]
+    raw_search_results: Optional[Dict[str, Any]] = None
+    search_metadata: Optional[Dict[str, Any]] = None
+
+@api_router.post("/search-results/autosave")
+async def autosave_search_results(input: AutoSaveInput, user=Depends(get_current_user)):
+    """Auto-save current search results (upserts a single auto-save per user)"""
+    doc = {
+        "user_id": user["id"],
+        "channels": input.channels,
+        "raw_search_results": input.raw_search_results,
+        "search_metadata": input.search_metadata,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+        "is_autosave": True
+    }
+    await db.autosaved_results.update_one(
+        {"user_id": user["id"]},
+        {"$set": doc},
+        upsert=True
+    )
+    return {"success": True}
+
+@api_router.get("/search-results/autosave")
+async def get_autosaved_results(user=Depends(get_current_user)):
+    """Get auto-saved search results for current user"""
+    result = await db.autosaved_results.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not result:
+        return {"exists": False}
+    return {"exists": True, **result}
+
+@api_router.delete("/search-results/autosave")
+async def delete_autosaved_results(user=Depends(get_current_user)):
+    """Delete auto-saved search results"""
+    await db.autosaved_results.delete_one({"user_id": user["id"]})
+    return {"success": True}
 
 # Search History endpoints
 @api_router.post("/search-history")
