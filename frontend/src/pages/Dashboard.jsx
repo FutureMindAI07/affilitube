@@ -102,7 +102,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, Bug, BookOpen } from "lucide-react";
+import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -147,6 +147,17 @@ const SEARCH_PRESETS = {
 };
 
 const DEFAULT_KEYWORD_PLACEHOLDER = `Select a niche above to see example keywords`;
+
+// Outreach status configuration
+const OUTREACH_STATUS_CONFIG = {
+  not_contacted: { label: "Not Contacted", color: "bg-slate-100 text-slate-700 border-slate-200" },
+  contacted: { label: "Contacted", color: "bg-blue-100 text-blue-700 border-blue-200" },
+  replied: { label: "Replied", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  in_negotiation: { label: "In Negotiation", color: "bg-orange-100 text-orange-700 border-orange-200" },
+  agreed: { label: "Agreed", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  declined: { label: "Declined", color: "bg-red-100 text-red-700 border-red-200" },
+  no_response: { label: "No Response", color: "bg-slate-200 text-slate-600 border-slate-300" },
+};
 
 export default function Dashboard() {
   const { user, token, logout } = useAuth();
@@ -210,6 +221,15 @@ export default function Dashboard() {
   const [filterMinScore, setFilterMinScore] = useState(0);
   const [filterHighAffiliate, setFilterHighAffiliate] = useState(false);
   const [filterHasPlatformLinks, setFilterHasPlatformLinks] = useState(false);
+  const [filterOutreachStatus, setFilterOutreachStatus] = useState("all");
+
+  // Outreach state for detail panel
+  const [outreachStatusUpdating, setOutreachStatusUpdating] = useState(false);
+  const [followUpDateUpdating, setFollowUpDateUpdating] = useState(false);
+  const [contactNoteText, setContactNoteText] = useState("");
+
+  // Follow-ups due count
+  const [followUpsDueCount, setFollowUpsDueCount] = useState(0);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -236,6 +256,7 @@ export default function Dashboard() {
     loadSearchHistory();
     loadSavedReports();
     loadAffiliatePlatforms();
+    loadFollowUpsDue();
   }, []);
 
   // Refresh user usage periodically
@@ -273,6 +294,57 @@ export default function Dashboard() {
       setAvailablePlatforms(res.data.platforms || []);
     } catch (e) {
       console.error("Error loading affiliate platforms:", e);
+    }
+  };
+
+  const loadFollowUpsDue = async () => {
+    try {
+      const res = await api.get("/channels/follow-ups/due");
+      setFollowUpsDueCount(res.data.count || 0);
+    } catch (e) {
+      console.error("Error loading follow-ups:", e);
+    }
+  };
+
+  const updateOutreachStatus = async (channelId, status, note) => {
+    setOutreachStatusUpdating(true);
+    try {
+      await api.patch(`/channels/${channelId}/outreach-status`, { status, note: note || null });
+      toast.success(`Status updated to ${OUTREACH_STATUS_CONFIG[status]?.label || status}`);
+      // Update local state
+      setChannels(prev => prev.map(ch => ch.channel_id === channelId ? { ...ch, outreach_status: status } : ch));
+      if (selectedChannel?.channel_id === channelId) {
+        const logEntry = { timestamp: new Date().toISOString(), status, note: note || "" };
+        setSelectedChannel(prev => ({
+          ...prev,
+          outreach_status: status,
+          contact_log: [...(prev.contact_log || []), logEntry]
+        }));
+      }
+      setContactNoteText("");
+      loadFollowUpsDue();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to update status");
+    } finally {
+      setOutreachStatusUpdating(false);
+    }
+  };
+
+  const updateFollowUpDate = async (channelId, date) => {
+    setFollowUpDateUpdating(true);
+    try {
+      const dateStr = date ? date.toISOString().split("T")[0] : null;
+      await api.patch(`/channels/${channelId}/follow-up-date`, { follow_up_date: dateStr });
+      toast.success(date ? `Follow-up set for ${dateStr}` : "Follow-up date cleared");
+      setChannels(prev => prev.map(ch => ch.channel_id === channelId ? { ...ch, follow_up_date: dateStr } : ch));
+      if (selectedChannel?.channel_id === channelId) {
+        setSelectedChannel(prev => ({ ...prev, follow_up_date: dateStr }));
+      }
+      loadFollowUpsDue();
+    } catch (e) {
+      toast.error("Failed to update follow-up date");
+    } finally {
+      setFollowUpDateUpdating(false);
     }
   };
 
@@ -719,6 +791,7 @@ export default function Dashboard() {
     .filter((ch) => ch.score_total >= filterMinScore)
     .filter((ch) => !filterHighAffiliate || (ch.affiliate_score >= 60))
     .filter((ch) => !filterHasPlatformLinks || (ch.affiliate_platforms_found?.length > 0))
+    .filter((ch) => filterOutreachStatus === "all" || (ch.outreach_status || "not_contacted") === filterOutreachStatus)
     .sort((a, b) => {
       const aVal = a[sortBy] || 0;
       const bVal = b[sortBy] || 0;
@@ -729,7 +802,7 @@ export default function Dashboard() {
   const paginatedChannels = sortedChannels.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Reset to page 1 when filters/sort change
-  useEffect(() => { setCurrentPage(1); }, [filterMinScore, filterHighAffiliate, filterHasPlatformLinks, sortBy, sortOrder, channels]);
+  useEffect(() => { setCurrentPage(1); }, [filterMinScore, filterHighAffiliate, filterHasPlatformLinks, filterOutreachStatus, sortBy, sortOrder, channels]);
 
   const getScoreClass = (score) => {
     if (score >= 60) return "score-high";
@@ -768,6 +841,10 @@ export default function Dashboard() {
             <button onClick={() => navigate("/dashboard")} className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium bg-indigo-50 text-indigo-700" data-testid="nav-tool">
               <Search className="h-3.5 w-3.5" />
               Prospect Finder
+            </button>
+            <button onClick={() => navigate("/dashboard/pipeline")} className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-all" data-testid="nav-pipeline">
+              <Handshake className="h-3.5 w-3.5" />
+              Pipeline
             </button>
             <button onClick={() => navigate("/dashboard/outreach")} className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-all" data-testid="nav-outreach">
               <Mail className="h-3.5 w-3.5" />
@@ -1040,6 +1117,9 @@ export default function Dashboard() {
         <button onClick={() => navigate("/dashboard")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 whitespace-nowrap">
           <Search className="h-3 w-3" /> Prospect Finder
         </button>
+        <button onClick={() => navigate("/dashboard/pipeline")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-slate-500 whitespace-nowrap">
+          <Handshake className="h-3 w-3" /> Pipeline
+        </button>
         <button onClick={() => navigate("/dashboard/outreach")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-slate-500 whitespace-nowrap">
           <Mail className="h-3 w-3" /> Outreach
         </button>
@@ -1050,6 +1130,37 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-6">
+        {/* Follow Ups Due Indicator */}
+        {followUpsDueCount > 0 && (
+          <button
+            onClick={() => navigate("/dashboard/pipeline?overdue=true")}
+            className="w-full"
+            data-testid="follow-ups-due-card"
+          >
+            <Card className="bg-gradient-to-r from-red-50 to-orange-50 border-red-200 hover:shadow-md transition-shadow cursor-pointer">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center">
+                      <Calendar className="h-5 w-5 text-red-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-red-800">
+                        {followUpsDueCount} Follow-Up{followUpsDueCount !== 1 ? "s" : ""} Due
+                      </p>
+                      <p className="text-xs text-red-600">You have overdue follow-ups that need attention</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-red-600">
+                    <span className="text-sm font-medium">View Pipeline</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </button>
+        )}
+
         {/* User Usage Display for Free Tier */}
         {userUsage && !userUsage.is_unlimited && (
           <Card className="bg-gradient-to-r from-indigo-50/60 to-purple-50/60 border-indigo-100/50">
@@ -1680,6 +1791,23 @@ export default function Dashboard() {
               </div>
               <Separator orientation="vertical" className="h-6" />
               <div className="flex items-center gap-2">
+                <Label htmlFor="filter-outreach" className="text-sm">
+                  Status:
+                </Label>
+                <Select value={filterOutreachStatus} onValueChange={setFilterOutreachStatus}>
+                  <SelectTrigger id="filter-outreach" className="w-40 h-8" data-testid="filter-outreach-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    {Object.entries(OUTREACH_STATUS_CONFIG).map(([key, cfg]) => (
+                      <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Separator orientation="vertical" className="h-6" />
+              <div className="flex items-center gap-2">
                 <Label htmlFor="sort-by" className="text-sm">
                   Sort by:
                 </Label>
@@ -1750,6 +1878,7 @@ export default function Dashboard() {
                         <TableHead className="text-right">Last Upload</TableHead>
                         <TableHead>Topics</TableHead>
                         <TableHead>Signals</TableHead>
+                        <TableHead className="w-28">Status</TableHead>
                         <TableHead className="w-12"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1867,6 +1996,17 @@ export default function Dashboard() {
                                 )
                               )}
                             </div>
+                          </TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            {(() => {
+                              const st = channel.outreach_status || "not_contacted";
+                              const cfg = OUTREACH_STATUS_CONFIG[st] || OUTREACH_STATUS_CONFIG.not_contacted;
+                              return (
+                                <Badge className={`${cfg.color} text-[10px] px-1.5 py-0.5 whitespace-nowrap`} data-testid={`status-badge-${channel.channel_id}`}>
+                                  {cfg.label}
+                                </Badge>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell>
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -2098,6 +2238,119 @@ export default function Dashboard() {
                         {selectedChannel.score_contactability}/10
                       </span>
                     </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Outreach Tracking */}
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Handshake className="h-4 w-4 text-indigo-500" />
+                    Outreach Tracking
+                  </h4>
+                  
+                  {/* Status Dropdown */}
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1.5 block">Status</Label>
+                      <Select
+                        value={selectedChannel.outreach_status || "not_contacted"}
+                        onValueChange={(val) => updateOutreachStatus(selectedChannel.channel_id, val, null)}
+                        disabled={outreachStatusUpdating}
+                      >
+                        <SelectTrigger className="h-9" data-testid="detail-outreach-status-select">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(OUTREACH_STATUS_CONFIG).map(([key, cfg]) => (
+                            <SelectItem key={key} value={key}>
+                              <span className="flex items-center gap-2">
+                                <span className={`inline-block w-2 h-2 rounded-full ${cfg.color.split(" ")[0]}`}></span>
+                                {cfg.label}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Follow-Up Date */}
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1.5 block">Follow-Up Date</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="date"
+                          value={selectedChannel.follow_up_date || ""}
+                          onChange={(e) => updateFollowUpDate(selectedChannel.channel_id, e.target.value ? new Date(e.target.value + "T00:00:00") : null)}
+                          disabled={followUpDateUpdating}
+                          className="h-9 flex-1"
+                          data-testid="detail-follow-up-date"
+                        />
+                        {selectedChannel.follow_up_date && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => updateFollowUpDate(selectedChannel.channel_id, null)}
+                            className="h-9 px-2 text-slate-400 hover:text-red-500"
+                            data-testid="clear-follow-up-date"
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Add Note */}
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1.5 block">Add Contact Note</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Add a note about this contact..."
+                          value={contactNoteText}
+                          onChange={(e) => setContactNoteText(e.target.value)}
+                          className="h-9 flex-1"
+                          data-testid="detail-contact-note-input"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && contactNoteText.trim()) {
+                              updateOutreachStatus(selectedChannel.channel_id, selectedChannel.outreach_status || "contacted", contactNoteText.trim());
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          className="h-9"
+                          disabled={!contactNoteText.trim() || outreachStatusUpdating}
+                          onClick={() => updateOutreachStatus(selectedChannel.channel_id, selectedChannel.outreach_status || "contacted", contactNoteText.trim())}
+                          data-testid="detail-add-note-btn"
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Contact Log */}
+                    {selectedChannel.contact_log?.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-1.5 block">Contact Log</Label>
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                          {[...selectedChannel.contact_log].reverse().map((entry, i) => {
+                            const entryCfg = OUTREACH_STATUS_CONFIG[entry.status] || OUTREACH_STATUS_CONFIG.not_contacted;
+                            return (
+                              <div key={i} className="flex items-start gap-2 text-xs p-2 rounded-md bg-slate-50 border border-slate-100">
+                                <Badge className={`${entryCfg.color} text-[9px] px-1.5 py-0 shrink-0 mt-0.5`}>{entryCfg.label}</Badge>
+                                <div className="flex-1 min-w-0">
+                                  {entry.note && <p className="text-slate-700 break-words">{entry.note}</p>}
+                                  <p className="text-slate-400 mt-0.5">
+                                    {new Date(entry.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

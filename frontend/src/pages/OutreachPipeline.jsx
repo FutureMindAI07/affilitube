@@ -36,7 +36,7 @@ import {
   Shield,
 } from "lucide-react";
 
-const API = `${import.meta.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_BACKEND_URL}/api`;
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 // Status configuration with colors and labels
 const STATUS_CONFIG = {

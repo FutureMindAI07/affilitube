@@ -8,6 +8,7 @@ import Signup from "@/pages/Signup";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import OutreachPage from "@/pages/OutreachPage";
+import OutreachPipeline from "@/pages/OutreachPipeline";
 import GettingStartedPage from "@/pages/GettingStartedPage";
 import AdminPanel from "@/pages/AdminPanel";
 import Terms from "@/pages/Terms";
@@ -59,6 +60,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <OutreachPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/pipeline"
+              element={
+                <ProtectedRoute>
+                  <OutreachPipeline />
                 </ProtectedRoute>
               }
             />
