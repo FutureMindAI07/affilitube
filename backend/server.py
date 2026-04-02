@@ -2081,7 +2081,10 @@ async def get_channels_by_outreach_status(
     """Get all channels that have been contacted (have outreach_status set), optionally filtered by status and project"""
     query = {
         "user_id": user["id"],
-        "outreach_status": {"$exists": True, "$ne": "not_contacted"}
+        "$or": [
+            {"outreach_status": {"$exists": True, "$ne": "not_contacted"}},
+            {"project_name": {"$exists": True, "$nin": [None, ""]}}
+        ]
     }
     
     if status and status != "all":

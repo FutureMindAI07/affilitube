@@ -381,7 +381,7 @@ export default function Dashboard() {
   const openPipelineDialog = (channel) => {
     setPipelineChannel(channel);
     setPipelineProjectName("");
-    setPipelineStatus("not_contacted");
+    setPipelineStatus("contacted");
     setPipelineDialogOpen(true);
     loadUserProjects();
   };
