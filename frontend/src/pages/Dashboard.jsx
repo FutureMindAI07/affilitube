@@ -3017,6 +3017,7 @@ export default function Dashboard() {
                         <TableHead className="text-right">Last Upload</TableHead>
                         <TableHead>Topics</TableHead>
                         <TableHead>Signals</TableHead>
+                        <TableHead className="w-28">Status</TableHead>
                         <TableHead className="w-12"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -3089,6 +3090,32 @@ export default function Dashboard() {
                                 </span>
                               ))}
                             </div>
+                          </TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            {(() => {
+                              const st = channel.outreach_status || "not_contacted";
+                              const inPipeline = st !== "not_contacted";
+                              const cfg = OUTREACH_STATUS_CONFIG[st] || OUTREACH_STATUS_CONFIG.not_contacted;
+                              if (inPipeline) {
+                                return (
+                                  <Badge className={`${cfg.color} text-[10px] px-1.5 py-0.5 whitespace-nowrap cursor-default`} data-testid={`report-status-badge-${channel.channel_id}`}>
+                                    {cfg.label}
+                                  </Badge>
+                                );
+                              }
+                              return (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                                  onClick={() => openPipelineDialog(channel)}
+                                  data-testid={`report-add-pipeline-btn-${channel.channel_id}`}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                  Pipeline
+                                </Button>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell>
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />

@@ -47,6 +47,11 @@
     .font-mono, code, pre, .data-cell {
         font-family: 'JetBrains Mono', monospace;
     }
+    /* Fix native datalist/option text visibility */
+    datalist, datalist option, option {
+        color: hsl(240 10% 3.9%);
+        background-color: hsl(0 0% 100%);
+    }
 }
 
 /* Custom scrollbar */
