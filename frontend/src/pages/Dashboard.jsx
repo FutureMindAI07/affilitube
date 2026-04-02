@@ -3161,25 +3161,22 @@ export default function Dashboard() {
                   placeholder="e.g. Q1 Outreach, SaaS Partners..."
                   value={pipelineProjectName}
                   onChange={(e) => setPipelineProjectName(e.target.value)}
-                  list="project-suggestions"
                   className="pr-8"
                   data-testid="pipeline-project-input"
+                  autoComplete="off"
                 />
                 <FolderOpen className="absolute right-2.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
-                <datalist id="project-suggestions">
-                  {userProjects.map(p => <option key={p} value={p} />)}
-                </datalist>
               </div>
               {userProjects.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
-                  {userProjects.slice(0, 5).map(p => (
+                  {userProjects.map(p => (
                     <button
                       key={p}
                       onClick={() => setPipelineProjectName(p)}
-                      className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                      className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                         pipelineProjectName === p
-                          ? "bg-indigo-50 border-indigo-300 text-indigo-700"
-                          : "bg-slate-50 border-slate-200 text-slate-600 hover:border-indigo-200"
+                          ? "bg-indigo-50 border-indigo-300 text-indigo-700 font-medium"
+                          : "bg-white border-slate-200 text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/50"
                       }`}
                     >
                       {p}
