@@ -10,7 +10,7 @@ Frontend (React + Tailwind + Shadcn UI + Framer Motion)
   ├── Pricing (/pricing) — Stripe checkout (Free/Pro tiers)
   ├── Auth (/login, /signup, /forgot-password)
   ├── Dashboard (/dashboard) — Prospect Finder tool with Niche Selector
-  ├── Outreach Pipeline (/dashboard/pipeline) — CRM-like channel tracking
+  ├── Outreach Pipeline (/dashboard/pipeline) — CRM-like channel tracking with project org
   ├── Outreach Templates (/dashboard/outreach) — Email templates
   ├── Getting Started (/dashboard/getting-started) — Tutorials & guides
   ├── Admin Panel (/admin) — Revenue, quota, users, search logs
@@ -23,7 +23,8 @@ Backend (FastAPI + Motor/MongoDB)
   ├── Stripe Checkout (Pro subscription: $39/mo or $299/yr)
   ├── YouTube Search & Enrichment (24hr caching, backend API key)
   ├── Niche-based Scoring (14 niches with dynamic keyword configs)
-  ├── Outreach Status Tracking (status, follow-up dates, contact logs)
+  ├── Outreach Status Tracking (status, follow-up dates, contact logs, projects)
+  ├── Search Results Auto-save & Persistence
   ├── History, Reports, Quota, Bug Reports, CSV Export
 ```
 
@@ -42,10 +43,10 @@ Backend (FastAPI + Motor/MongoDB)
 
 ### Outreach Status Tracking (Completed Apr 2, 2026)
 Backend:
-- PATCH /api/channels/{id}/outreach-status — Update status + contact log
+- PATCH /api/channels/{id}/outreach-status — Update status + contact log + project_name
 - PATCH /api/channels/{id}/follow-up-date — Set/clear follow-up date
 - GET /api/channels/follow-ups/due — Overdue follow-ups
-- GET /api/channels/by-outreach-status — Channels grouped by status
+- GET /api/channels/by-outreach-status — Channels grouped by status (with project filter)
 - GET /api/channels/outreach-statuses — Valid status list
 
 Frontend:
@@ -55,6 +56,36 @@ Frontend:
 - Outreach status filter dropdown in filter bar
 - Channel Detail Panel: status dropdown, follow-up date picker, contact note input, contact log
 - Follow Ups Due indicator card on Dashboard (navigates to pipeline)
+
+### UX Fix 1: Add to Pipeline from Search Results (Completed Apr 2, 2026)
+- "Add to Pipeline" button on each enriched channel row in results table
+- "Add to Pipeline" prominent button in channel detail panel
+- Dialog with project/campaign name input (with autocomplete from existing projects)
+- Initial outreach status dropdown (defaults to "not_contacted")
+- Shows "In Pipeline" badge with status when already added
+
+### UX Fix 2: Project Organisation in Pipeline (Completed Apr 2, 2026)
+Backend:
+- project_name field on outreach status data per channel
+- GET /api/pipeline/projects — unique project names for user
+- PATCH /api/channels/{id}/project-name — update project name
+
+Frontend:
+- Project filter dropdown in Pipeline view
+- Project name label on each channel card
+- Inline project name editing from pipeline view
+
+### UX Fix 3: Persist Search Results Across Navigation (Completed Apr 2, 2026)
+Frontend:
+- SearchResultsContext — React context persisting channels across tab navigation
+- sessionStorage backup for fast restore
+- Results loaded indicator ("X channels loaded from last search") with clear button
+- Results persist until new search, logout, or explicit clear
+
+Backend:
+- POST /api/search-results/autosave — auto-save results (upserts per user)
+- GET /api/search-results/autosave — restore auto-saved results
+- DELETE /api/search-results/autosave — clear auto-saved results
 
 ## Supported Niches (14)
 1. SaaS & Software
@@ -72,11 +103,10 @@ Frontend:
 13. Food & Cooking
 14. Tech & Gadgets
 
-## Credentials
-- Admin: admin@affilitube.com / admin123!
-- Stripe Price IDs (placeholders):
-  - Pro Monthly: price_PLACEHOLDER_PRO_MONTHLY_39
-  - Pro Yearly: price_PLACEHOLDER_PRO_YEARLY_299
+## Key DB Collections
+- `users`: {email, role, tier, monthly_search_count, search_count_reset_date, has_paid}
+- `channels`: {channel_id, user_id, channel_data, outreach_status, follow_up_date, project_name, contact_log}
+- `autosaved_results`: {user_id, channels, raw_search_results, search_metadata, saved_at, is_autosave}
 
 ## Environment Variables
 - YOUTUBE_API_KEY — Backend YouTube Data API v3 key
