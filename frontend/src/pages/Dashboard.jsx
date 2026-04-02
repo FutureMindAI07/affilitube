@@ -102,8 +102,66 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus } from "lucide-react";
+import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus, ArrowUp, ArrowDown, Minus, Activity, TrendingUp } from "lucide-react";
 import { useSearchResults } from "@/contexts/SearchResultsContext";
+
+// Health indicator configs
+const ENGAGEMENT_HEALTH_CONFIG = {
+  Healthy: { color: "bg-emerald-100 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
+  Average: { color: "bg-yellow-100 text-yellow-700 border-yellow-200", dot: "bg-yellow-500" },
+  Low: { color: "bg-orange-100 text-orange-700 border-orange-200", dot: "bg-orange-500" },
+  "Very Low": { color: "bg-red-100 text-red-700 border-red-200", dot: "bg-red-500" },
+};
+
+const UPLOAD_CONSISTENCY_ICONS = {
+  Daily: "text-emerald-500",
+  "Very Active": "text-emerald-500",
+  Active: "text-blue-500",
+  Occasional: "text-yellow-500",
+  Infrequent: "text-slate-400",
+};
+
+// Client-side health indicator calculation for channels loaded from cache/autosave
+function computeHealthIndicators(channel) {
+  if (channel.engagement_health && channel.upload_consistency && channel.growth_indicator) return channel;
+  const ch = { ...channel };
+  // Engagement health
+  if (!ch.engagement_health && ch.subscriber_count > 0) {
+    const rate = (ch.avg_views_recent / ch.subscriber_count) * 100;
+    ch.engagement_rate = Math.round(rate * 100) / 100;
+    if (rate >= 5) ch.engagement_health = "Healthy";
+    else if (rate >= 2) ch.engagement_health = "Average";
+    else if (rate >= 0.5) ch.engagement_health = "Low";
+    else ch.engagement_health = "Very Low";
+  }
+  // Growth indicator
+  if (!ch.growth_indicator && ch.video_count > 0 && ch.view_count > 0) {
+    const lifetimeAvg = ch.view_count / ch.video_count;
+    const ratio = lifetimeAvg > 0 ? ch.avg_views_recent / lifetimeAvg : 1;
+    if (ratio > 1.5) ch.growth_indicator = "Growing";
+    else if (ratio < 0.5) ch.growth_indicator = "Declining";
+    else ch.growth_indicator = "Stable";
+  }
+  // Upload consistency from recent_videos
+  if (!ch.upload_consistency && ch.recent_videos?.length >= 2) {
+    const dates = ch.recent_videos
+      .map(v => v.published_at ? new Date(v.published_at) : null)
+      .filter(Boolean)
+      .sort((a, b) => b - a);
+    if (dates.length >= 2) {
+      const gaps = [];
+      for (let i = 0; i < dates.length - 1; i++) gaps.push((dates[i] - dates[i+1]) / 86400000);
+      const avg = gaps.reduce((a,b) => a+b, 0) / gaps.length;
+      ch.upload_avg_days = Math.round(avg * 10) / 10;
+      if (avg <= 2) ch.upload_consistency = "Daily";
+      else if (avg <= 7) ch.upload_consistency = "Very Active";
+      else if (avg <= 14) ch.upload_consistency = "Active";
+      else if (avg <= 30) ch.upload_consistency = "Occasional";
+      else ch.upload_consistency = "Infrequent";
+    }
+  }
+  return ch;
+}
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -228,6 +286,7 @@ export default function Dashboard() {
   const [filterHighAffiliate, setFilterHighAffiliate] = useState(false);
   const [filterHasPlatformLinks, setFilterHasPlatformLinks] = useState(false);
   const [filterOutreachStatus, setFilterOutreachStatus] = useState("all");
+  const [filterEngagementHealth, setFilterEngagementHealth] = useState("all");
 
   // Outreach state for detail panel
   const [outreachStatusUpdating, setOutreachStatusUpdating] = useState(false);
@@ -899,10 +958,12 @@ export default function Dashboard() {
 
   // Sorting and filtering
   const sortedChannels = [...channels]
+    .map(computeHealthIndicators)
     .filter((ch) => ch.score_total >= filterMinScore)
     .filter((ch) => !filterHighAffiliate || (ch.affiliate_score >= 60))
     .filter((ch) => !filterHasPlatformLinks || (ch.affiliate_platforms_found?.length > 0))
     .filter((ch) => filterOutreachStatus === "all" || (ch.outreach_status || "not_contacted") === filterOutreachStatus)
+    .filter((ch) => filterEngagementHealth === "all" || (ch.engagement_health || "") === filterEngagementHealth)
     .sort((a, b) => {
       const aVal = a[sortBy] || 0;
       const bVal = b[sortBy] || 0;
@@ -913,7 +974,7 @@ export default function Dashboard() {
   const paginatedChannels = sortedChannels.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Reset to page 1 when filters/sort change
-  useEffect(() => { setCurrentPage(1); }, [filterMinScore, filterHighAffiliate, filterHasPlatformLinks, filterOutreachStatus, sortBy, sortOrder, channels]);
+  useEffect(() => { setCurrentPage(1); }, [filterMinScore, filterHighAffiliate, filterHasPlatformLinks, filterOutreachStatus, filterEngagementHealth, sortBy, sortOrder, channels]);
 
   const getScoreClass = (score) => {
     if (score >= 60) return "score-high";
@@ -1944,6 +2005,24 @@ export default function Dashboard() {
               </div>
               <Separator orientation="vertical" className="h-6" />
               <div className="flex items-center gap-2">
+                <Label htmlFor="filter-engagement" className="text-sm">
+                  Engagement:
+                </Label>
+                <Select value={filterEngagementHealth} onValueChange={setFilterEngagementHealth}>
+                  <SelectTrigger id="filter-engagement" className="w-32 h-8" data-testid="filter-engagement-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="Healthy">Healthy</SelectItem>
+                    <SelectItem value="Average">Average</SelectItem>
+                    <SelectItem value="Low">Low</SelectItem>
+                    <SelectItem value="Very Low">Very Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Separator orientation="vertical" className="h-6" />
+              <div className="flex items-center gap-2">
                 <Label htmlFor="sort-by" className="text-sm">
                   Sort by:
                 </Label>
@@ -2014,6 +2093,7 @@ export default function Dashboard() {
                         <TableHead className="text-right">Last Upload</TableHead>
                         <TableHead>Topics</TableHead>
                         <TableHead>Signals</TableHead>
+                        <TableHead className="w-20">Health</TableHead>
                         <TableHead className="w-28">Status</TableHead>
                         <TableHead className="w-12"></TableHead>
                       </TableRow>
@@ -2131,6 +2211,19 @@ export default function Dashboard() {
                                   </span>
                                 )
                               )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              {channel.engagement_health && (
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${ENGAGEMENT_HEALTH_CONFIG[channel.engagement_health]?.dot || "bg-slate-300"}`} title={`Engagement: ${channel.engagement_health}`}></span>
+                              )}
+                              {["Daily", "Very Active", "Active"].includes(channel.upload_consistency) && (
+                                <Activity className={`h-3 w-3 shrink-0 ${UPLOAD_CONSISTENCY_ICONS[channel.upload_consistency]}`} title={channel.upload_consistency} />
+                              )}
+                              {channel.growth_indicator === "Growing" && <ArrowUp className="h-3 w-3 text-emerald-500 shrink-0" title="Growing" />}
+                              {channel.growth_indicator === "Declining" && <ArrowDown className="h-3 w-3 text-red-500 shrink-0" title="Declining" />}
+                              {channel.growth_indicator === "Stable" && <Minus className="h-3 w-3 text-slate-400 shrink-0" title="Stable" />}
                             </div>
                           </TableCell>
                           <TableCell onClick={(e) => e.stopPropagation()}>
@@ -2721,6 +2814,65 @@ export default function Dashboard() {
                           ? `${selectedChannel.days_since_upload}d ago`
                           : "-"}
                       </p>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Channel Health Indicators */}
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-emerald-500" />
+                    Channel Health
+                  </h4>
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {/* Upload Consistency */}
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Upload Frequency</p>
+                        <p className="text-sm font-medium">
+                          {selectedChannel.upload_consistency || "Unknown"}
+                        </p>
+                      </div>
+                      {selectedChannel.upload_avg_days != null && (
+                        <span className="text-xs text-muted-foreground">
+                          ~{selectedChannel.upload_avg_days}d between uploads
+                        </span>
+                      )}
+                    </div>
+                    {/* Engagement Health */}
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Engagement Health</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {selectedChannel.engagement_health && (
+                            <Badge className={`${ENGAGEMENT_HEALTH_CONFIG[selectedChannel.engagement_health]?.color || "bg-slate-100 text-slate-600"} text-xs`}>
+                              {selectedChannel.engagement_health}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      {selectedChannel.engagement_rate != null && (
+                        <span className="text-xs text-muted-foreground">
+                          {selectedChannel.engagement_rate}% views/subs
+                        </span>
+                      )}
+                    </div>
+                    {/* Growth Indicator */}
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Growth Trend</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {selectedChannel.growth_indicator === "Growing" && <ArrowUp className="h-4 w-4 text-emerald-500" />}
+                          {selectedChannel.growth_indicator === "Stable" && <Minus className="h-4 w-4 text-slate-400" />}
+                          {selectedChannel.growth_indicator === "Declining" && <ArrowDown className="h-4 w-4 text-red-500" />}
+                          <span className="text-sm font-medium">{selectedChannel.growth_indicator || "Unknown"}</span>
+                        </div>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        Recent vs lifetime avg
+                      </span>
                     </div>
                   </div>
                 </div>

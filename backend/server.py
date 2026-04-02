@@ -768,6 +768,12 @@ class ChannelData(BaseModel):
     tools_section_detected: bool = False
     tools_stack_signal_score: int = 0
     tools_section_phrases: List[str] = []
+    # Channel Health Indicators
+    upload_consistency: str = ""  # Daily, Very Active, Active, Occasional, Infrequent
+    upload_avg_days: Optional[float] = None
+    engagement_health: str = ""  # Healthy, Average, Low, Very Low
+    engagement_rate: Optional[float] = None
+    growth_indicator: str = ""  # Growing, Stable, Declining
 
 class ShortlistItem(BaseModel):
     channel_id: str
@@ -927,6 +933,61 @@ def calculate_contactability_score(public_links: Dict[str, str]) -> int:
     if public_links.get('instagram'):
         score += 2
     return min(10, score)
+
+def calculate_upload_consistency(recent_videos: list) -> tuple:
+    """Calculate upload consistency from recent video dates."""
+    if len(recent_videos) < 2:
+        return ("Infrequent", None)
+    dates = []
+    for v in recent_videos:
+        pa = v.get("published_at")
+        if pa:
+            try:
+                dates.append(datetime.fromisoformat(pa.replace("Z", "+00:00")))
+            except Exception:
+                pass
+    if len(dates) < 2:
+        return ("Infrequent", None)
+    dates.sort(reverse=True)
+    gaps = [(dates[i] - dates[i + 1]).days for i in range(len(dates) - 1)]
+    avg_days = sum(gaps) / len(gaps) if gaps else 999
+    if avg_days <= 2:
+        return ("Daily", round(avg_days, 1))
+    elif avg_days <= 7:
+        return ("Very Active", round(avg_days, 1))
+    elif avg_days <= 14:
+        return ("Active", round(avg_days, 1))
+    elif avg_days <= 30:
+        return ("Occasional", round(avg_days, 1))
+    return ("Infrequent", round(avg_days, 1))
+
+def calculate_engagement_health(avg_views: float, subscriber_count: int) -> tuple:
+    """Calculate engagement health flag."""
+    if subscriber_count == 0:
+        return ("Average", 0.0)
+    rate = (avg_views / subscriber_count) * 100
+    rate = round(rate, 2)
+    if rate >= 5:
+        return ("Healthy", rate)
+    elif rate >= 2:
+        return ("Average", rate)
+    elif rate >= 0.5:
+        return ("Low", rate)
+    return ("Very Low", rate)
+
+def calculate_growth_indicator(avg_views_recent: float, view_count: int, video_count: int) -> str:
+    """Calculate growth indicator by comparing recent performance to lifetime average."""
+    if video_count == 0 or view_count == 0:
+        return "Stable"
+    lifetime_avg = view_count / video_count
+    if lifetime_avg == 0:
+        return "Stable"
+    ratio = avg_views_recent / lifetime_avg
+    if ratio > 1.5:
+        return "Growing"
+    elif ratio < 0.5:
+        return "Declining"
+    return "Stable"
 
 def detect_affiliate_signals(channel_name: str, description: str, video_titles: List[str], niche_keywords: List[str] = None) -> List[str]:
     """Detect affiliate likelihood signals"""
@@ -1674,6 +1735,16 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
             hidden = cached.get("hidden_subscriber_count", False)
             if not hidden and (sub_count < min_subscribers or sub_count > max_subscribers):
                 continue
+            # Backfill health indicators if missing
+            if not cached.get("upload_consistency"):
+                uc, uad = calculate_upload_consistency(cached.get("recent_videos", []))
+                eh, er = calculate_engagement_health(cached.get("avg_views_recent", 0), cached.get("subscriber_count", 0))
+                gi = calculate_growth_indicator(cached.get("avg_views_recent", 0), cached.get("view_count", 0), cached.get("video_count", 0))
+                cached["upload_consistency"] = uc
+                cached["upload_avg_days"] = uad
+                cached["engagement_health"] = eh
+                cached["engagement_rate"] = er
+                cached["growth_indicator"] = gi
             cached_channels.append(cached)
         else:
             uncached_ids.append(ch_id)
@@ -1871,6 +1942,11 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                         brand_contact_count, has_business_email, tools_stack_signal_score
                     )
                     
+                    # Channel Health Indicators
+                    upload_consistency, upload_avg_days = calculate_upload_consistency(recent_videos)
+                    engagement_health, engagement_rate = calculate_engagement_health(avg_views, sub_count)
+                    growth_indicator = calculate_growth_indicator(avg_views, int(stats.get("viewCount", 0)), int(stats.get("videoCount", 0)))
+                    
                     # Get metadata
                     meta = channel_metadata.get(ch_id, {})
                     
@@ -1922,7 +1998,13 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                         # Tool Stack Detection
                         tools_section_detected=tools_section_detected,
                         tools_stack_signal_score=tools_stack_signal_score,
-                        tools_section_phrases=tools_section_phrases
+                        tools_section_phrases=tools_section_phrases,
+                        # Channel Health Indicators
+                        upload_consistency=upload_consistency,
+                        upload_avg_days=upload_avg_days,
+                        engagement_health=engagement_health,
+                        engagement_rate=engagement_rate,
+                        growth_indicator=growth_indicator
                     )
                     
                     enriched_channels.append(channel_data.model_dump())
@@ -2317,7 +2399,9 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
         # Affiliate platform links
         "affiliate_platforms_found", "affiliate_platforms_count", "affiliate_platform_links",
         # Tool Stack Detection
-        "tools_section_detected", "tools_stack_signal_score"
+        "tools_section_detected", "tools_stack_signal_score",
+        # Channel Health Indicators
+        "upload_consistency", "upload_avg_days", "engagement_health", "engagement_rate", "growth_indicator"
     ]
     
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -2372,7 +2456,13 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
             "affiliate_platform_links": str(ch.get("affiliate_platform_links", {})),
             # Tool Stack Detection
             "tools_section_detected": ch.get("tools_section_detected", False),
-            "tools_stack_signal_score": ch.get("tools_stack_signal_score", 0)
+            "tools_stack_signal_score": ch.get("tools_stack_signal_score", 0),
+            # Channel Health Indicators
+            "upload_consistency": ch.get("upload_consistency", ""),
+            "upload_avg_days": ch.get("upload_avg_days", ""),
+            "engagement_health": ch.get("engagement_health", ""),
+            "engagement_rate": ch.get("engagement_rate", ""),
+            "growth_indicator": ch.get("growth_indicator", "")
         }
         writer.writerow(row)
     
