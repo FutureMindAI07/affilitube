@@ -2140,6 +2140,18 @@ async def update_channel_project_name(channel_id: str, input: UpdateProjectNameI
     )
     return {"success": True, "project_name": input.project_name}
 
+@api_router.delete("/channels/{channel_id}/pipeline")
+async def remove_from_pipeline(channel_id: str, user=Depends(get_current_user)):
+    """Remove a channel from the pipeline by resetting outreach fields"""
+    channel = await db.channels.find_one({"channel_id": channel_id, "user_id": user["id"]})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    await db.channels.update_one(
+        {"channel_id": channel_id, "user_id": user["id"]},
+        {"$set": {"outreach_status": "not_contacted", "project_name": None, "follow_up_date": None, "contact_log": []}}
+    )
+    return {"success": True}
+
 class AutoSaveInput(BaseModel):
     channels: List[Dict[str, Any]]
     raw_search_results: Optional[Dict[str, Any]] = None

@@ -154,6 +154,17 @@ export default function OutreachPipeline() {
     }
   };
 
+  const removeFromPipeline = async (channel) => {
+    try {
+      await api.delete(`/channels/${channel.channel_id}/pipeline`);
+      toast.success(`${channel.channel_name} removed from pipeline`);
+      loadChannels();
+      loadProjects();
+    } catch (e) {
+      toast.error("Failed to remove from pipeline");
+    }
+  };
+
   const filteredChannels = channels.filter(ch => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
@@ -437,17 +448,28 @@ export default function OutreachPipeline() {
                       </Badge>
 
                       {/* Quick Actions */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setUpdatingChannel(channel);
-                          setNewStatus(channel.outreach_status || "not_contacted");
-                        }}
-                        className="shrink-0"
-                      >
-                        Update Status
-                      </Button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setUpdatingChannel(channel);
+                            setNewStatus(channel.outreach_status || "not_contacted");
+                          }}
+                        >
+                          Update Status
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-slate-400 hover:text-red-500 hover:bg-red-50 h-8 w-8 p-0"
+                          onClick={() => removeFromPipeline(channel)}
+                          data-testid={`remove-pipeline-btn-${channel.channel_id}`}
+                          title="Remove from pipeline"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
 
                     {/* Contact Log Preview */}
