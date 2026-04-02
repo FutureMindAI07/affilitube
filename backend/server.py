@@ -1985,6 +1985,122 @@ async def update_notes(channel_id: str, input: UpdateNotesInput, user=Depends(ge
     )
     return {"success": True}
 
+# ==================== OUTREACH STATUS TRACKING ====================
+
+OUTREACH_STATUSES = [
+    "not_contacted",
+    "contacted",
+    "replied",
+    "in_negotiation",
+    "agreed",
+    "declined",
+    "no_response"
+]
+
+class UpdateOutreachStatusInput(BaseModel):
+    status: str
+    note: Optional[str] = None
+
+class UpdateFollowUpDateInput(BaseModel):
+    follow_up_date: Optional[str] = None  # ISO date string or null to clear
+
+@api_router.patch("/channels/{channel_id}/outreach-status")
+async def update_outreach_status(channel_id: str, input: UpdateOutreachStatusInput, user=Depends(get_current_user)):
+    """Update outreach status and add a contact log entry"""
+    if input.status not in OUTREACH_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(OUTREACH_STATUSES)}")
+    
+    # Check if channel exists for this user
+    channel = await db.channels.find_one({"channel_id": channel_id, "user_id": user["id"]})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    # Create contact log entry
+    log_entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "status": input.status,
+        "note": input.note or ""
+    }
+    
+    # Update status and add to contact log
+    await db.channels.update_one(
+        {"channel_id": channel_id, "user_id": user["id"]},
+        {
+            "$set": {"outreach_status": input.status},
+            "$push": {"contact_log": log_entry}
+        }
+    )
+    
+    return {"success": True, "status": input.status, "log_entry": log_entry}
+
+@api_router.patch("/channels/{channel_id}/follow-up-date")
+async def update_follow_up_date(channel_id: str, input: UpdateFollowUpDateInput, user=Depends(get_current_user)):
+    """Update the follow-up date for a channel"""
+    # Check if channel exists for this user
+    channel = await db.channels.find_one({"channel_id": channel_id, "user_id": user["id"]})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    # Update follow-up date (can be null to clear)
+    await db.channels.update_one(
+        {"channel_id": channel_id, "user_id": user["id"]},
+        {"$set": {"follow_up_date": input.follow_up_date}}
+    )
+    
+    return {"success": True, "follow_up_date": input.follow_up_date}
+
+@api_router.get("/channels/follow-ups/due")
+async def get_due_follow_ups(user=Depends(get_current_user)):
+    """Get all channels where follow_up_date is today or earlier and status is not agreed or declined"""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    # Find channels with due follow-ups
+    channels = await db.channels.find(
+        {
+            "user_id": user["id"],
+            "follow_up_date": {"$lte": today, "$ne": None},
+            "outreach_status": {"$nin": ["agreed", "declined"]}
+        },
+        {"_id": 0}
+    ).to_list(500)
+    
+    return {"channels": channels, "count": len(channels)}
+
+@api_router.get("/channels/by-outreach-status")
+async def get_channels_by_outreach_status(
+    status: Optional[str] = Query(default=None, description="Filter by outreach status"),
+    user=Depends(get_current_user)
+):
+    """Get all channels that have been contacted (have outreach_status set), optionally filtered by status"""
+    query = {
+        "user_id": user["id"],
+        "outreach_status": {"$exists": True, "$ne": "not_contacted"}
+    }
+    
+    if status and status != "all":
+        if status not in OUTREACH_STATUSES:
+            raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(OUTREACH_STATUSES)}")
+        query["outreach_status"] = status
+    
+    channels = await db.channels.find(query, {"_id": 0}).sort("enriched_at", -1).to_list(500)
+    
+    # Group by status for summary
+    status_counts = {}
+    for ch in channels:
+        st = ch.get("outreach_status", "not_contacted")
+        status_counts[st] = status_counts.get(st, 0) + 1
+    
+    return {
+        "channels": channels,
+        "total": len(channels),
+        "status_counts": status_counts
+    }
+
+@api_router.get("/channels/outreach-statuses")
+async def get_outreach_statuses():
+    """Get list of valid outreach statuses"""
+    return {"statuses": OUTREACH_STATUSES}
+
 # Search History endpoints
 @api_router.post("/search-history")
 async def save_search_history(input: SaveSearchInput, user=Depends(get_current_user)):

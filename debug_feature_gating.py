@@ -7,7 +7,7 @@ import requests
 import json
 
 # Test credentials
-base_url = "https://creator-qualify-hub.preview.emergentagent.com"
+base_url = "https://status-hub-20.preview.emergentagent.com"
 api_url = f"{base_url}/api"
 
 def login_free_user():
