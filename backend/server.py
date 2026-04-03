@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -2309,7 +2309,7 @@ async def save_search_history(input: SaveSearchInput, user=Depends(get_current_u
     tier = get_user_tier(user)
     tier_config = get_tier_config(tier)
     if not tier_config["saved_searches"]:
-        raise HTTPException(status_code=403, detail="Upgrade to Pro to save searches")
+        return JSONResponse(status_code=403, content={"error": "upgrade_required", "message": "This feature requires a Starter or Pro plan", "upgrade_url": "/pricing"})
     
     item = SearchHistoryItem(
         name=input.name,
@@ -2354,7 +2354,7 @@ async def save_search_report(input: SaveReportInput, user=Depends(get_current_us
     tier = get_user_tier(user)
     tier_config = get_tier_config(tier)
     if not tier_config["saved_reports"]:
-        raise HTTPException(status_code=403, detail="Upgrade to Pro to save reports")
+        return JSONResponse(status_code=403, content={"error": "upgrade_required", "message": "This feature requires a Starter or Pro plan", "upgrade_url": "/pricing"})
     
     report = SearchReport(
         name=input.name,
@@ -2400,7 +2400,7 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
     tier = get_user_tier(user)
     tier_config = get_tier_config(tier)
     if not tier_config["csv_export"]:
-        raise HTTPException(status_code=403, detail="CSV export requires Starter or Pro plan. Upgrade to unlock.")
+        return JSONResponse(status_code=403, content={"error": "upgrade_required", "message": "This feature requires a Starter or Pro plan", "upgrade_url": "/pricing"})
     
     channels = await db.channels.find(
         {"channel_id": {"$in": channel_ids}, "user_id": user["id"]},

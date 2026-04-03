@@ -1,0 +1,75 @@
+{
+  "summary": "Completed comprehensive testing of tier restriction UX/UI for free tier users. All 9 backend tests pass (100%). All frontend tests pass - buttons correctly show lock icons and greyed out styling for free users, and open UpgradeDialog instead of feature dialogs. Pro users correctly see normal buttons without lock icons and can access features.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "Backend: Free user login returns tier=free",
+    "Backend: Pro user login returns tier=pro",
+    "Backend: POST /api/export/csv returns 403 JSON {error: upgrade_required, message: ..., upgrade_url: /pricing} for free tier user",
+    "Backend: POST /api/search-history returns 403 JSON with same format for free tier user",
+    "Backend: POST /api/search-reports returns 403 JSON with same format for free tier user",
+    "Backend: Pro user can access /api/export/csv without 403",
+    "Backend: Pro user can access /api/search-history without 403",
+    "Backend: Pro user can access /api/search-reports without 403",
+    "Backend: GET /api/user/usage returns correct tier restrictions (csv_export=false, saved_searches=false, saved_reports=false for free tier)",
+    "Frontend: Free user - Save Search button shows lock icon and opacity-50 styling",
+    "Frontend: Free user - Clicking Save Search opens UpgradeDialog (not save search dialog)",
+    "Frontend: Free user - Export All button shows lock icon and opacity-50 styling",
+    "Frontend: Free user - Clicking Export All opens UpgradeDialog",
+    "Frontend: Free user - Save Report button shows lock icon and opacity-50 styling",
+    "Frontend: Free user - Clicking Save Report opens UpgradeDialog",
+    "Frontend: UpgradeDialog has View Pricing button (data-testid=upgrade-view-pricing-btn)",
+    "Frontend: UpgradeDialog has Maybe Later button (data-testid=upgrade-maybe-later-btn)",
+    "Frontend: Click View Pricing navigates to /pricing page",
+    "Frontend: Click Maybe Later closes the dialog",
+    "Frontend: Pro user - Save Search button does NOT have lock icon",
+    "Frontend: Pro user - Clicking Save Search opens Save Search dialog (not UpgradeDialog)",
+    "Frontend: Pro user - Export All button does NOT have lock icon"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_tier_restrictions.py",
+    "/app/test_reports/pytest/pytest_tier_restrictions.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "Backend correctly uses JSONResponse for 403 responses with proper JSON format {error, message, upgrade_url}",
+    "Frontend correctly derives isFreeUser from userUsage?.tier === 'free'",
+    "UpgradeDialog component is well-structured with proper data-testid attributes",
+    "Button styling correctly applies opacity-50 and cursor-not-allowed for free users",
+    "Lock icon correctly shown only for free users via conditional rendering"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_tier_restrictions.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (9/9 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+
+  "test_credentials": {
+    "free_user": "freetest@test.com / password123 (tier: free)",
+    "pro_user": "admin@affilitube.com / admin123! (tier: pro)"
+  },
+
+  "seed_data_creation": "Used existing test users from test_credentials.md",
+
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Iteration 12 tested tier restriction UX/UI for free tier users. Backend endpoints /api/export/csv, /api/search-history, /api/search-reports correctly return 403 JSON with {error: upgrade_required, message: This feature requires a Starter or Pro plan, upgrade_url: /pricing} for free tier users. Frontend buttons (Save Search, Save Report, Export All, Export Shortlist) correctly show lock icons and greyed out styling for free users, and clicking them opens UpgradeDialog instead of the feature dialogs. Pro users see normal buttons without lock icons and can access all features. The UpgradeDialog component at /app/frontend/src/components/UpgradeDialog.jsx has View Pricing and Maybe Later buttons with proper data-testid attributes."
+}

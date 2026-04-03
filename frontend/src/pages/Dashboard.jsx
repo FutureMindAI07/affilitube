@@ -33,6 +33,7 @@ import {
   SlidersHorizontal,
   Wrench,
   Shield,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,6 +105,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus, ArrowUp, ArrowDown, Minus, Activity, TrendingUp, CreditCard } from "lucide-react";
 import { useSearchResults } from "@/contexts/SearchResultsContext";
+import { UpgradeDialog } from "@/components/UpgradeDialog";
 
 // Health indicator configs
 const ENGAGEMENT_HEALTH_CONFIG = {
@@ -236,6 +238,8 @@ export default function Dashboard() {
 
   // User usage/tier state
   const [userUsage, setUserUsage] = useState(null);
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+  const isFreeUser = userUsage?.tier === "free";
 
   const [keywords, setKeywords] = useState("");
   const [minSubs, setMinSubs] = useState(2000);
@@ -1708,17 +1712,23 @@ export default function Dashboard() {
                 </Button>
                 
                 {/* Save Search Dialog */}
+                <Button
+                  variant="outline"
+                  disabled={!keywords.trim()}
+                  onClick={() => {
+                    if (isFreeUser) {
+                      setUpgradeDialogOpen(true);
+                    } else {
+                      setSaveSearchOpen(true);
+                    }
+                  }}
+                  className={isFreeUser ? "opacity-50 cursor-not-allowed" : ""}
+                  data-testid="save-search-btn"
+                >
+                  {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <Save className="h-4 w-4 mr-2" />}
+                  Save Search
+                </Button>
                 <Dialog open={saveSearchOpen} onOpenChange={setSaveSearchOpen}>
-                  <DialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      disabled={!keywords.trim()}
-                      data-testid="save-search-btn"
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      Save Search
-                    </Button>
-                  </DialogTrigger>
                   <DialogContent data-testid="save-search-dialog">
                     <DialogHeader>
                       <DialogTitle>Save Search</DialogTitle>
@@ -1898,18 +1908,24 @@ export default function Dashboard() {
                   </TooltipProvider>
                   
                   {/* Save Report Dialog */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={sortedChannels.length === 0}
+                    onClick={() => {
+                      if (isFreeUser) {
+                        setUpgradeDialogOpen(true);
+                      } else {
+                        setSaveReportOpen(true);
+                      }
+                    }}
+                    className={isFreeUser ? "opacity-50 cursor-not-allowed" : ""}
+                    data-testid="save-report-btn"
+                  >
+                    {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <FileText className="h-4 w-4 mr-2" />}
+                    Save Report
+                  </Button>
                   <Dialog open={saveReportOpen} onOpenChange={setSaveReportOpen}>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={sortedChannels.length === 0}
-                        data-testid="save-report-btn"
-                      >
-                        <FileText className="h-4 w-4 mr-2" />
-                        Save Report
-                      </Button>
-                    </DialogTrigger>
                     <DialogContent data-testid="save-report-dialog">
                       <DialogHeader>
                         <DialogTitle>Save Report</DialogTitle>
@@ -1950,21 +1966,35 @@ export default function Dashboard() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => exportCSV(true)}
+                    onClick={() => {
+                      if (isFreeUser) {
+                        setUpgradeDialogOpen(true);
+                      } else {
+                        exportCSV(true);
+                      }
+                    }}
                     disabled={shortlist.size === 0}
+                    className={isFreeUser ? "opacity-50 cursor-not-allowed" : ""}
                     data-testid="export-shortlist-btn"
                   >
-                    <Download className="h-4 w-4 mr-2" />
+                    {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <Download className="h-4 w-4 mr-2" />}
                     Export Shortlist
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => exportCSV(false)}
+                    onClick={() => {
+                      if (isFreeUser) {
+                        setUpgradeDialogOpen(true);
+                      } else {
+                        exportCSV(false);
+                      }
+                    }}
                     disabled={sortedChannels.length === 0}
+                    className={isFreeUser ? "opacity-50 cursor-not-allowed" : ""}
                     data-testid="export-all-btn"
                   >
-                    <Download className="h-4 w-4 mr-2" />
+                    {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <Download className="h-4 w-4 mr-2" />}
                     Export All
                   </Button>
                 </div>
@@ -3133,13 +3163,16 @@ export default function Dashboard() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  // Export report channels to CSV
-                  const idsToExport = viewingReport.channels.map(ch => ch.channel_id);
-                  exportCSV(false, viewingReport.channels);
+                  if (isFreeUser) {
+                    setUpgradeDialogOpen(true);
+                  } else {
+                    exportCSV(false, viewingReport.channels);
+                  }
                 }}
+                className={isFreeUser ? "opacity-50 cursor-not-allowed" : ""}
                 data-testid="export-report-btn"
               >
-                <Download className="h-4 w-4 mr-2" />
+                {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <Download className="h-4 w-4 mr-2" />}
                 Export CSV
               </Button>
             </div>
@@ -3404,6 +3437,7 @@ export default function Dashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <UpgradeDialog open={upgradeDialogOpen} onOpenChange={setUpgradeDialogOpen} />
     </div>
   );
 }

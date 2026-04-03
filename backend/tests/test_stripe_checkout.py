@@ -111,7 +111,7 @@ class TestCreateCheckoutSession:
     def test_create_session_requires_auth(self):
         """Test that checkout session creation requires authentication"""
         response = requests.post(f"{BASE_URL}/api/checkout/create-session", json={
-            "origin_url": "https://status-hub-20.preview.emergentagent.com"
+            "origin_url": "https://tier-restrictions.preview.emergentagent.com"
         })
         
         # Should return 401 or 403 without auth
@@ -122,7 +122,7 @@ class TestCreateCheckoutSession:
         """Test successful checkout session creation"""
         response = requests.post(
             f"{BASE_URL}/api/checkout/create-session",
-            json={"origin_url": "https://status-hub-20.preview.emergentagent.com"},
+            json={"origin_url": "https://tier-restrictions.preview.emergentagent.com"},
             headers=new_test_user["headers"]
         )
         
@@ -149,7 +149,7 @@ class TestCreateCheckoutSession:
     
     def test_create_session_with_origin_url(self, new_test_user):
         """Test that origin_url is used correctly in success/cancel URLs"""
-        origin_url = "https://status-hub-20.preview.emergentagent.com"
+        origin_url = "https://tier-restrictions.preview.emergentagent.com"
         response = requests.post(
             f"{BASE_URL}/api/checkout/create-session",
             json={"origin_url": origin_url},
@@ -186,7 +186,7 @@ class TestCheckoutStatus:
         # First create a session
         create_response = requests.post(
             f"{BASE_URL}/api/checkout/create-session",
-            json={"origin_url": "https://status-hub-20.preview.emergentagent.com"},
+            json={"origin_url": "https://tier-restrictions.preview.emergentagent.com"},
             headers=new_test_user["headers"]
         )
         assert create_response.status_code == 200, f"Create session failed: {create_response.text}"
@@ -216,7 +216,7 @@ class TestCheckoutStatus:
         # Create a session first
         create_response = requests.post(
             f"{BASE_URL}/api/checkout/create-session",
-            json={"origin_url": "https://status-hub-20.preview.emergentagent.com"},
+            json={"origin_url": "https://tier-restrictions.preview.emergentagent.com"},
             headers=new_test_user["headers"]
         )
         assert create_response.status_code == 200, f"Create session failed"
@@ -265,7 +265,7 @@ class TestPaymentTransactionsCollection:
         # Create a session
         create_response = requests.post(
             f"{BASE_URL}/api/checkout/create-session",
-            json={"origin_url": "https://status-hub-20.preview.emergentagent.com"},
+            json={"origin_url": "https://tier-restrictions.preview.emergentagent.com"},
             headers=new_test_user["headers"]
         )
         
