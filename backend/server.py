@@ -2811,29 +2811,34 @@ async def admin_revenue(admin=Depends(get_admin_user)):
 
 # ==================== STRIPE CHECKOUT ====================
 
+import stripe as stripe_sdk
+
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET")
 
-# Placeholder Stripe Price IDs - Replace with actual IDs once created
+# Read price IDs from environment
 STRIPE_PRICE_IDS = {
-    "starter_monthly": "STARTER_MONTHLY_PRICE_ID",     # $39.99/month
-    "starter_yearly": "STARTER_ANNUAL_PRICE_ID",        # $319.99/year
-    "pro_monthly": "PRO_MONTHLY_PRICE_ID",              # $79/month
-    "pro_yearly": "PRO_ANNUAL_PRICE_ID",                # $632/year
+    "starter_monthly": os.environ.get("STRIPE_STARTER_MONTHLY_PRICE_ID"),
+    "starter_annual": os.environ.get("STRIPE_STARTER_ANNUAL_PRICE_ID"),
+    "pro_monthly": os.environ.get("STRIPE_PRO_MONTHLY_PRICE_ID"),
+    "pro_annual": os.environ.get("STRIPE_PRO_ANNUAL_PRICE_ID"),
 }
 
-# Map price IDs to tiers for webhook/checkout processing
-PRICE_ID_TO_TIER = {
-    "STARTER_MONTHLY_PRICE_ID": "starter",
-    "STARTER_ANNUAL_PRICE_ID": "starter",
-    "PRO_MONTHLY_PRICE_ID": "pro",
-    "PRO_ANNUAL_PRICE_ID": "pro",
-}
+# Reverse map: price_id -> tier
+PRICE_ID_TO_TIER = {}
+for plan_key, pid in STRIPE_PRICE_IDS.items():
+    if pid:
+        PRICE_ID_TO_TIER[pid] = "starter" if plan_key.startswith("starter") else "pro"
 
 def get_tier_for_plan(plan: str) -> str:
     """Determine which tier a plan belongs to"""
     if plan.startswith("starter"):
         return "starter"
     return "pro"
+
+def get_tier_for_price_id(price_id: str) -> str:
+    """Determine which tier a Stripe price ID maps to"""
+    return PRICE_ID_TO_TIER.get(price_id, "pro")
 
 @api_router.post("/checkout/create-session")
 async def create_checkout_session(data: CheckoutRequest, request: Request, user=Depends(get_current_user)):
@@ -2853,31 +2858,32 @@ async def create_checkout_session(data: CheckoutRequest, request: Request, user=
     if tier == "starter" and target_tier == "starter":
         raise HTTPException(status_code=400, detail="You already have Starter access. Upgrade to Pro instead.")
 
+    stripe_sdk.api_key = STRIPE_API_KEY
     origin = request.headers.get("origin") or str(request.base_url).rstrip("/")
-    webhook_url = f"{str(request.base_url).rstrip('/')}/api/webhook/stripe"
-    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
-
     success_url = f"{origin}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{origin}/pricing"
-
-    checkout_request = CheckoutSessionRequest(
-        stripe_price_id=price_id,
-        quantity=1,
-        success_url=success_url,
-        cancel_url=cancel_url,
-        metadata={
-            "user_id": user["id"],
-            "user_email": user["email"],
-            "product": f"affilitube_{data.plan}",
-            "plan": data.plan
-        }
-    )
-
-    session: CheckoutSessionResponse = await stripe_checkout.create_checkout_session(checkout_request)
+    
+    try:
+        session = stripe_sdk.checkout.Session.create(
+            mode="subscription",
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            customer_email=user["email"],
+            metadata={
+                "user_id": user["id"],
+                "user_email": user["email"],
+                "product": f"affilitube_{data.plan}",
+                "plan": data.plan
+            },
+        )
+    except Exception as e:
+        logger.error(f"Stripe checkout error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create checkout session")
 
     # Record pending transaction
     await db.payment_transactions.insert_one({
-        "session_id": session.session_id,
+        "session_id": session.id,
         "user_id": user["id"],
         "user_email": user["email"],
         "stripe_price_id": price_id,
@@ -2887,49 +2893,56 @@ async def create_checkout_session(data: CheckoutRequest, request: Request, user=
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    return {"url": session.url, "session_id": session.session_id}
+    return {"url": session.url, "session_id": session.id}
 
 @api_router.get("/checkout/status/{session_id}")
 async def get_checkout_status(session_id: str, request: Request, user=Depends(get_current_user)):
     if not STRIPE_API_KEY:
         raise HTTPException(status_code=500, detail="Stripe not configured")
 
-    # Verify this session belongs to the requesting user
     txn = await db.payment_transactions.find_one({"session_id": session_id, "user_id": user["id"]}, {"_id": 0})
     if not txn:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    host_url = str(request.base_url).rstrip("/")
-    webhook_url = f"{host_url}/api/webhook/stripe"
-    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    stripe_sdk.api_key = STRIPE_API_KEY
+    try:
+        session = stripe_sdk.checkout.Session.retrieve(session_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not retrieve session: {e}")
 
-    status: CheckoutStatusResponse = await stripe_checkout.get_checkout_status(session_id)
-
-    # Update transaction status
-    new_status = status.payment_status if status.payment_status else status.status
+    new_status = session.payment_status or session.status
     await db.payment_transactions.update_one(
         {"session_id": session_id},
-        {"$set": {"payment_status": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        {"$set": {
+            "payment_status": new_status,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "stripe_customer_id": session.customer,
+            "stripe_subscription_id": session.subscription,
+        }}
     )
 
-    # If paid, upgrade user to appropriate tier
     if new_status == "paid":
         assigned_tier = get_tier_for_plan(txn.get("plan", "pro_monthly"))
+        update_fields = {
+            "tier": assigned_tier, 
+            "has_paid": True,
+            "paid_at": datetime.now(timezone.utc).isoformat(),
+            "subscription_plan": txn.get("plan", "pro_monthly"),
+        }
+        if session.customer:
+            update_fields["stripe_customer_id"] = session.customer
+        if session.subscription:
+            update_fields["stripe_subscription_id"] = session.subscription
         await db.users.update_one(
             {"id": user["id"]},
-            {"$set": {
-                "tier": assigned_tier, 
-                "has_paid": True,
-                "paid_at": datetime.now(timezone.utc).isoformat(),
-                "subscription_plan": txn.get("plan", "pro_monthly")
-            }}
+            {"$set": update_fields}
         )
 
     return {
-        "status": status.status,
+        "status": session.status,
         "payment_status": new_status,
-        "amount_total": status.amount_total,
-        "currency": status.currency,
+        "amount_total": session.amount_total,
+        "currency": session.currency,
     }
 
 @api_router.post("/webhook/stripe")
@@ -2940,36 +2953,149 @@ async def stripe_webhook(request: Request):
     if not STRIPE_API_KEY:
         raise HTTPException(status_code=500, detail="Stripe not configured")
 
-    host_url = str(request.base_url).rstrip("/")
-    webhook_url = f"{host_url}/api/webhook/stripe"
-    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
-
+    # Verify webhook signature
     try:
-        webhook_response = await stripe_checkout.handle_webhook(body, signature)
-        if webhook_response.payment_status == "paid" and webhook_response.session_id:
-            txn = await db.payment_transactions.find_one({"session_id": webhook_response.session_id})
-            if txn and txn.get("payment_status") != "paid":
-                await db.payment_transactions.update_one(
-                    {"session_id": webhook_response.session_id},
-                    {"$set": {"payment_status": "paid", "updated_at": datetime.now(timezone.utc).isoformat()}}
-                )
-                user_id = webhook_response.metadata.get("user_id") or txn.get("user_id")
-                plan = webhook_response.metadata.get("plan") or txn.get("plan", "pro_monthly")
-                if user_id:
-                    assigned_tier = get_tier_for_plan(plan)
-                    await db.users.update_one(
-                        {"id": user_id},
-                        {"$set": {
-                            "tier": assigned_tier, 
-                            "has_paid": True,
-                            "paid_at": datetime.now(timezone.utc).isoformat(),
-                            "subscription_plan": plan
-                        }}
-                    )
-        return {"status": "ok"}
+        if STRIPE_WEBHOOK_SECRET:
+            event = stripe_sdk.Webhook.construct_event(body, signature, STRIPE_WEBHOOK_SECRET)
+        else:
+            import json as json_lib
+            event = json_lib.loads(body)
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return {"status": "error", "detail": str(e)}
+        logger.error(f"Stripe signature verification failed: {e}")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+    event_type = event.get("type", "") if isinstance(event, dict) else event.type
+    data_obj = event.get("data", {}).get("object", {}) if isinstance(event, dict) else event.data.object
+
+    if event_type == "checkout.session.completed":
+        session_id = data_obj.get("id") if isinstance(data_obj, dict) else data_obj.id
+        customer_id = data_obj.get("customer") if isinstance(data_obj, dict) else data_obj.customer
+        subscription_id = data_obj.get("subscription") if isinstance(data_obj, dict) else data_obj.subscription
+        metadata = data_obj.get("metadata", {}) if isinstance(data_obj, dict) else (data_obj.metadata or {})
+        
+        txn = await db.payment_transactions.find_one({"session_id": session_id})
+        if txn and txn.get("payment_status") != "paid":
+            await db.payment_transactions.update_one(
+                {"session_id": session_id},
+                {"$set": {
+                    "payment_status": "paid",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "stripe_customer_id": customer_id,
+                    "stripe_subscription_id": subscription_id,
+                }}
+            )
+            user_id = metadata.get("user_id") or txn.get("user_id")
+            plan = metadata.get("plan") or txn.get("plan", "pro_monthly")
+            if user_id:
+                assigned_tier = get_tier_for_plan(plan)
+                update_fields = {
+                    "tier": assigned_tier, 
+                    "has_paid": True,
+                    "paid_at": datetime.now(timezone.utc).isoformat(),
+                    "subscription_plan": plan,
+                }
+                if customer_id:
+                    update_fields["stripe_customer_id"] = customer_id
+                if subscription_id:
+                    update_fields["stripe_subscription_id"] = subscription_id
+                await db.users.update_one(
+                    {"id": user_id},
+                    {"$set": update_fields}
+                )
+                logger.info(f"Checkout completed: user={user_id}, tier={assigned_tier}")
+
+    elif event_type == "customer.subscription.updated":
+        items_data = data_obj.get("items", {}).get("data", []) if isinstance(data_obj, dict) else (data_obj.get("items", {}).get("data", []) if hasattr(data_obj, "get") else [])
+        if items_data:
+            price_obj = items_data[0].get("price", {}) if isinstance(items_data[0], dict) else items_data[0].price
+            new_price_id = price_obj.get("id", "") if isinstance(price_obj, dict) else price_obj.id
+            new_tier = get_tier_for_price_id(new_price_id)
+            customer_id = data_obj.get("customer") if isinstance(data_obj, dict) else data_obj.customer
+            if customer_id:
+                user = await db.users.find_one({"stripe_customer_id": customer_id})
+                if user:
+                    await db.users.update_one(
+                        {"id": user["id"]},
+                        {"$set": {"tier": new_tier, "subscription_plan": f"{new_tier}_subscription"}}
+                    )
+                    logger.info(f"Subscription updated for {user['email']}: tier={new_tier}")
+
+    elif event_type == "customer.subscription.deleted":
+        customer_id = data_obj.get("customer") if isinstance(data_obj, dict) else data_obj.customer
+        if customer_id:
+            user = await db.users.find_one({"stripe_customer_id": customer_id})
+            if user:
+                grace_until = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+                await db.users.update_one(
+                    {"id": user["id"]},
+                    {"$set": {"subscription_cancelled": True, "grace_period_until": grace_until}}
+                )
+                logger.info(f"Subscription cancelled for {user['email']}, grace until {grace_until}")
+
+    elif event_type == "invoice.payment_failed":
+        customer_id = data_obj.get("customer") if isinstance(data_obj, dict) else data_obj.customer
+        if customer_id:
+            user = await db.users.find_one({"stripe_customer_id": customer_id})
+            await db.payment_events.insert_one({
+                "event_type": "payment_failed",
+                "customer_id": customer_id,
+                "user_email": user.get("email") if user else None,
+                "user_id": user.get("id") if user else None,
+                "invoice_id": data_obj.get("id") if isinstance(data_obj, dict) else data_obj.id,
+                "amount_due": data_obj.get("amount_due") if isinstance(data_obj, dict) else data_obj.amount_due,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            if user:
+                grace_until = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+                await db.users.update_one(
+                    {"id": user["id"]},
+                    {"$set": {"payment_failed": True, "grace_period_until": grace_until}}
+                )
+                logger.warning(f"Payment failed for {user['email']}, grace until {grace_until}")
+
+    elif event_type == "invoice.payment_succeeded":
+        customer_id = data_obj.get("customer") if isinstance(data_obj, dict) else data_obj.customer
+        if customer_id:
+            user = await db.users.find_one({"stripe_customer_id": customer_id})
+            if user:
+                await db.users.update_one(
+                    {"id": user["id"]},
+                    {"$unset": {"payment_failed": "", "grace_period_until": "", "subscription_cancelled": ""}}
+                )
+
+    return {"status": "ok"}
+
+@api_router.post("/billing/portal-session")
+async def create_billing_portal_session(request: Request, user=Depends(get_current_user)):
+    """Create a Stripe customer portal session for subscription management"""
+    if not STRIPE_API_KEY:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
+    
+    tier = get_user_tier(user)
+    if tier not in ["starter", "pro"]:
+        raise HTTPException(status_code=400, detail="No active subscription to manage")
+    
+    user_data = await db.users.find_one({"id": user["id"]})
+    customer_id = user_data.get("stripe_customer_id") if user_data else None
+    
+    if not customer_id:
+        # Look up customer by email in Stripe
+        stripe_sdk.api_key = STRIPE_API_KEY
+        customers = stripe_sdk.Customer.list(email=user["email"], limit=1)
+        if customers.data:
+            customer_id = customers.data[0].id
+            await db.users.update_one({"id": user["id"]}, {"$set": {"stripe_customer_id": customer_id}})
+        else:
+            raise HTTPException(status_code=404, detail="No Stripe customer found. Please contact support.")
+    
+    origin = request.headers.get("origin") or str(request.base_url).rstrip("/")
+    stripe_sdk.api_key = STRIPE_API_KEY
+    portal_session = stripe_sdk.billing_portal.Session.create(
+        customer=customer_id,
+        return_url=f"{origin}/dashboard",
+    )
+    
+    return {"url": portal_session.url}
 
 # Include the router in the main app
 app.include_router(api_router)

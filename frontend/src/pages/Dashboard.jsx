@@ -102,7 +102,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus, ArrowUp, ArrowDown, Minus, Activity, TrendingUp } from "lucide-react";
+import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus, ArrowUp, ArrowDown, Minus, Activity, TrendingUp, CreditCard } from "lucide-react";
 import { useSearchResults } from "@/contexts/SearchResultsContext";
 
 // Health indicator configs
@@ -1071,6 +1071,27 @@ export default function Dashboard() {
               >
                 <Shield className="h-3.5 w-3.5" />
                 Admin
+              </Button>
+            )}
+            
+            {/* Manage Subscription for paid users */}
+            {userUsage && (userUsage.tier === "starter" || userUsage.tier === "pro") && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                data-testid="manage-subscription-btn"
+                onClick={async () => {
+                  try {
+                    const res = await api.post("/billing/portal-session");
+                    window.location.href = res.data.url;
+                  } catch (e) {
+                    toast.error(e.response?.data?.detail || "Unable to open billing portal");
+                  }
+                }}
+              >
+                <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+                Manage Subscription
               </Button>
             )}
           
