@@ -1036,13 +1036,20 @@ export default function Dashboard() {
                 className={`gap-1.5 text-xs rounded-full ${
                   userUsage.is_unlimited 
                     ? 'border-emerald-200 bg-emerald-50/50 text-emerald-700' 
-                    : 'border-indigo-200 bg-indigo-50/50 text-indigo-700'
+                    : userUsage.tier === "starter"
+                    ? 'border-indigo-200 bg-indigo-50/50 text-indigo-700'
+                    : 'border-slate-200 bg-slate-50/50 text-slate-600'
                 }`}
               >
                 {userUsage.is_unlimited ? (
                   <>
                     <Zap className="h-3 w-3" />
-                    Pro Plan
+                    {userUsage.tier_name} Plan
+                  </>
+                ) : userUsage.tier === "starter" ? (
+                  <>
+                    <Zap className="h-3 w-3" />
+                    Starter — {userUsage.searches_remaining}/{userUsage.max_searches} searches
                   </>
                 ) : (
                   <>
@@ -1341,8 +1348,14 @@ export default function Dashboard() {
                 <div className="flex items-center gap-3">
                   <Gauge className="h-5 w-5 text-indigo-600" />
                   <div>
-                    <p className="text-sm font-medium text-slate-900">Free Plan — {userUsage.searches_remaining} of {userUsage.max_searches} searches remaining this month</p>
-                    <p className="text-xs text-slate-500">Results limited to 10 channels per search. Upgrade for unlimited.</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {userUsage.tier_name} Plan — {userUsage.searches_remaining} of {userUsage.max_searches} searches remaining this month
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {userUsage.tier === "free"
+                        ? "Results limited to 10 channels per search. Upgrade for unlimited."
+                        : `${userUsage.max_searches} searches per month. Upgrade to Pro for unlimited.`}
+                    </p>
                   </div>
                 </div>
                 <Button 
@@ -1350,7 +1363,7 @@ export default function Dashboard() {
                   className="btn-gradient"
                   onClick={() => navigate("/pricing")}
                 >
-                  Upgrade to Pro
+                  {userUsage.tier === "free" ? "Upgrade" : "Upgrade to Pro"}
                 </Button>
               </div>
             </CardContent>

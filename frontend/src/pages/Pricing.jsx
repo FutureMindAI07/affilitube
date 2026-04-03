@@ -1,4 +1,4 @@
-import { CheckCircle2, X, Youtube, Zap, ArrowRight } from "lucide-react";
+import { CheckCircle2, X, Youtube, Zap, ArrowRight, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -7,7 +7,7 @@ import { useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 
-const API = import.meta.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_BACKEND_URL;
+const API = process.env.REACT_APP_BACKEND_URL;
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -29,18 +29,47 @@ const plans = [
       { text: "CSV export", included: false },
       { text: "Saved searches", included: false },
       { text: "Saved reports", included: false },
+      { text: "Outreach pipeline", included: false },
     ],
     cta: "Get Started Free",
     ctaAction: "signup",
     popular: false,
+    highlighted: false,
+  },
+  {
+    name: "Starter",
+    priceMonthly: "$39.99",
+    priceYearly: "$319.99",
+    monthlyEquivalent: "$26.67",
+    period: "month",
+    periodYearly: "year",
+    description: "Perfect for founders and small teams",
+    features: [
+      { text: "20 searches per month", included: true },
+      { text: "Full channel results (no limits)", included: true },
+      { text: "Full scoring & channel details", included: true },
+      { text: "Niche selector (14 niches)", included: true },
+      { text: "Shortlist channels", included: true },
+      { text: "CSV export", included: true },
+      { text: "Saved searches", included: true },
+      { text: "Saved reports", included: true },
+      { text: "Outreach pipeline (up to 3 projects)", included: true },
+      { text: "Unlimited pipeline projects", included: false },
+    ],
+    cta: "Start Starter",
+    ctaAction: "checkout",
+    planPrefix: "starter",
+    popular: true,
+    highlighted: false,
   },
   {
     name: "Pro",
-    priceMonthly: "$39",
-    priceYearly: "$299",
+    priceMonthly: "$79",
+    priceYearly: "$632",
+    monthlyEquivalent: "$52.67",
     period: "month",
     periodYearly: "year",
-    description: "Unlimited access for serious prospectors",
+    description: "For serious influencer marketers",
     features: [
       { text: "Unlimited searches", included: true },
       { text: "Full channel results (no limits)", included: true },
@@ -50,17 +79,21 @@ const plans = [
       { text: "CSV export", included: true },
       { text: "Saved searches", included: true },
       { text: "Saved reports", included: true },
+      { text: "Unlimited outreach pipeline projects", included: true },
+      { text: "Priority support", included: true },
     ],
     cta: "Start Pro",
     ctaAction: "checkout",
-    popular: true,
+    planPrefix: "pro",
+    popular: false,
+    highlighted: true,
   },
 ];
 
 export default function Pricing() {
   const navigate = useNavigate();
   const { user, token } = useAuth();
-  const [billingCycle, setBillingCycle] = useState("monthly"); // monthly or yearly
+  const [billingCycle, setBillingCycle] = useState("monthly");
   const [loading, setLoading] = useState(false);
 
   const handleCTA = async (plan) => {
@@ -69,7 +102,6 @@ export default function Pricing() {
       return;
     }
 
-    // Pro checkout
     if (!user) {
       navigate("/signup");
       return;
@@ -77,9 +109,11 @@ export default function Pricing() {
 
     setLoading(true);
     try {
-      const planId = billingCycle === "yearly" ? "pro_yearly" : "pro_monthly";
+      const planId = billingCycle === "yearly"
+        ? `${plan.planPrefix}_yearly`
+        : `${plan.planPrefix}_monthly`;
       const res = await axios.post(
-        `${API}/checkout/create-session`,
+        `${API}/api/checkout/create-session`,
         { plan: planId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -113,17 +147,10 @@ export default function Pricing() {
               </Button>
             ) : (
               <>
-                <Button
-                  variant="ghost"
-                  onClick={() => navigate("/login")}
-                  className="rounded-full"
-                >
+                <Button variant="ghost" onClick={() => navigate("/login")} className="rounded-full">
                   Log In
                 </Button>
-                <Button
-                  onClick={() => navigate("/signup")}
-                  className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600"
-                >
+                <Button onClick={() => navigate("/signup")} className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600">
                   Sign Up
                 </Button>
               </>
@@ -134,7 +161,7 @@ export default function Pricing() {
 
       {/* Pricing Section */}
       <section className="pt-32 pb-20 px-6">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <motion.div
             initial="hidden"
             animate="show"
@@ -152,9 +179,9 @@ export default function Pricing() {
             </motion.h1>
             <motion.p
               variants={fadeUp}
-              className="mt-4 text-lg text-slate-600 max-w-xl mx-auto"
+              className="mt-4 text-lg text-slate-600 max-w-2xl mx-auto"
             >
-              Start free with 3 searches per month. Upgrade to Pro for unlimited access and full export capabilities.
+              Start free with 3 searches per month. Upgrade to Starter or Pro for full access and powerful outreach tools.
             </motion.p>
 
             {/* Billing Toggle */}
@@ -166,6 +193,7 @@ export default function Pricing() {
                     ? "bg-white shadow-sm text-slate-900"
                     : "text-slate-500 hover:text-slate-700"
                 }`}
+                data-testid="billing-monthly-toggle"
               >
                 Monthly
               </button>
@@ -176,10 +204,11 @@ export default function Pricing() {
                     ? "bg-white shadow-sm text-slate-900"
                     : "text-slate-500 hover:text-slate-700"
                 }`}
+                data-testid="billing-yearly-toggle"
               >
                 Yearly
                 <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">
-                  Save 36%
+                  Save ~33%
                 </span>
               </button>
             </motion.div>
@@ -191,34 +220,45 @@ export default function Pricing() {
             animate="show"
             variants={{
               hidden: { opacity: 0 },
-              show: { opacity: 1, transition: { staggerChildren: 0.15 } },
+              show: { opacity: 1, transition: { staggerChildren: 0.12 } },
             }}
-            className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto"
+            className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto"
           >
             {plans.map((plan) => (
               <motion.div
                 key={plan.name}
                 variants={fadeUp}
-                className={`relative rounded-2xl p-8 ${
-                  plan.popular
-                    ? "bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-xl shadow-indigo-500/20"
+                data-testid={`pricing-card-${plan.name.toLowerCase()}`}
+                className={`relative rounded-2xl p-7 flex flex-col ${
+                  plan.highlighted
+                    ? "bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-xl shadow-indigo-500/20 md:-mt-2 md:mb-0 md:pb-9"
+                    : plan.popular
+                    ? "bg-white border-2 border-indigo-300 shadow-md"
                     : "bg-white border border-slate-200 shadow-sm"
                 }`}
               >
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-indigo-600 text-xs font-semibold shadow-lg">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-600 text-white text-xs font-semibold shadow-lg">
                       <Zap className="h-3 w-3" />
                       Most Popular
                     </span>
                   </div>
                 )}
+                {plan.highlighted && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-indigo-600 text-xs font-semibold shadow-lg">
+                      <Crown className="h-3 w-3" />
+                      Best Value
+                    </span>
+                  </div>
+                )}
 
-                <div className="mb-6">
-                  <h3 className={`font-heading font-bold text-xl ${plan.popular ? "text-white" : "text-slate-900"}`}>
+                <div className="mb-5">
+                  <h3 className={`font-heading font-bold text-xl ${plan.highlighted ? "text-white" : "text-slate-900"}`}>
                     {plan.name}
                   </h3>
-                  <p className={`mt-1 text-sm ${plan.popular ? "text-indigo-100" : "text-slate-500"}`}>
+                  <p className={`mt-1 text-sm ${plan.highlighted ? "text-indigo-100" : "text-slate-500"}`}>
                     {plan.description}
                   </p>
                 </div>
@@ -226,42 +266,38 @@ export default function Pricing() {
                 <div className="mb-6">
                   {plan.name === "Free" ? (
                     <>
-                      <span className={`font-heading text-4xl font-bold ${plan.popular ? "text-white" : "text-slate-900"}`}>
-                        {plan.price}
-                      </span>
-                      <span className={`text-sm ${plan.popular ? "text-indigo-100" : "text-slate-500"}`}>
-                        /{plan.period}
-                      </span>
+                      <span className="font-heading text-4xl font-bold text-slate-900">{plan.price}</span>
+                      <span className="text-sm text-slate-500">/{plan.period}</span>
                     </>
                   ) : (
                     <>
-                      <span className={`font-heading text-4xl font-bold ${plan.popular ? "text-white" : "text-slate-900"}`}>
+                      <span className={`font-heading text-4xl font-bold ${plan.highlighted ? "text-white" : "text-slate-900"}`}>
                         {billingCycle === "yearly" ? plan.priceYearly : plan.priceMonthly}
                       </span>
-                      <span className={`text-sm ${plan.popular ? "text-indigo-100" : "text-slate-500"}`}>
+                      <span className={`text-sm ${plan.highlighted ? "text-indigo-100" : "text-slate-500"}`}>
                         /{billingCycle === "yearly" ? plan.periodYearly : plan.period}
                       </span>
                       {billingCycle === "yearly" && (
-                        <p className={`text-sm mt-1 ${plan.popular ? "text-indigo-100" : "text-slate-500"}`}>
-                          (~$25/month)
+                        <p className={`text-sm mt-1 ${plan.highlighted ? "text-indigo-100" : "text-slate-500"}`}>
+                          (~{plan.monthlyEquivalent}/month)
                         </p>
                       )}
                     </>
                   )}
                 </div>
 
-                <ul className="space-y-3 mb-8">
+                <ul className="space-y-2.5 mb-8 flex-1">
                   {plan.features.map((feature) => (
-                    <li key={feature.text} className="flex items-start gap-3">
+                    <li key={feature.text} className="flex items-start gap-2.5">
                       {feature.included ? (
-                        <CheckCircle2 className={`h-5 w-5 shrink-0 mt-0.5 ${plan.popular ? "text-indigo-200" : "text-emerald-500"}`} />
+                        <CheckCircle2 className={`h-4.5 w-4.5 shrink-0 mt-0.5 ${plan.highlighted ? "text-indigo-200" : "text-emerald-500"}`} />
                       ) : (
-                        <X className={`h-5 w-5 shrink-0 mt-0.5 ${plan.popular ? "text-indigo-300" : "text-slate-300"}`} />
+                        <X className={`h-4.5 w-4.5 shrink-0 mt-0.5 ${plan.highlighted ? "text-indigo-300" : "text-slate-300"}`} />
                       )}
                       <span className={`text-sm ${
                         feature.included
-                          ? plan.popular ? "text-white" : "text-slate-700"
-                          : plan.popular ? "text-indigo-200" : "text-slate-400"
+                          ? plan.highlighted ? "text-white" : "text-slate-700"
+                          : plan.highlighted ? "text-indigo-200 line-through" : "text-slate-400 line-through"
                       }`}>
                         {feature.text}
                       </span>
@@ -272,9 +308,12 @@ export default function Pricing() {
                 <Button
                   onClick={() => handleCTA(plan)}
                   disabled={loading}
+                  data-testid={`cta-${plan.name.toLowerCase()}`}
                   className={`w-full rounded-full h-12 font-semibold transition-all ${
-                    plan.popular
+                    plan.highlighted
                       ? "bg-white text-indigo-600 hover:bg-indigo-50 shadow-lg"
+                      : plan.popular
+                      ? "bg-indigo-600 text-white hover:bg-indigo-700"
                       : "bg-slate-900 text-white hover:bg-slate-800"
                   }`}
                 >

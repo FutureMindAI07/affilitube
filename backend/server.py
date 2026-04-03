@@ -79,7 +79,19 @@ TIERS = {
         "max_results_per_search": 10,
         "csv_export": False,
         "saved_searches": False,
-        "saved_reports": False
+        "saved_reports": False,
+        "pipeline_access": False,
+        "max_pipeline_projects": 0
+    },
+    "starter": {
+        "name": "Starter",
+        "searches_per_month": 20,
+        "max_results_per_search": None,
+        "csv_export": True,
+        "saved_searches": True,
+        "saved_reports": True,
+        "pipeline_access": True,
+        "max_pipeline_projects": 3
     },
     "pro": {
         "name": "Pro",
@@ -87,7 +99,9 @@ TIERS = {
         "max_results_per_search": None,  # No limit
         "csv_export": True,
         "saved_searches": True,
-        "saved_reports": True
+        "saved_reports": True,
+        "pipeline_access": True,
+        "max_pipeline_projects": None  # Unlimited
     },
     "appsumo": {
         "name": "AppSumo",
@@ -95,7 +109,9 @@ TIERS = {
         "max_results_per_search": None,  # No limit
         "csv_export": True,
         "saved_searches": True,
-        "saved_reports": True
+        "saved_reports": True,
+        "pipeline_access": True,
+        "max_pipeline_projects": None  # Unlimited
     }
 }
 
@@ -1458,6 +1474,8 @@ async def get_user_usage(user=Depends(get_current_user)):
         "csv_export": tier_config["csv_export"],
         "saved_searches": tier_config["saved_searches"],
         "saved_reports": tier_config["saved_reports"],
+        "pipeline_access": tier_config.get("pipeline_access", False),
+        "max_pipeline_projects": tier_config.get("max_pipeline_projects"),
         "is_unlimited": tier_config["searches_per_month"] is None
     }
 
@@ -1553,7 +1571,7 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
         tier_config = get_tier_config(search_limit["tier"])
         raise HTTPException(
             status_code=403, 
-            detail=f"Monthly search limit reached ({tier_config['searches_per_month']} searches). Upgrade to Pro for unlimited searches."
+            detail=f"Monthly search limit reached ({tier_config['searches_per_month']} searches). Upgrade your plan for more searches."
         )
     
     # Get YouTube service with backend API key
@@ -2090,6 +2108,18 @@ class UpdateFollowUpDateInput(BaseModel):
 @api_router.patch("/channels/{channel_id}/outreach-status")
 async def update_outreach_status(channel_id: str, input: UpdateOutreachStatusInput, user=Depends(get_current_user)):
     """Update outreach status and add a contact log entry"""
+    # Check pipeline access
+    tier = get_user_tier(user)
+    tier_config = get_tier_config(tier)
+    if not tier_config.get("pipeline_access"):
+        raise HTTPException(status_code=403, detail="Pipeline access requires Starter or Pro plan.")
+    
+    # Check project limit for starter tier
+    if input.project_name and tier_config.get("max_pipeline_projects") is not None:
+        existing_projects = await db.channels.distinct("project_name", {"user_id": user["id"], "project_name": {"$exists": True, "$nin": [None, ""]}})
+        if input.project_name not in existing_projects and len(existing_projects) >= tier_config["max_pipeline_projects"]:
+            raise HTTPException(status_code=403, detail=f"Starter plan limited to {tier_config['max_pipeline_projects']} projects. Upgrade to Pro for unlimited.")
+    
     if input.status not in OUTREACH_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(OUTREACH_STATUSES)}")
     
@@ -2370,7 +2400,7 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
     tier = get_user_tier(user)
     tier_config = get_tier_config(tier)
     if not tier_config["csv_export"]:
-        raise HTTPException(status_code=403, detail="Upgrade to Pro to export CSV")
+        raise HTTPException(status_code=403, detail="CSV export requires Starter or Pro plan. Upgrade to unlock.")
     
     channels = await db.channels.find(
         {"channel_id": {"$in": channel_ids}, "user_id": user["id"]},
@@ -2506,6 +2536,7 @@ async def admin_overview(admin=Depends(get_admin_user)):
     # User counts by tier
     total_users = await db.users.count_documents({})
     free_users = await db.users.count_documents({"tier": "free"})
+    starter_users = await db.users.count_documents({"tier": "starter"})
     pro_users = await db.users.count_documents({"tier": "pro"})
     appsumo_users = await db.users.count_documents({"tier": "appsumo"})
     # Count users without tier field as free
@@ -2525,13 +2556,14 @@ async def admin_overview(admin=Depends(get_admin_user)):
     # New signups in last 7 days
     new_signups = await db.users.count_documents({"created_at": {"$gte": week_ago}})
     
-    # Revenue estimate (Pro subscribers * $39/month as baseline)
-    monthly_revenue = pro_users * 39
+    # Revenue estimate
+    monthly_revenue = (starter_users * 40) + (pro_users * 79)
     
     return {
         "users": {
             "total": total_users,
             "free": free_users,
+            "starter": starter_users,
             "pro": pro_users,
             "appsumo": appsumo_users,
         },
@@ -2548,6 +2580,7 @@ async def admin_overview(admin=Depends(get_admin_user)):
         "new_signups_7d": new_signups,
         "revenue": {
             "monthly_estimate": monthly_revenue,
+            "starter_subscribers": starter_users,
             "pro_subscribers": pro_users,
         }
     }
@@ -2609,8 +2642,8 @@ async def admin_list_users(
 @api_router.put("/admin/users/{user_id}/tier")
 async def admin_update_user_tier(user_id: str, data: UpdateUserTierRequest, admin=Depends(get_admin_user)):
     """Update a user's tier"""
-    if data.tier not in ["free", "pro", "appsumo"]:
-        raise HTTPException(status_code=400, detail="Invalid tier. Must be free, pro, or appsumo")
+    if data.tier not in ["free", "starter", "pro", "appsumo"]:
+        raise HTTPException(status_code=400, detail="Invalid tier. Must be free, starter, pro, or appsumo")
     
     result = await db.users.update_one(
         {"id": user_id},
@@ -2782,9 +2815,25 @@ STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY")
 
 # Placeholder Stripe Price IDs - Replace with actual IDs once created
 STRIPE_PRICE_IDS = {
-    "pro_monthly": "price_PLACEHOLDER_PRO_MONTHLY_39",  # $39/month
-    "pro_yearly": "price_PLACEHOLDER_PRO_YEARLY_299",   # $299/year
+    "starter_monthly": "STARTER_MONTHLY_PRICE_ID",     # $39.99/month
+    "starter_yearly": "STARTER_ANNUAL_PRICE_ID",        # $319.99/year
+    "pro_monthly": "PRO_MONTHLY_PRICE_ID",              # $79/month
+    "pro_yearly": "PRO_ANNUAL_PRICE_ID",                # $632/year
 }
+
+# Map price IDs to tiers for webhook/checkout processing
+PRICE_ID_TO_TIER = {
+    "STARTER_MONTHLY_PRICE_ID": "starter",
+    "STARTER_ANNUAL_PRICE_ID": "starter",
+    "PRO_MONTHLY_PRICE_ID": "pro",
+    "PRO_ANNUAL_PRICE_ID": "pro",
+}
+
+def get_tier_for_plan(plan: str) -> str:
+    """Determine which tier a plan belongs to"""
+    if plan.startswith("starter"):
+        return "starter"
+    return "pro"
 
 @api_router.post("/checkout/create-session")
 async def create_checkout_session(data: CheckoutRequest, request: Request, user=Depends(get_current_user)):
@@ -2796,10 +2845,13 @@ async def create_checkout_session(data: CheckoutRequest, request: Request, user=
     if not price_id:
         raise HTTPException(status_code=400, detail="Invalid plan selected")
 
-    # Check if user already has Pro access
+    # Check if user already has the target tier or higher
     tier = get_user_tier(user)
+    target_tier = get_tier_for_plan(data.plan)
     if tier in ["pro", "appsumo"]:
         raise HTTPException(status_code=400, detail="You already have Pro access")
+    if tier == "starter" and target_tier == "starter":
+        raise HTTPException(status_code=400, detail="You already have Starter access. Upgrade to Pro instead.")
 
     origin = request.headers.get("origin") or str(request.base_url).rstrip("/")
     webhook_url = f"{str(request.base_url).rstrip('/')}/api/webhook/stripe"
@@ -2860,13 +2912,14 @@ async def get_checkout_status(session_id: str, request: Request, user=Depends(ge
         {"$set": {"payment_status": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
 
-    # If paid, upgrade user to Pro tier
+    # If paid, upgrade user to appropriate tier
     if new_status == "paid":
+        assigned_tier = get_tier_for_plan(txn.get("plan", "pro_monthly"))
         await db.users.update_one(
-            {"id": user["id"], "tier": {"$ne": "pro"}},
+            {"id": user["id"]},
             {"$set": {
-                "tier": "pro", 
-                "has_paid": True,  # Backwards compatibility
+                "tier": assigned_tier, 
+                "has_paid": True,
                 "paid_at": datetime.now(timezone.utc).isoformat(),
                 "subscription_plan": txn.get("plan", "pro_monthly")
             }}
@@ -2903,10 +2956,11 @@ async def stripe_webhook(request: Request):
                 user_id = webhook_response.metadata.get("user_id") or txn.get("user_id")
                 plan = webhook_response.metadata.get("plan") or txn.get("plan", "pro_monthly")
                 if user_id:
+                    assigned_tier = get_tier_for_plan(plan)
                     await db.users.update_one(
-                        {"id": user_id, "tier": {"$ne": "pro"}},
+                        {"id": user_id},
                         {"$set": {
-                            "tier": "pro", 
+                            "tier": assigned_tier, 
                             "has_paid": True,
                             "paid_at": datetime.now(timezone.utc).isoformat(),
                             "subscription_plan": plan

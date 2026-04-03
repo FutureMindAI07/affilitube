@@ -204,6 +204,7 @@ export default function AdminPanel() {
   const tierBadge = (tier) => {
     const colors = {
       free: "bg-slate-100 text-slate-700",
+      starter: "bg-indigo-100 text-indigo-700",
       pro: "bg-purple-100 text-purple-700",
       appsumo: "bg-orange-100 text-orange-700",
     };
@@ -304,8 +305,9 @@ export default function AdminPanel() {
                       <Users className="h-6 w-6 text-indigo-600" />
                     </div>
                   </div>
-                  <div className="mt-3 flex gap-2 text-xs">
+                  <div className="mt-3 flex gap-2 text-xs flex-wrap">
                     <span className="text-slate-500">Free: {overview.users.free}</span>
+                    <span className="text-indigo-600 font-medium">Starter: {overview.users.starter || 0}</span>
                     <span className="text-purple-600 font-medium">Pro: {overview.users.pro}</span>
                     <span className="text-orange-600">AppSumo: {overview.users.appsumo}</span>
                   </div>
@@ -441,6 +443,7 @@ export default function AdminPanel() {
                       <SelectContent>
                         <SelectItem value="all">All Tiers</SelectItem>
                         <SelectItem value="free">Free</SelectItem>
+                        <SelectItem value="starter">Starter</SelectItem>
                         <SelectItem value="pro">Pro</SelectItem>
                         <SelectItem value="appsumo">AppSumo</SelectItem>
                       </SelectContent>
@@ -773,7 +776,7 @@ export default function AdminPanel() {
             <Card>
               <CardHeader>
                 <CardTitle>Paid Users</CardTitle>
-                <CardDescription>All users with Pro or AppSumo tier</CardDescription>
+                <CardDescription>All users with Starter, Pro, or AppSumo tier</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
