@@ -7,7 +7,7 @@ Build a multi-niche web app that identifies YouTube channels likely to be good a
 ```
 Frontend (React + Tailwind + Shadcn UI + Framer Motion)
   ├── Landing (/)
-  ├── Pricing (/pricing) — Stripe checkout (Free/Pro tiers)
+  ├── Pricing (/pricing) — 3-tier: Free/Starter/Pro
   ├── Auth (/login, /signup, /forgot-password)
   ├── Dashboard (/dashboard) — Prospect Finder with Niche Selector
   ├── Outreach Pipeline (/dashboard/pipeline) — CRM-like channel tracking with projects
@@ -19,62 +19,45 @@ Frontend (React + Tailwind + Shadcn UI + Framer Motion)
 
 Backend (FastAPI + Motor/MongoDB)
   ├── Auth (JWT, password reset)
-  ├── Tier System (free/pro/appsumo with limits)
-  ├── Stripe Checkout (Pro subscription: $39/mo or $299/yr)
+  ├── 4-Tier System (free/starter/pro/appsumo with limits)
+  ├── Stripe Checkout (Starter: $39.99/mo or $319.99/yr, Pro: $79/mo or $632/yr)
   ├── YouTube Search & Enrichment (24hr caching, backend API key)
   ├── Niche-based Scoring (14 niches with dynamic keyword configs)
   ├── Channel Health Indicators (upload consistency, engagement health, growth)
   ├── Outreach Status Tracking (status, follow-up dates, contact logs, projects)
   ├── Search Results Auto-save & Persistence
-  ├── Pipeline Management (add/remove, project organization)
+  ├── Pipeline Management (add/remove, project organization, tier gating)
   ├── History, Reports, Quota, Bug Reports, CSV Export
 ```
 
+## Tier System (Updated Apr 3, 2026)
+| Feature | Free | Starter ($39.99/mo) | Pro ($79/mo) | AppSumo |
+|---|---|---|---|---|
+| Searches/month | 3 | 20 | Unlimited | Unlimited |
+| Results/search | 10 | No limit | No limit | No limit |
+| CSV export | No | Yes | Yes | Yes |
+| Saved searches | No | Yes | Yes | Yes |
+| Saved reports | No | Yes | Yes | Yes |
+| Pipeline access | No | Yes (3 projects) | Yes (unlimited) | Yes (unlimited) |
+| Priority support | No | No | Yes | Yes |
+
+## Stripe Price IDs (Placeholders)
+- STARTER_MONTHLY_PRICE_ID ($39.99/month)
+- STARTER_ANNUAL_PRICE_ID ($319.99/year)
+- PRO_MONTHLY_PRICE_ID ($79/month)
+- PRO_ANNUAL_PRICE_ID ($632/year)
+
 ## Completed Features
-
-### Core Platform
-- Tubiate to Affilitube rebrand
-- Backend YouTube API key (removed per-user keys)
-- 14-niche keyword configuration system
-- 3-tier subscription: Free (3 searches/mo, 10 results) / Pro (unlimited) / AppSumo
-- Admin Panel at /admin
-- JWT authentication, password reset, bug reports
-- Search presets, shortlist, saved searches/reports, CSV export
-
-### Channel Health Indicators (Completed Apr 2, 2026)
-Backend:
-- 3 calculation functions: upload_consistency, engagement_health, growth_indicator
-- 5 new fields on ChannelData model
-- Computed during enrichment, backfilled for cached channels
-- Included in CSV exports
-
-Frontend:
-- Health column in results table (colored engagement dot + upload activity icon + growth arrow)
-- Engagement health filter dropdown (All/Healthy/Average/Low/Very Low)
-- Channel Health section in detail panel (Upload Frequency, Engagement Health badge, Growth Trend)
-- Client-side computeHealthIndicators for cached/autosaved channels
-
-### Outreach Pipeline & Projects (Completed Apr 2, 2026)
-- Add to Pipeline dialog (project name autocomplete + status dropdown)
-- Pipeline nav in dashboard header
-- Pipeline view with project filter, inline project editing, remove button
-- Follow Ups Due indicator card
-- Search results persistence (React context + sessionStorage + backend auto-save)
-
-## Key DB Collections
-- `users`: {email, role, tier, monthly_search_count, search_count_reset_date, has_paid}
-- `channels`: {channel_id, user_id, channel_data, outreach_status, follow_up_date, project_name, contact_log, upload_consistency, engagement_health, engagement_rate, growth_indicator, upload_avg_days}
-- `autosaved_results`: {user_id, channels, raw_search_results, search_metadata, saved_at, is_autosave}
-
-## Key API Endpoints
-- PATCH /api/channels/{id}/outreach-status (accepts project_name)
-- PATCH /api/channels/{id}/follow-up-date
-- PATCH /api/channels/{id}/project-name
-- DELETE /api/channels/{id}/pipeline
-- GET /api/channels/by-outreach-status (with project filter)
-- GET /api/pipeline/projects
-- POST/GET/DELETE /api/search-results/autosave
-- GET /api/channels/follow-ups/due
+- 14-niche YouTube channel discovery & scoring
+- Channel Health Indicators (upload consistency, engagement health, growth)
+- Outreach Pipeline with project organization
+- Add to Pipeline dialog, remove from pipeline, inline project editing
+- Search results persistence (context + sessionStorage + backend auto-save)
+- 3-tier pricing page (Free/Starter/Pro) with monthly/yearly toggle
+- Tier-gated features (CSV, pipeline, saved reports/searches)
+- Dashboard tier display (badge + usage card) for all tiers
+- Admin panel with 4-tier user breakdown
+- JWT auth, password reset, admin panel, bug reports
 
 ## Backlog
-- P1: Integrate real Stripe Price IDs (waiting on user-provided keys)
+- P1: Replace placeholder Stripe Price IDs with real ones
