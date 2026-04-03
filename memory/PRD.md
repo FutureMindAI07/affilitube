@@ -7,30 +7,40 @@ Build a multi-niche web app that identifies YouTube channels likely to be good a
 ```
 Frontend (React + Tailwind + Shadcn UI + Framer Motion)
   ├── Landing (/)
-  ├── Pricing (/pricing) — 3-tier: Free/Starter/Pro
+  ├── Pricing (/pricing) — 3-tier: Free/Starter/Pro with Stripe checkout
   ├── Auth (/login, /signup, /forgot-password)
   ├── Dashboard (/dashboard) — Prospect Finder with Niche Selector
-  ├── Outreach Pipeline (/dashboard/pipeline) — CRM-like channel tracking with projects
+  ├── Outreach Pipeline (/dashboard/pipeline) — CRM-like channel tracking
   ├── Outreach Templates (/dashboard/outreach) — Email templates
   ├── Getting Started (/dashboard/getting-started) — Tutorials & guides
   ├── Admin Panel (/admin) — Revenue, quota, users, search logs
   ├── Checkout Success (/checkout/success)
   ├── Terms (/terms) & Privacy (/privacy)
 
-Backend (FastAPI + Motor/MongoDB)
+Backend (FastAPI + Motor/MongoDB + Stripe SDK)
   ├── Auth (JWT, password reset)
-  ├── 4-Tier System (free/starter/pro/appsumo with limits)
-  ├── Stripe Checkout (Starter: $39.99/mo or $319.99/yr, Pro: $79/mo or $632/yr)
+  ├── 4-Tier System (free/starter/pro/appsumo)
+  ├── Stripe Subscriptions (starter: $39.99/$319.99, pro: $79/$632)
+  ├── Stripe Webhook (checkout, subscription lifecycle, payment events)
+  ├── Stripe Customer Portal (subscription management)
   ├── YouTube Search & Enrichment (24hr caching, backend API key)
-  ├── Niche-based Scoring (14 niches with dynamic keyword configs)
-  ├── Channel Health Indicators (upload consistency, engagement health, growth)
-  ├── Outreach Status Tracking (status, follow-up dates, contact logs, projects)
+  ├── Niche-based Scoring (14 niches)
+  ├── Channel Health Indicators
+  ├── Outreach Pipeline (status tracking, projects, contact logs)
   ├── Search Results Auto-save & Persistence
-  ├── Pipeline Management (add/remove, project organization, tier gating)
-  ├── History, Reports, Quota, Bug Reports, CSV Export
+  ├── CSV Export, Reports, History, Bug Reports
 ```
 
-## Tier System (Updated Apr 3, 2026)
+## Stripe Integration (Updated Apr 3, 2026)
+- Real price IDs from environment variables (no hardcoded values)
+- Subscription mode checkout (not payment mode)
+- Webhook signature verification via STRIPE_WEBHOOK_SECRET
+- Events handled: checkout.session.completed, customer.subscription.updated/deleted, invoice.payment_succeeded/failed
+- 3-day grace period on payment failure before downgrade
+- Customer portal for subscription management
+- "Manage Subscription" button in Dashboard for paid users
+
+## Tier System
 | Feature | Free | Starter ($39.99/mo) | Pro ($79/mo) | AppSumo |
 |---|---|---|---|---|
 | Searches/month | 3 | 20 | Unlimited | Unlimited |
@@ -41,23 +51,5 @@ Backend (FastAPI + Motor/MongoDB)
 | Pipeline access | No | Yes (3 projects) | Yes (unlimited) | Yes (unlimited) |
 | Priority support | No | No | Yes | Yes |
 
-## Stripe Price IDs (Placeholders)
-- STARTER_MONTHLY_PRICE_ID ($39.99/month)
-- STARTER_ANNUAL_PRICE_ID ($319.99/year)
-- PRO_MONTHLY_PRICE_ID ($79/month)
-- PRO_ANNUAL_PRICE_ID ($632/year)
-
-## Completed Features
-- 14-niche YouTube channel discovery & scoring
-- Channel Health Indicators (upload consistency, engagement health, growth)
-- Outreach Pipeline with project organization
-- Add to Pipeline dialog, remove from pipeline, inline project editing
-- Search results persistence (context + sessionStorage + backend auto-save)
-- 3-tier pricing page (Free/Starter/Pro) with monthly/yearly toggle
-- Tier-gated features (CSV, pipeline, saved reports/searches)
-- Dashboard tier display (badge + usage card) for all tiers
-- Admin panel with 4-tier user breakdown
-- JWT auth, password reset, admin panel, bug reports
-
 ## Backlog
-- P1: Replace placeholder Stripe Price IDs with real ones
+- None — all requested features implemented
