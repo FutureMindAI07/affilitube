@@ -1714,7 +1714,7 @@ export default function Dashboard() {
                 {/* Save Search Dialog */}
                 <Button
                   variant="outline"
-                  disabled={!keywords.trim()}
+                  disabled={isFreeUser ? false : !keywords.trim()}
                   onClick={() => {
                     if (isFreeUser) {
                       setUpgradeDialogOpen(true);
@@ -1722,7 +1722,7 @@ export default function Dashboard() {
                       setSaveSearchOpen(true);
                     }
                   }}
-                  className={isFreeUser ? "opacity-50 cursor-not-allowed" : ""}
+                  className={isFreeUser ? "opacity-50" : ""}
                   data-testid="save-search-btn"
                 >
                   {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <Save className="h-4 w-4 mr-2" />}
@@ -1911,7 +1911,7 @@ export default function Dashboard() {
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={sortedChannels.length === 0}
+                    disabled={!isFreeUser && sortedChannels.length === 0}
                     onClick={() => {
                       if (isFreeUser) {
                         setUpgradeDialogOpen(true);
@@ -1919,7 +1919,7 @@ export default function Dashboard() {
                         setSaveReportOpen(true);
                       }
                     }}
-                    className={isFreeUser ? "opacity-50 cursor-not-allowed" : ""}
+                    className={isFreeUser ? "opacity-50" : ""}
                     data-testid="save-report-btn"
                   >
                     {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <FileText className="h-4 w-4 mr-2" />}
@@ -1973,8 +1973,8 @@ export default function Dashboard() {
                         exportCSV(true);
                       }
                     }}
-                    disabled={shortlist.size === 0}
-                    className={isFreeUser ? "opacity-50 cursor-not-allowed" : ""}
+                    disabled={!isFreeUser && shortlist.size === 0}
+                    className={isFreeUser ? "opacity-50" : ""}
                     data-testid="export-shortlist-btn"
                   >
                     {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <Download className="h-4 w-4 mr-2" />}
@@ -1990,8 +1990,8 @@ export default function Dashboard() {
                         exportCSV(false);
                       }
                     }}
-                    disabled={sortedChannels.length === 0}
-                    className={isFreeUser ? "opacity-50 cursor-not-allowed" : ""}
+                    disabled={!isFreeUser && sortedChannels.length === 0}
+                    className={isFreeUser ? "opacity-50" : ""}
                     data-testid="export-all-btn"
                   >
                     {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <Download className="h-4 w-4 mr-2" />}
@@ -3169,7 +3169,7 @@ export default function Dashboard() {
                     exportCSV(false, viewingReport.channels);
                   }
                 }}
-                className={isFreeUser ? "opacity-50 cursor-not-allowed" : ""}
+                className={isFreeUser ? "opacity-50" : ""}
                 data-testid="export-report-btn"
               >
                 {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <Download className="h-4 w-4 mr-2" />}
