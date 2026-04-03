@@ -52,4 +52,9 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 | Priority support | No | No | Yes | Yes |
 
 ## Backlog
-- None — all requested features implemented
+- Bulk actions in Pipeline view
+- Priority support system for Pro tier
+- Dashboard.jsx refactoring (3400+ lines → break into smaller components)
+
+## Completed (Feb 2026)
+- Graceful Tier Restrictions for Free Users: Grey out + lock icon on Export All, Save Report, Save Search, Export Shortlist buttons for free tier; reusable UpgradeDialog component; backend returns clean 403 JSON with {error, message, upgrade_url}
