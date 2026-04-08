@@ -26,6 +26,9 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const res = await axios.post(`${API}/auth/login`, { email, password });
+    sessionStorage.removeItem("affi_channels");
+    sessionStorage.removeItem("affi_raw");
+    sessionStorage.removeItem("affi_meta");
     localStorage.setItem("token", res.data.token);
     setToken(res.data.token);
     setUser(res.data.user);
@@ -34,6 +37,9 @@ export function AuthProvider({ children }) {
 
   const register = async (email, password) => {
     const res = await axios.post(`${API}/auth/register`, { email, password });
+    sessionStorage.removeItem("affi_channels");
+    sessionStorage.removeItem("affi_raw");
+    sessionStorage.removeItem("affi_meta");
     localStorage.setItem("token", res.data.token);
     setToken(res.data.token);
     setUser(res.data.user);
