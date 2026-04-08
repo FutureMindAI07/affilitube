@@ -13,6 +13,7 @@ export default function CheckoutSuccess() {
   const { token, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [status, setStatus] = useState("checking"); // checking, paid, failed
+  const [planTier, setPlanTier] = useState(null);
 
   useEffect(() => {
     if (!sessionId || !token) return;
@@ -27,6 +28,7 @@ export default function CheckoutSuccess() {
         });
         if (res.data.payment_status === "paid") {
           setStatus("paid");
+          setPlanTier(res.data.tier);
           if (refreshUser) refreshUser();
           return;
         }
@@ -65,8 +67,12 @@ export default function CheckoutSuccess() {
           <div className="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-5">
             <CheckCircle2 className="h-8 w-8 text-emerald-600" />
           </div>
-          <h1 className="font-heading text-3xl font-bold text-slate-900 mb-2">Welcome to Affilitube Pro!</h1>
-          <p className="text-slate-500 mb-8 max-w-sm">Your Pro access is now active. Enjoy unlimited searches and full export capabilities.</p>
+          <h1 className="font-heading text-3xl font-bold text-slate-900 mb-2">Welcome to Affilitube {planTier === "starter" ? "Starter" : "Pro"}!</h1>
+          <p className="text-slate-500 mb-8 max-w-sm">
+            {planTier === "starter"
+              ? "Your Starter access is now active. Enjoy 20 monthly searches and full export capabilities."
+              : "Your Pro access is now active. Enjoy unlimited searches and full export capabilities."}
+          </p>
           <Button
             onClick={() => navigate("/dashboard")}
             className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 h-11 px-8 font-semibold shadow-lg shadow-indigo-500/20"

@@ -2944,6 +2944,8 @@ async def get_checkout_status(session_id: str, request: Request, user=Depends(ge
     return {
         "status": session.status,
         "payment_status": new_status,
+        "plan": txn.get("plan", ""),
+        "tier": get_tier_for_plan(txn.get("plan", "")) if new_status == "paid" else None,
         "amount_total": session.amount_total,
         "currency": session.currency,
     }
