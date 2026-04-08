@@ -1,11 +1,27 @@
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const SearchResultsContext = createContext(null);
 
 export function SearchResultsProvider({ children }) {
+  const { user } = useAuth();
+  const prevUserIdRef = useRef(user?.id);
   const [channels, setChannels] = useState([]);
   const [rawSearchResults, setRawSearchResults] = useState(null);
   const [searchMetadata, setSearchMetadata] = useState(null);
+
+  // Clear all results when user changes (prevents cross-user data leakage)
+  useEffect(() => {
+    if (prevUserIdRef.current && prevUserIdRef.current !== user?.id) {
+      setChannels([]);
+      setRawSearchResults(null);
+      setSearchMetadata(null);
+      sessionStorage.removeItem("affi_channels");
+      sessionStorage.removeItem("affi_raw");
+      sessionStorage.removeItem("affi_meta");
+    }
+    prevUserIdRef.current = user?.id;
+  }, [user?.id]);
 
   const clearResults = useCallback(() => {
     setChannels([]);
