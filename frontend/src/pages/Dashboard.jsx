@@ -1398,13 +1398,28 @@ export default function Dashboard() {
         {/* Search Panel */}
         <Card className="glass-card" data-testid="search-panel">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 font-heading">
-              <Search className="h-5 w-5 text-indigo-500" />
-              Search Configuration
-            </CardTitle>
-            <CardDescription>
-              Select your niche, enter keywords, and find YouTube affiliate prospects
-            </CardDescription>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 font-heading">
+                  <Search className="h-5 w-5 text-indigo-500" />
+                  Search Configuration
+                </CardTitle>
+                <CardDescription>
+                  Select your niche, enter keywords, and find YouTube affiliate prospects
+                </CardDescription>
+              </div>
+              {userUsage && !userUsage.is_unlimited && (
+                <Button
+                  size="sm"
+                  className="btn-gradient shrink-0"
+                  onClick={() => navigate("/pricing")}
+                  data-testid="search-panel-upgrade-btn"
+                >
+                  <Zap className="h-3.5 w-3.5 mr-1.5" />
+                  {userUsage.tier === "free" ? "Upgrade" : "Upgrade to Pro"}
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Niche Selector */}
