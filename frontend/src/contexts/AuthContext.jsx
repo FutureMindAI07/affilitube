@@ -42,6 +42,9 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem("token");
+    sessionStorage.removeItem("affi_channels");
+    sessionStorage.removeItem("affi_raw");
+    sessionStorage.removeItem("affi_meta");
     setToken(null);
     setUser(null);
   };
