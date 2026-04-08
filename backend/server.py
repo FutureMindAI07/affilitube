@@ -2859,7 +2859,10 @@ async def create_checkout_session(data: CheckoutRequest, request: Request, user=
         raise HTTPException(status_code=400, detail="You already have Starter access. Upgrade to Pro instead.")
 
     stripe_sdk.api_key = STRIPE_API_KEY
-    origin = request.headers.get("origin") or str(request.base_url).rstrip("/")
+    # Build origin from forwarded headers (Kubernetes ingress) for correct redirect URLs
+    proto = request.headers.get("x-forwarded-proto", "https")
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    origin = request.headers.get("origin") or f"{proto}://{host}".rstrip("/")
     success_url = f"{origin}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{origin}/pricing"
     
