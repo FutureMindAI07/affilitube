@@ -2306,11 +2306,11 @@ export default function Dashboard() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-7 text-xs gap-1 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                                  onClick={() => openPipelineDialog(channel)}
+                                  className={`h-7 text-xs gap-1 ${isFreeUser ? "opacity-50 text-muted-foreground border-muted" : "text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}
+                                  onClick={() => isFreeUser ? setUpgradeDialogOpen(true) : openPipelineDialog(channel)}
                                   data-testid={`add-pipeline-btn-${channel.channel_id}`}
                                 >
-                                  <Plus className="h-3 w-3" />
+                                  {isFreeUser ? <Lock className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
                                   Pipeline
                                 </Button>
                               );
@@ -3069,11 +3069,11 @@ export default function Dashboard() {
                   {/* Add to Pipeline - prominent CTA */}
                   {(selectedChannel.outreach_status || "not_contacted") === "not_contacted" ? (
                     <Button
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 gap-2"
-                      onClick={() => openPipelineDialog(selectedChannel)}
+                      className={`w-full gap-2 ${isFreeUser ? "opacity-50 bg-muted text-muted-foreground hover:bg-muted" : "bg-indigo-600 hover:bg-indigo-700"}`}
+                      onClick={() => isFreeUser ? setUpgradeDialogOpen(true) : openPipelineDialog(selectedChannel)}
                       data-testid="detail-add-pipeline-btn"
                     >
-                      <Plus className="h-4 w-4" />
+                      {isFreeUser ? <Lock className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                       Add to Pipeline
                     </Button>
                   ) : (
@@ -3326,11 +3326,11 @@ export default function Dashboard() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-7 text-xs gap-1 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                                  onClick={() => openPipelineDialog(channel)}
+                                  className={`h-7 text-xs gap-1 ${isFreeUser ? "opacity-50 text-muted-foreground border-muted" : "text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}
+                                  onClick={() => isFreeUser ? setUpgradeDialogOpen(true) : openPipelineDialog(channel)}
                                   data-testid={`report-add-pipeline-btn-${channel.channel_id}`}
                                 >
-                                  <Plus className="h-3 w-3" />
+                                  {isFreeUser ? <Lock className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
                                   Pipeline
                                 </Button>
                               );
