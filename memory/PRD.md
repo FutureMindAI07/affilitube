@@ -57,4 +57,6 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - Dashboard.jsx refactoring (3400+ lines → break into smaller components)
 
 ## Completed (Feb 2026)
-- Graceful Tier Restrictions for Free Users: Grey out + lock icon on Export All, Save Report, Save Search, Export Shortlist buttons for free tier; reusable UpgradeDialog component at `/app/frontend/src/components/UpgradeDialog.jsx`; backend returns clean 403 JSON with `{error, message, upgrade_url}`; buttons remain clickable for free users (open upgrade dialog) while normally disabled conditions only apply to paid users
+- Graceful Tier Restrictions for Free Users: Grey out + lock icon on Export All, Save Report, Save Search, Export Shortlist, Pipeline buttons for free tier; reusable UpgradeDialog component at `/app/frontend/src/components/UpgradeDialog.jsx`; backend returns clean 403 JSON with `{error, message, upgrade_url}`
+- Stripe Checkout Redirect Fix: Fixed success_url using internal cluster URL instead of public URL; now uses x-forwarded-proto/host headers
+- Dashboard Header Cleanup: Removed redundant quota banner, moved Manage Subscription/Bug Report/Logout into user dropdown menu, slimmed auto-save indicator into compact chip

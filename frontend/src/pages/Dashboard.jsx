@@ -101,9 +101,16 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus, ArrowUp, ArrowDown, Minus, Activity, TrendingUp, CreditCard } from "lucide-react";
+import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus, ArrowUp, ArrowDown, Minus, Activity, TrendingUp, CreditCard, User as UserIcon, ChevronDown as ChevronDownIcon } from "lucide-react";
 import { useSearchResults } from "@/contexts/SearchResultsContext";
 import { UpgradeDialog } from "@/components/UpgradeDialog";
 
@@ -1078,26 +1085,7 @@ export default function Dashboard() {
               </Button>
             )}
             
-            {/* Manage Subscription for paid users */}
-            {userUsage && (userUsage.tier === "starter" || userUsage.tier === "pro") && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-full"
-                data-testid="manage-subscription-btn"
-                onClick={async () => {
-                  try {
-                    const res = await api.post("/billing/portal-session");
-                    window.location.href = res.data.url;
-                  } catch (e) {
-                    toast.error(e.response?.data?.detail || "Unable to open billing portal");
-                  }
-                }}
-              >
-                <CreditCard className="h-3.5 w-3.5 mr-1.5" />
-                Manage Subscription
-              </Button>
-            )}
+            {/* Manage Subscription - moved to user dropdown */}
           
           {/* Search History Button */}
           <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
@@ -1282,36 +1270,58 @@ export default function Dashboard() {
             </DialogContent>
           </Dialog>
 
-            {/* User Menu */}
+            {/* User Dropdown Menu */}
             <Separator orientation="vertical" className="h-5" />
-            <div className="flex items-center gap-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setBugReportOpen(true)}
-                      className="text-slate-500 hover:text-slate-900"
-                      data-testid="bug-report-btn"
-                    >
-                      <Bug className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Report a Bug</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <span className="text-xs text-slate-500 hidden sm:inline">{user?.email}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { navigate("/"); setTimeout(logout, 100); }}
-                className="text-slate-500 hover:text-slate-900"
-                data-testid="logout-btn"
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-1.5 text-slate-600 hover:text-slate-900" data-testid="user-menu-btn">
+                  <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center">
+                    <UserIcon className="h-3.5 w-3.5 text-indigo-600" />
+                  </div>
+                  <span className="text-xs hidden sm:inline max-w-[120px] truncate">{user?.email}</span>
+                  <ChevronDownIcon className="h-3 w-3 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56" data-testid="user-menu-dropdown">
+                <div className="px-2 py-1.5">
+                  <p className="text-sm font-medium">{user?.email}</p>
+                  {userUsage && <p className="text-xs text-muted-foreground">{userUsage.tier_name} Plan</p>}
+                </div>
+                <DropdownMenuSeparator />
+                {userUsage && (userUsage.tier === "starter" || userUsage.tier === "pro") && (
+                  <DropdownMenuItem
+                    className="gap-2 cursor-pointer"
+                    data-testid="manage-subscription-btn"
+                    onClick={async () => {
+                      try {
+                        const res = await api.post("/billing/portal-session");
+                        window.location.href = res.data.url;
+                      } catch (e) {
+                        toast.error(e.response?.data?.detail || "Unable to open billing portal");
+                      }
+                    }}
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    Manage Subscription
+                  </DropdownMenuItem>
+                )}
+                {userUsage && !userUsage.is_unlimited && (
+                  <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => navigate("/pricing")}>
+                    <Zap className="h-4 w-4" />
+                    {userUsage.tier === "free" ? "Upgrade Plan" : "Upgrade to Pro"}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => setBugReportOpen(true)} data-testid="bug-report-btn">
+                  <Bug className="h-4 w-4" />
+                  Report a Bug
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="gap-2 cursor-pointer text-red-600 focus:text-red-600" onClick={() => { navigate("/"); setTimeout(logout, 100); }} data-testid="logout-btn">
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
         </div>
         </div>
       </header>
@@ -1365,59 +1375,24 @@ export default function Dashboard() {
           </button>
         )}
 
-        {/* User Usage Display for Free Tier */}
-        {userUsage && !userUsage.is_unlimited && (
-          <Card className="bg-gradient-to-r from-indigo-50/60 to-purple-50/60 border-indigo-100/50">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Gauge className="h-5 w-5 text-indigo-600" />
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">
-                      {userUsage.tier_name} Plan — {userUsage.searches_remaining} of {userUsage.max_searches} searches remaining this month
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {userUsage.tier === "free"
-                        ? "Results limited to 10 channels per search. Upgrade for unlimited."
-                        : `${userUsage.max_searches} searches per month. Upgrade to Pro for unlimited.`}
-                    </p>
-                  </div>
-                </div>
-                <Button 
-                  size="sm" 
-                  className="btn-gradient"
-                  onClick={() => navigate("/pricing")}
-                >
-                  {userUsage.tier === "free" ? "Upgrade" : "Upgrade to Pro"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Loaded Results Indicator */}
+        {/* Loaded Results Indicator - compact chip */}
         {channels.length > 0 && !isSearching && !isEnriching && (
-          <Card className="bg-gradient-to-r from-indigo-50/60 to-purple-50/60 border-indigo-100/50" data-testid="results-loaded-indicator">
-            <CardContent className="pt-3 pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-indigo-600" />
-                  <span className="text-sm text-indigo-700 font-medium">
-                    {channels.length} channels loaded{searchResults.searchMetadata?.niche ? ` from ${searchResults.searchMetadata.niche.replace(/_/g, " ")} search` : " from last search"}
-                  </span>
-                  {searchResults.searchMetadata?.timestamp && (
-                    <span className="text-xs text-indigo-400">
-                      ({new Date(searchResults.searchMetadata.timestamp).toLocaleString()})
-                    </span>
-                  )}
-                </div>
-                <Button variant="ghost" size="sm" onClick={clearSearchResults} className="text-slate-400 hover:text-red-500 h-7 px-2 gap-1" data-testid="clear-results-btn">
-                  <X className="h-3.5 w-3.5" />
-                  Clear
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex items-center gap-2 px-1" data-testid="results-loaded-indicator">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50/80 border border-indigo-100/60">
+              <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500" />
+              <span className="text-xs text-indigo-700 font-medium">
+                {channels.length} channels loaded{searchResults.searchMetadata?.niche ? ` from ${searchResults.searchMetadata.niche.replace(/_/g, " ")}` : ""}
+              </span>
+              {searchResults.searchMetadata?.timestamp && (
+                <span className="text-[10px] text-indigo-400">
+                  ({new Date(searchResults.searchMetadata.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})
+                </span>
+              )}
+              <button onClick={clearSearchResults} className="ml-1 text-indigo-400 hover:text-red-500 transition-colors" data-testid="clear-results-btn">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Search Panel */}
