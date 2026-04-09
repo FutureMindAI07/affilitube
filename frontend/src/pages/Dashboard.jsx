@@ -729,7 +729,7 @@ export default function Dashboard() {
 
   const updateNotes = async (channelId, notes) => {
     try {
-      await axios.put(`${API}/channels/${channelId}/notes`, { notes });
+      await api.put(`/channels/${channelId}/notes`, { notes });
       setChannels((prev) =>
         prev.map((ch) => (ch.channel_id === channelId ? { ...ch, notes } : ch))
       );
@@ -3041,8 +3041,9 @@ export default function Dashboard() {
                   <h4 className="text-sm font-semibold mb-3">Notes</h4>
                   <Textarea
                     placeholder="Add your notes about this channel..."
-                    value={selectedChannel.notes || ""}
-                    onChange={(e) =>
+                    defaultValue={selectedChannel.notes || ""}
+                    key={selectedChannel.channel_id}
+                    onBlur={(e) =>
                       updateNotes(
                         selectedChannel.channel_id,
                         e.target.value
