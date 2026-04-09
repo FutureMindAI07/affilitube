@@ -737,7 +737,8 @@ export default function Dashboard() {
         setSelectedChannel((prev) => ({ ...prev, notes }));
       }
     } catch (e) {
-      toast.error("Failed to save notes");
+      console.error("Notes save error:", e?.response?.status, e?.response?.data, e?.message);
+      toast.error(e?.response?.data?.detail || "Failed to save notes");
     }
   };
 
