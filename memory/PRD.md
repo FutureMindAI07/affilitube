@@ -60,3 +60,10 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - Graceful Tier Restrictions for Free Users: Grey out + lock icon on Export All, Save Report, Save Search, Export Shortlist, Pipeline buttons for free tier; reusable UpgradeDialog component at `/app/frontend/src/components/UpgradeDialog.jsx`; backend returns clean 403 JSON with `{error, message, upgrade_url}`
 - Stripe Checkout Redirect Fix: Fixed success_url using internal cluster URL instead of public URL; now uses x-forwarded-proto/host headers
 - Dashboard Header Cleanup: Removed redundant quota banner, moved Manage Subscription/Bug Report/Logout into user dropdown menu, slimmed auto-save indicator into compact chip
+- Cross-User Data Leakage Fix: SessionStorage + React context cleared on login/logout/register to prevent stale search results showing for different users
+- Checkout Success Page: Shows correct tier name (Starter vs Pro) from backend response
+- Notes Save Fix: Changed axios.put to api.put (auth), onChange to onBlur (debounce)
+- Pricing → Signup Flow: Selected plan preserved through registration via URL param, auto-triggers Stripe checkout
+- /free Landing Page: Dedicated conversion page for YouTube traffic (no nav, hero, how it works, benefits, pricing snapshot, minimal footer)
+- Saved Report Table Parity: Full parity with live results table (Aff Score, Health, Pipeline columns, sorting, filtering, pagination)
+- Sponsorship History / Brand Intelligence: On-demand analysis of last 10 videos via YouTube API with regex-based detection; 7-day cache; Gift icon in table; Brand Intelligence section in detail panel; tier gating (Pro sees brand names, others see blurred + upgrade CTA)
