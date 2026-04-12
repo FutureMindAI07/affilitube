@@ -103,7 +103,10 @@ export default function Pricing() {
     }
 
     if (!user) {
-      navigate("/signup");
+      const planId = billingCycle === "yearly"
+        ? `${plan.planPrefix}_yearly`
+        : `${plan.planPrefix}_monthly`;
+      navigate(`/signup?plan=${planId}`);
       return;
     }
 

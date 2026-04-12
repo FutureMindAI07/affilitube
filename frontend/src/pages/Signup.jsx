@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Youtube, ArrowRight, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import axios from "axios";
+import { toast } from "sonner";
+
+const API = process.env.REACT_APP_BACKEND_URL;
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -23,6 +27,8 @@ export default function Signup() {
   const [agreedTerms, setAgreedTerms] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const planFromPricing = searchParams.get("plan");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,8 +37,19 @@ export default function Signup() {
     if (password !== confirmPassword) { setError("Passwords do not match"); return; }
     setLoading(true);
     try {
-      await register(email, password);
-      navigate("/dashboard");
+      const res = await register(email, password);
+      if (planFromPricing) {
+        // User came from pricing page with a paid plan — trigger checkout
+        const token = res.token;
+        const checkoutRes = await axios.post(
+          `${API}/api/checkout/create-session`,
+          { plan: planFromPricing },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        window.location.href = checkoutRes.data.url;
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err) {
       setError(err.response?.data?.detail || "Registration failed");
     } finally {
@@ -59,7 +76,11 @@ export default function Signup() {
           <motion.div variants={fadeUp} className="bg-white/80 backdrop-blur-xl rounded-3xl border border-white/50 shadow-xl shadow-slate-200/30 p-10">
             <div className="text-center mb-8">
               <h1 className="font-heading text-2xl font-bold text-slate-900">Create your account</h1>
-              <p className="mt-2 text-sm text-slate-500">Start with 3 free searches — no credit card required</p>
+              <p className="mt-2 text-sm text-slate-500">
+                {planFromPricing
+                  ? `Create your account to continue to ${planFromPricing.includes("starter") ? "Starter" : "Pro"} checkout`
+                  : "Start with 3 free searches — no credit card required"}
+              </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
