@@ -2085,6 +2085,208 @@ async def update_notes(channel_id: str, input: UpdateNotesInput, user=Depends(ge
     )
     return {"success": True}
 
+# ==================== SPONSORSHIP DETECTION ====================
+
+SPONSORSHIP_PATTERNS = [
+    # Explicit sponsorship language
+    (r"(?i)(?:sponsored|presented|brought to you)\s+by\s+([A-Z][\w\s&'.-]{1,40})", "sponsor"),
+    (r"(?i)thanks?\s+to\s+([A-Z][\w\s&'.-]{1,40})\s+for\s+(?:sponsoring|supporting|partnering)", "sponsor"),
+    (r"(?i)this\s+(?:video|episode|segment)\s+is\s+(?:sponsored|supported)\s+by\s+([A-Z][\w\s&'.-]{1,40})", "sponsor"),
+    (r"(?i)(?:partner(?:ship)?|collaboration|collab)\s+with\s+([A-Z][\w\s&'.-]{1,40})", "sponsor"),
+    # Discount/promo codes
+    (r"(?i)(?:discount|promo|coupon)\s+code[:\s]+['\"]?(\w+)['\"]?", "promo_code"),
+    (r"(?i)use\s+(?:my\s+)?code\s+['\"]?(\w+)['\"]?", "promo_code"),
+    (r"(?i)(\d+%?\s*off)\s+(?:with|using)\s+(?:code|link)", "promo_code"),
+    # FTC / disclosure
+    (r"(?i)#(?:ad|sponsored|paidpartnership|partner)", "disclosure"),
+    (r"(?i)includes?\s+paid\s+(?:promotion|partnership)", "disclosure"),
+]
+
+AFFILIATE_LINK_PATTERNS = [
+    r"amzn\.to/",
+    r"amazon\.[\w.]+/.*(?:tag=|ref=)",
+    r"bit\.ly/",
+    r"tinyurl\.com/",
+    r"go\.magik\.ly/",
+    r"shrsl\.com/",
+    r"rstyle\.me/",
+    r"linktr\.ee/",
+    r"stan\.store/",
+    r"geni\.us/",
+    r"howl\.me/",
+    r"shopmy\.us/",
+    r"lvndr\.com/",
+    r"mavely\.co/",
+    r"rstyle\.me/",
+    r"collabs\.shop/",
+    r"glnk\.io/",
+    r"jdoqocy\.com/",
+    r"tkqlhce\.com/",
+    r"anrdoezrs\.net/",
+    r"shareasale\.com/",
+    r"(?:commission|affiliate|partner|ref)[_\-]?(?:link|url|id)",
+]
+
+
+def detect_sponsorships(videos):
+    """Analyze video titles & descriptions for sponsorship signals.
+    
+    Args:
+        videos: list of dicts with keys: video_id, title, description
+    
+    Returns:
+        dict with sponsorship_data
+    """
+    detected_brands = set()
+    affiliate_link_count = 0
+    disclosure_count = 0
+    promo_code_count = 0
+    videos_with_sponsorships = []
+
+    for video in videos:
+        desc = video.get("description", "")
+        title = video.get("title", "")
+        combined = f"{title}\n{desc}"
+        video_signals = []
+
+        # Check sponsorship patterns
+        for pattern, signal_type in SPONSORSHIP_PATTERNS:
+            matches = re.finditer(pattern, combined)
+            for match in matches:
+                if signal_type == "sponsor":
+                    brand = match.group(1).strip().rstrip(".,!?")
+                    # Filter out common false positives
+                    if len(brand) > 2 and brand.lower() not in ("the", "this", "our", "and", "for", "you", "your", "my"):
+                        detected_brands.add(brand)
+                        video_signals.append(f"Sponsor: {brand}")
+                elif signal_type == "promo_code":
+                    promo_code_count += 1
+                    video_signals.append("Promo code")
+                elif signal_type == "disclosure":
+                    disclosure_count += 1
+                    video_signals.append("Disclosure tag")
+
+        # Check affiliate links
+        video_aff_links = 0
+        for link_pattern in AFFILIATE_LINK_PATTERNS:
+            found = re.findall(link_pattern, desc, re.IGNORECASE)
+            video_aff_links += len(found)
+        affiliate_link_count += video_aff_links
+        if video_aff_links > 0:
+            video_signals.append(f"{video_aff_links} affiliate link(s)")
+
+        if video_signals:
+            videos_with_sponsorships.append({
+                "video_id": video.get("video_id"),
+                "title": title,
+                "signals": video_signals,
+            })
+
+    # Confidence score: 0-100 based on signal density
+    total_videos = len(videos) if videos else 1
+    signal_ratio = len(videos_with_sponsorships) / total_videos
+    brand_score = min(len(detected_brands) * 15, 40)
+    link_score = min(affiliate_link_count * 5, 30)
+    disclosure_score = min(disclosure_count * 10, 20)
+    promo_score = min(promo_code_count * 5, 10)
+    confidence = min(int(brand_score + link_score + disclosure_score + promo_score + signal_ratio * 20), 100)
+
+    return {
+        "is_sponsored_active": len(videos_with_sponsorships) > 0,
+        "detected_brands": sorted(detected_brands),
+        "affiliate_link_count": affiliate_link_count,
+        "disclosure_count": disclosure_count,
+        "promo_code_count": promo_code_count,
+        "confidence_score": confidence,
+        "videos_analyzed": len(videos),
+        "videos_with_sponsorships": videos_with_sponsorships,
+    }
+
+
+@api_router.get("/channels/{channel_id}/sponsorship-data")
+async def get_sponsorship_data(channel_id: str, user=Depends(get_current_user)):
+    """On-demand sponsorship analysis for a channel. Uses 7-day cache."""
+    
+    # Check cache first
+    channel = await db.channels.find_one(
+        {"channel_id": channel_id},
+        {"_id": 0, "sponsorship_data": 1, "last_sponsorship_check": 1}
+    )
+    
+    if channel and channel.get("last_sponsorship_check"):
+        last_check = channel["last_sponsorship_check"]
+        # Handle both timezone-aware and naive datetimes from MongoDB
+        if last_check.tzinfo is None:
+            last_check = last_check.replace(tzinfo=timezone.utc)
+        cache_age = (datetime.now(timezone.utc) - last_check).days
+        if cache_age < 7 and channel.get("sponsorship_data"):
+            return channel["sponsorship_data"]
+    
+    # Fetch last 10 videos from YouTube
+    try:
+        youtube = get_youtube_service()
+        
+        # Get uploads playlist ID
+        ch_response = youtube.channels().list(
+            part="contentDetails",
+            id=channel_id
+        ).execute()
+        
+        if not ch_response.get("items"):
+            return {"is_sponsored_active": False, "detected_brands": [], "affiliate_link_count": 0,
+                    "confidence_score": 0, "videos_analyzed": 0, "videos_with_sponsorships": []}
+        
+        uploads_playlist = ch_response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+        
+        # Get last 10 video IDs
+        playlist_response = youtube.playlistItems().list(
+            part="contentDetails",
+            playlistId=uploads_playlist,
+            maxResults=10
+        ).execute()
+        
+        video_ids = [item["contentDetails"]["videoId"] for item in playlist_response.get("items", [])]
+        
+        if not video_ids:
+            empty_result = {"is_sponsored_active": False, "detected_brands": [], "affiliate_link_count": 0,
+                           "confidence_score": 0, "videos_analyzed": 0, "videos_with_sponsorships": []}
+            await db.channels.update_many(
+                {"channel_id": channel_id},
+                {"$set": {"sponsorship_data": empty_result, "last_sponsorship_check": datetime.now(timezone.utc)}}
+            )
+            return empty_result
+        
+        # Fetch video details (title + description)
+        videos_response = youtube.videos().list(
+            part="snippet",
+            id=",".join(video_ids)
+        ).execute()
+        
+        videos = []
+        for item in videos_response.get("items", []):
+            videos.append({
+                "video_id": item["id"],
+                "title": item["snippet"]["title"],
+                "description": item["snippet"]["description"],
+            })
+        
+        # Run detection
+        result = detect_sponsorships(videos)
+        
+        # Cache to DB (update all copies of this channel across users)
+        await db.channels.update_many(
+            {"channel_id": channel_id},
+            {"$set": {"sponsorship_data": result, "last_sponsorship_check": datetime.now(timezone.utc)}}
+        )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Sponsorship detection error for {channel_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to analyze sponsorship data")
+
 # ==================== OUTREACH STATUS TRACKING ====================
 
 OUTREACH_STATUSES = [

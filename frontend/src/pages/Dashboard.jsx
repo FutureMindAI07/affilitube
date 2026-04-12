@@ -110,7 +110,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus, ArrowUp, ArrowDown, Minus, Activity, TrendingUp, CreditCard, User as UserIcon, ChevronDown as ChevronDownIcon } from "lucide-react";
+import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus, ArrowUp, ArrowDown, Minus, Activity, TrendingUp, CreditCard, User as UserIcon, ChevronDown as ChevronDownIcon, Gift, ExternalLink as ExternalLinkIcon } from "lucide-react";
 import { useSearchResults } from "@/contexts/SearchResultsContext";
 import { UpgradeDialog } from "@/components/UpgradeDialog";
 
@@ -282,6 +282,8 @@ export default function Dashboard() {
   const [shortlist, setShortlist] = useState(new Set());
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [sponsorshipData, setSponsorshipData] = useState(null);
+  const [sponsorshipLoading, setSponsorshipLoading] = useState(false);
 
   // Bug report
   const [bugReportOpen, setBugReportOpen] = useState(false);
@@ -750,6 +752,21 @@ export default function Dashboard() {
     }
   };
 
+  // Fetch sponsorship data on-demand when detail panel opens
+  const fetchSponsorshipData = async (channelId) => {
+    setSponsorshipData(null);
+    setSponsorshipLoading(true);
+    try {
+      const res = await api.get(`/channels/${channelId}/sponsorship-data`);
+      setSponsorshipData(res.data);
+    } catch (e) {
+      console.error("Sponsorship fetch error:", e?.response?.status);
+      setSponsorshipData(null);
+    } finally {
+      setSponsorshipLoading(false);
+    }
+  };
+
   const exportCSV = async (onlyShortlist = false, reportChannels = null) => {
     // If reportChannels provided, export those directly
     if (reportChannels) {
@@ -815,6 +832,7 @@ export default function Dashboard() {
   const openChannelDetail = (channel) => {
     setSelectedChannel(channel);
     setDetailOpen(true);
+    fetchSponsorshipData(channel.channel_id);
   };
 
   // Search history functions
@@ -2217,6 +2235,9 @@ export default function Dashboard() {
                                 {channel.tools_section_detected && (
                                   <Wrench className="h-3 w-3 text-orange-500" />
                                 )}
+                                {channel.sponsorship_data?.is_sponsored_active && (
+                                  <Gift className="h-3 w-3 text-pink-500" title="Sponsorships detected" />
+                                )}
                               </div>
                               <div className="flex items-center gap-1">
                                 <span className="text-xs text-muted-foreground truncate max-w-[140px]">
@@ -3045,6 +3066,126 @@ export default function Dashboard() {
 
                 <Separator />
 
+                {/* Brand Intelligence */}
+                <div data-testid="brand-intelligence-section">
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Gift className="h-4 w-4 text-pink-500" />
+                    Brand Intelligence
+                  </h4>
+                  {sponsorshipLoading ? (
+                    <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground" data-testid="sponsorship-loading">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Analyzing last 10 videos...
+                    </div>
+                  ) : sponsorshipData ? (
+                    <div className="space-y-3">
+                      {/* Confidence Score */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Sponsorship Confidence</span>
+                        <Badge
+                          className={`font-mono ${
+                            sponsorshipData.confidence_score >= 60
+                              ? "bg-pink-100 text-pink-700 border-pink-200"
+                              : sponsorshipData.confidence_score >= 30
+                              ? "bg-amber-100 text-amber-700 border-amber-200"
+                              : "bg-slate-100 text-slate-600 border-slate-200"
+                          }`}
+                          data-testid="sponsorship-confidence"
+                        >
+                          {sponsorshipData.confidence_score}/100
+                        </Badge>
+                      </div>
+
+                      {/* Stats row */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-lg bg-slate-50 p-2 text-center">
+                          <p className="text-lg font-bold text-slate-900">{sponsorshipData.detected_brands?.length || 0}</p>
+                          <p className="text-[10px] text-muted-foreground">Brands</p>
+                        </div>
+                        <div className="rounded-lg bg-slate-50 p-2 text-center">
+                          <p className="text-lg font-bold text-slate-900">{sponsorshipData.affiliate_link_count || 0}</p>
+                          <p className="text-[10px] text-muted-foreground">Aff Links</p>
+                        </div>
+                        <div className="rounded-lg bg-slate-50 p-2 text-center">
+                          <p className="text-lg font-bold text-slate-900">{sponsorshipData.videos_with_sponsorships?.length || 0}</p>
+                          <p className="text-[10px] text-muted-foreground">of {sponsorshipData.videos_analyzed || 0} Videos</p>
+                        </div>
+                      </div>
+
+                      {/* Detected brands */}
+                      {sponsorshipData.detected_brands?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1.5">Detected Past Partners</p>
+                          {userUsage?.tier === "pro" || userUsage?.tier === "appsumo" ? (
+                            <div className="flex flex-wrap gap-1" data-testid="brand-names-visible">
+                              {sponsorshipData.detected_brands.map((brand) => (
+                                <Badge key={brand} variant="outline" className="text-xs bg-pink-50 text-pink-700 border-pink-200">
+                                  {brand}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="relative" data-testid="brand-names-gated">
+                              <div className="flex flex-wrap gap-1 blur-sm select-none pointer-events-none">
+                                {sponsorshipData.detected_brands.map((brand) => (
+                                  <Badge key={brand} variant="outline" className="text-xs">
+                                    {brand}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="gap-1.5 text-xs bg-white/90 shadow-sm border-pink-200 text-pink-700 hover:bg-pink-50"
+                                  onClick={() => userUsage?.tier === "free" ? setUpgradeDialogOpen(true) : navigate("/pricing")}
+                                  data-testid="brand-upgrade-btn"
+                                >
+                                  <Lock className="h-3 w-3" />
+                                  {sponsorshipData.detected_brands.length} Brands Detected — Upgrade to Pro
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Videos with sponsorships */}
+                      {sponsorshipData.videos_with_sponsorships?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1.5">Videos with Disclosures</p>
+                          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                            {sponsorshipData.videos_with_sponsorships.map((v) => (
+                              <a
+                                key={v.video_id}
+                                href={`https://www.youtube.com/watch?v=${v.video_id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-start gap-2 p-1.5 rounded-md hover:bg-slate-50 transition-colors group"
+                                data-testid={`sponsorship-video-${v.video_id}`}
+                              >
+                                <ExternalLinkIcon className="h-3 w-3 mt-0.5 text-muted-foreground group-hover:text-primary shrink-0" />
+                                <div>
+                                  <p className="text-xs font-medium text-slate-700 group-hover:text-primary line-clamp-1">{v.title}</p>
+                                  <p className="text-[10px] text-muted-foreground">{v.signals?.join(" · ")}</p>
+                                </div>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {!sponsorshipData.is_sponsored_active && (
+                        <p className="text-xs text-muted-foreground italic py-2">No sponsorship signals detected in the last {sponsorshipData.videos_analyzed || 10} videos.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic py-2">Unable to load sponsorship data.</p>
+                  )}
+                </div>
+
+                <Separator />
+
                 {/* Notes */}
                 <div>
                   <h4 className="text-sm font-semibold mb-3">Notes</h4>
@@ -3386,6 +3527,7 @@ export default function Dashboard() {
                               onClick={() => {
                                 setSelectedChannel(channel);
                                 setDetailOpen(true);
+                                fetchSponsorshipData(channel.channel_id);
                               }}
                               data-testid={`report-row-${channel.channel_id}`}
                             >
@@ -3422,6 +3564,9 @@ export default function Dashboard() {
                                     )}
                                     {channel.tools_section_detected && (
                                       <Wrench className="h-3 w-3 text-orange-500" />
+                                    )}
+                                    {channel.sponsorship_data?.is_sponsored_active && (
+                                      <Gift className="h-3 w-3 text-pink-500" title="Sponsorships detected" />
                                     )}
                                   </div>
                                   <div className="flex items-center gap-1">
