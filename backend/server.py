@@ -1779,7 +1779,6 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
         enriched_channels.sort(key=lambda x: x.get("score_total", 0), reverse=True)
         return {"channels": enriched_channels, "total": len(enriched_channels), "cached": len(cached_channels)}
     
-    enriched_channels = []
     videos_to_fetch = min(videos_to_scan, 20)  # Cap at 20
     
     try:
