@@ -76,7 +76,7 @@ TIERS = {
     "free": {
         "name": "Free",
         "searches_per_month": 3,
-        "max_results_per_search": 10,
+        "max_results_per_search": 50,
         "csv_export": False,
         "saved_searches": False,
         "saved_reports": False,
