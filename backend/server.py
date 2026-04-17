@@ -2617,11 +2617,20 @@ Constraints:
 - Lowercase is okay for a natural feel.
 - Absolutely avoid these words: synergy, boost, empower, cutting-edge, match made in heaven, knacks, unlock, leverage, game-changer.
 - Keep it under 150 words.
+- CRITICAL: Each of the 5 sections above MUST be its own short paragraph separated by a blank line. Do NOT write the email as one big block of text.
 
 Format your response EXACTLY as:
 SUBJECT: [a short, lowercase, non-marketing subject line]
 ---
-[the plain text email body]"""
+[paragraph 1: the opening]
+
+[paragraph 2: the hook]
+
+[paragraph 3: the why you reveal]
+
+[paragraph 4: the value]
+
+[paragraph 5: the CTA and demo link]"""
 
     try:
         from openai import OpenAI
@@ -2631,7 +2640,7 @@ SUBJECT: [a short, lowercase, non-marketing subject line]
         completion = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are the solo founder of Affilitube. Your goal is to write a one-to-one, plain-text email that feels like it was typed manually in 30 seconds. Be humble but direct. No marketing speak. No exclamation marks. Calm, professional, slightly casual. Think of how a real person would write a quick email to someone they genuinely respect."},
+                {"role": "system", "content": "You are the solo founder of Affilitube. Your goal is to write a one-to-one, plain-text email that feels like it was typed manually in 30 seconds. Be humble but direct. No marketing speak. No exclamation marks. Calm, professional, slightly casual. Think of how a real person would write a quick email to someone they genuinely respect. IMPORTANT: always separate each thought into its own short paragraph with a blank line between them. Never write a wall of text."},
                 {"role": "user", "content": prompt},
             ],
             max_tokens=500,
@@ -2646,6 +2655,20 @@ SUBJECT: [a short, lowercase, non-marketing subject line]
             parts = body.split("---", 1)
             subject = parts[0].replace("SUBJECT:", "").strip()
             body = parts[1].strip()
+
+        # Ensure paragraph breaks — if GPT returned a wall of text, split on sentence boundaries
+        if "\n\n" not in body and len(body) > 200:
+            import re
+            # Split at key phrase boundaries that should start new paragraphs
+            for marker in [
+                r"(?i)(i caught your video)",
+                r"(?i)(we built this tool)",
+                r"(?i)(we'?d love to have)",
+                r"(?i)(would you be open)",
+                r"(?i)(if you'?re interested in how)",
+            ]:
+                body = re.sub(marker, r"\n\n\1", body)
+            body = body.strip()
 
         return {
             "subject": subject,
