@@ -858,6 +858,7 @@ export default function Dashboard() {
           uploaded_within_days: uploadedWithin,
           max_results_per_keyword: maxResults,
           search_mode: searchMode,
+          exclude_keywords: excludeKeywords.split("\n").map(k => k.trim()).filter(Boolean),
         },
         results_count: channels.length || null,
       });
@@ -872,6 +873,7 @@ export default function Dashboard() {
 
   const loadSavedSearch = async (search) => {
     setKeywords(search.keywords.join("\n"));
+    setExcludeKeywords((search.filters.exclude_keywords || []).join("\n"));
     setMinSubs(search.filters.min_subscribers || 2000);
     setMaxSubs(search.filters.max_subscribers || 100000);
     setUploadedWithin(search.filters.uploaded_within_days || 90);
