@@ -249,6 +249,7 @@ export default function Dashboard() {
   const isFreeUser = userUsage?.tier === "free";
 
   const [keywords, setKeywords] = useState("");
+  const [excludeKeywords, setExcludeKeywords] = useState("");
   const [minSubs, setMinSubs] = useState(2000);
   const [maxSubs, setMaxSubs] = useState(100000);
   const [uploadedWithin, setUploadedWithin] = useState(90);
@@ -640,6 +641,7 @@ export default function Dashboard() {
     try {
       const searchRes = await api.post("/search", {
         keywords: keywordList,
+        exclude_keywords: excludeKeywords.split("\n").map(k => k.trim()).filter(Boolean),
         niche: selectedNiche.key,
         min_subscribers: minSubs,
         max_subscribers: maxSubs,
@@ -1481,24 +1483,44 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Keywords */}
-            <div className="space-y-2">
-              <Label htmlFor="keywords">Keywords (one per line)</Label>
-              <Textarea
-                id="keywords"
-                value={keywords}
-                onChange={(e) => setKeywords(e.target.value)}
-                rows={6}
-                className={`font-mono text-sm ${!selectedNiche ? 'bg-slate-50' : ''}`}
-                placeholder={keywordPlaceholder}
-                disabled={!selectedNiche}
-                data-testid="keywords-input"
-              />
-              {selectedNiche && (
+            {/* Keywords + Exclude Keywords */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="keywords">Keywords (one per line)</Label>
+                <Textarea
+                  id="keywords"
+                  value={keywords}
+                  onChange={(e) => setKeywords(e.target.value)}
+                  rows={5}
+                  className={`font-mono text-sm ${!selectedNiche ? 'bg-slate-50' : ''}`}
+                  placeholder={keywordPlaceholder}
+                  disabled={!selectedNiche}
+                  data-testid="keywords-input"
+                />
+                {selectedNiche && (
+                  <p className="text-xs text-slate-500">
+                    Searching in <span className="font-medium text-indigo-600">{selectedNiche.name}</span> niche
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="exclude-keywords" className="flex items-center gap-1.5">
+                  <XCircle className="h-3.5 w-3.5 text-red-400" />
+                  Exclude Keywords (one per line)
+                </Label>
+                <Textarea
+                  id="exclude-keywords"
+                  value={excludeKeywords}
+                  onChange={(e) => setExcludeKeywords(e.target.value)}
+                  rows={5}
+                  className="font-mono text-sm"
+                  placeholder={"e.g.\nmusic\ngaming\nvlog"}
+                  data-testid="exclude-keywords-input"
+                />
                 <p className="text-xs text-slate-500">
-                  Searching in <span className="font-medium text-indigo-600">{selectedNiche.name}</span> niche
+                  Channels matching these keywords will be filtered out
                 </p>
-              )}
+              </div>
             </div>
 
             {/* Filters Grid */}
@@ -3265,6 +3287,25 @@ export default function Dashboard() {
                     </a>
                   </Button>
                   </div>
+                  {/* Exclude Channel Button */}
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2 text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600"
+                    onClick={async () => {
+                      try {
+                        await api.post(`/channels/${selectedChannel.channel_id}/exclude`);
+                        setChannels((prev) => prev.filter((ch) => ch.channel_id !== selectedChannel.channel_id));
+                        setDetailOpen(false);
+                        toast.success(`${selectedChannel.channel_name} excluded from future searches`);
+                      } catch (e) {
+                        toast.error("Failed to exclude channel");
+                      }
+                    }}
+                    data-testid="exclude-channel-btn"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    Exclude from Searches
+                  </Button>
                 </div>
               </div>
             </>

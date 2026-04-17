@@ -67,3 +67,8 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - /free Landing Page: Dedicated conversion page for YouTube traffic (no nav, hero, how it works, benefits, pricing snapshot, minimal footer)
 - Saved Report Table Parity: Full parity with live results table (Aff Score, Health, Pipeline columns, sorting, filtering, pagination)
 - Sponsorship History / Brand Intelligence: On-demand analysis of last 10 videos via YouTube API with regex-based detection; 7-day cache; Gift icon in table; Brand Intelligence section in detail panel; tier gating (Pro sees brand names, others see blurred + upgrade CTA)
+- Enrichment Cache Bug Fix: Removed line that wiped cached channels when mixing cached + uncached results, causing inconsistent search results between consecutive searches
+- Stripe Live Switchover: Updated all Stripe keys and price IDs to live environment
+- Free Tier Search Limit: Increased from 10 to 50 channels per search
+- Exclude Keywords: New textarea alongside keywords input to filter out channels matching excluded terms during search
+- Exclude Channel: "Exclude from Searches" button in detail panel; excluded channels stored per-user in MongoDB; filtered from both search and enrichment results

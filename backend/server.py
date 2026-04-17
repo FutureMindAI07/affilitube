@@ -655,6 +655,7 @@ class BugReportInput(BaseModel):
 
 class SearchFilters(BaseModel):
     keywords: List[str]
+    exclude_keywords: List[str] = []
     niche: str = "saas_software"  # NEW: Niche parameter
     min_subscribers: int = 2000
     max_subscribers: int = 100000
@@ -1608,7 +1609,7 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
                     for item in response.get("items", []):
                         ch_id = item["id"]["channelId"]
                         if ch_id not in channels_map:
-                            channels_map[ch_id] = {"keywords": [], "sources": set()}
+                            channels_map[ch_id] = {"keywords": [], "sources": set(), "title": item["snippet"].get("channelTitle", "")}
                         channels_map[ch_id]["keywords"].append(keyword)
                         channels_map[ch_id]["sources"].add("channel_search")
                 except HttpError as e:
@@ -1638,7 +1639,7 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
                     for item in response.get("items", []):
                         ch_id = item["snippet"]["channelId"]
                         if ch_id not in channels_map:
-                            channels_map[ch_id] = {"keywords": [], "sources": set()}
+                            channels_map[ch_id] = {"keywords": [], "sources": set(), "title": item["snippet"].get("channelTitle", "")}
                         if keyword not in channels_map[ch_id]["keywords"]:
                             channels_map[ch_id]["keywords"].append(keyword)
                         channels_map[ch_id]["sources"].add("video_search")
@@ -1656,6 +1657,25 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
         tier = get_user_tier(user)
         tier_config = get_tier_config(tier)
         channel_ids = list(channels_map.keys())
+        
+        # Remove user-excluded channels
+        excluded = await db.excluded_channels.find(
+            {"user_id": user["id"]}, {"_id": 0, "channel_id": 1}
+        ).to_list(length=10000)
+        excluded_ids = {e["channel_id"] for e in excluded}
+        if excluded_ids:
+            channel_ids = [cid for cid in channel_ids if cid not in excluded_ids]
+        
+        # Filter by exclude keywords (match against channel title from search snippets)
+        if filters.exclude_keywords:
+            exclude_lower = [ek.strip().lower() for ek in filters.exclude_keywords if ek.strip()]
+            if exclude_lower:
+                filtered_ids = []
+                for ch_id in channel_ids:
+                    ch_title = channels_map[ch_id].get("title", "").lower()
+                    if not any(ek in ch_title for ek in exclude_lower):
+                        filtered_ids.append(ch_id)
+                channel_ids = filtered_ids
         
         if tier_config["max_results_per_search"] is not None:
             channel_ids = channel_ids[:tier_config["max_results_per_search"]]
@@ -1732,6 +1752,14 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
     scan_video_descriptions = req.scan_video_descriptions
     max_channels_to_enrich = req.max_channels_to_enrich
     affiliate_platforms = req.affiliate_platforms
+    
+    # Remove user-excluded channels before enrichment
+    excluded = await db.excluded_channels.find(
+        {"user_id": user["id"]}, {"_id": 0, "channel_id": 1}
+    ).to_list(length=10000)
+    excluded_ids = {e["channel_id"] for e in excluded}
+    if excluded_ids:
+        channel_ids = [cid for cid in channel_ids if cid not in excluded_ids]
     
     # Apply max channels limit
     if max_channels_to_enrich and len(channel_ids) > max_channels_to_enrich:
@@ -2083,6 +2111,39 @@ async def update_notes(channel_id: str, input: UpdateNotesInput, user=Depends(ge
         {"$set": {"notes": input.notes}}
     )
     return {"success": True}
+
+# ==================== EXCLUDED CHANNELS ====================
+
+@api_router.post("/channels/{channel_id}/exclude")
+async def exclude_channel(channel_id: str, user=Depends(get_current_user)):
+    """Exclude a channel from future searches for this user."""
+    await db.excluded_channels.update_one(
+        {"user_id": user["id"], "channel_id": channel_id},
+        {"$set": {
+            "user_id": user["id"],
+            "channel_id": channel_id,
+            "excluded_at": datetime.now(timezone.utc).isoformat()
+        }},
+        upsert=True
+    )
+    return {"success": True}
+
+
+@api_router.delete("/channels/{channel_id}/exclude")
+async def unexclude_channel(channel_id: str, user=Depends(get_current_user)):
+    """Remove a channel from the exclusion list."""
+    await db.excluded_channels.delete_one({"user_id": user["id"], "channel_id": channel_id})
+    return {"success": True}
+
+
+@api_router.get("/channels/excluded")
+async def get_excluded_channels(user=Depends(get_current_user)):
+    """Get list of excluded channel IDs for this user."""
+    excluded = await db.excluded_channels.find(
+        {"user_id": user["id"]}, {"_id": 0, "channel_id": 1, "excluded_at": 1}
+    ).to_list(length=10000)
+    return {"excluded": excluded, "count": len(excluded)}
+
 
 # ==================== SPONSORSHIP DETECTION ====================
 
