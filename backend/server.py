@@ -2575,9 +2575,9 @@ async def generate_ai_draft(channel_id: str, user=Depends(get_current_user)):
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    llm_key = os.environ.get("EMERGENT_LLM_KEY")
+    llm_key = os.environ.get("OPENAI_API_KEY")
     if not llm_key:
-        raise HTTPException(status_code=500, detail="LLM key not configured")
+        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
 
     channel_name = channel.get("channel_name", "Creator")
     recent_videos = channel.get("recent_videos", [])
@@ -2608,20 +2608,24 @@ SUBJECT: [subject line here]
 [email body here]"""
 
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        import uuid
+        from openai import OpenAI
 
-        chat = LlmChat(
-            api_key=llm_key,
-            session_id=str(uuid.uuid4()),
-            system_message="You are an expert email copywriter specializing in YouTube influencer outreach. Write concise, personalized partnership emails."
-        ).with_model("openai", "gpt-4o")
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert email copywriter specializing in YouTube influencer outreach. Write concise, personalized partnership emails."},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=500,
+            temperature=0.8,
+        )
+
+        response = completion.choices[0].message.content.strip()
 
         subject = ""
-        body = response.strip()
+        body = response
         if "SUBJECT:" in body and "---" in body:
             parts = body.split("---", 1)
             subject = parts[0].replace("SUBJECT:", "").strip()
