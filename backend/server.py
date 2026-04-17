@@ -2589,23 +2589,39 @@ async def generate_ai_draft(channel_id: str, user=Depends(get_current_user)):
     aff_score = channel.get("affiliate_score", 0)
     business_email = channel.get("business_email", "")
 
-    prompt = f"""You are a professional partnership manager for Affilitube, a tool that helps brands find YouTube influencers. Write a short, peer-to-peer outreach email to {channel_name}.
+    prompt = f"""Write a one-to-one, plain-text outreach email to {channel_name}.
 
-The Hook: Start by mentioning a specific video from their recent list below. Make it sound like a genuine viewer who found real value in their content.
-
-Recent video titles:
+Here are their recent video titles (pick ONE to reference):
 {video_titles_str}
 
-The Connection: Briefly explain why Affilitube fits their {tags_str} audience. Their affiliate score is {aff_score}/100, which means they already show strong signals of affiliate and brand partnership activity.
+Their niche/tags: {tags_str}
+Their affiliate score: {aff_score}/100
 
-The Ask: Propose an affiliate partnership where they can earn by recommending Affilitube to their audience.
+Follow this structure exactly:
 
-Constraint: Keep it under 150 words. Do not use corporate jargon or 'marketing-speak'. Use a friendly, casual-professional tone.
+1. THE "I'M A HUMAN" OPENING: Use the line "I know you must get lots of emails like this and I don't want to waste your time..."
+
+2. THE SPECIFIC HOOK: Mention one specific video title from the list above. Keep it simple: "I caught your video about [Title]—really liked the part where you [infer a small detail or keep it brief]."
+
+3. THE "WHY YOU" REVEAL: Say: "we built this tool that helps small and medium creators/brands find influencers and affiliates... and to be honest, we actually used the tool itself to find you."
+
+4. THE VALUE: Explain that you'd love to have them as an early affiliate partner because they actually move the needle in the {tags_str} space.
+
+5. THE SHORT CTA: End with "would you be open to a 2-minute look at it? no worries if not."
+
+Constraints:
+- Plain text only. No bolding, no formatting, no markdown.
+- No placeholders like [Your Name] at the end—the sender will add their signature manually.
+- No exclamation marks. Keep the energy calm and professional.
+- Slightly casual style (use contractions like "we've", "don't", start some sentences with "but" or "so").
+- Lowercase is okay for a natural feel.
+- Absolutely avoid these words: synergy, boost, empower, cutting-edge, match made in heaven, knacks, unlock, leverage, game-changer.
+- Keep it under 150 words.
 
 Format your response EXACTLY as:
-SUBJECT: [subject line here]
+SUBJECT: [a short, lowercase, non-marketing subject line]
 ---
-[email body here]"""
+[the plain text email body]"""
 
     try:
         from openai import OpenAI
@@ -2615,11 +2631,11 @@ SUBJECT: [subject line here]
         completion = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an expert email copywriter specializing in YouTube influencer outreach. Write concise, personalized partnership emails."},
+                {"role": "system", "content": "You are the solo founder of Affilitube. Your goal is to write a one-to-one, plain-text email that feels like it was typed manually in 30 seconds. Be humble but direct. No marketing speak. No exclamation marks. Calm, professional, slightly casual. Think of how a real person would write a quick email to someone they genuinely respect."},
                 {"role": "user", "content": prompt},
             ],
             max_tokens=500,
-            temperature=0.8,
+            temperature=0.85,
         )
 
         response = completion.choices[0].message.content.strip()
