@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
@@ -2367,8 +2367,40 @@ class UpdateOutreachStatusInput(BaseModel):
 class UpdateFollowUpDateInput(BaseModel):
     follow_up_date: Optional[str] = None  # ISO date string or null to clear
 
+async def _cache_sponsorship_data(channel_id: str):
+    """Background task to pre-cache sponsorship data for a channel."""
+    try:
+        youtube = get_youtube_service()
+        ch_response = youtube.channels().list(part="contentDetails", id=channel_id).execute()
+        if not ch_response.get("items"):
+            return
+        uploads_playlist = ch_response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+        playlist_response = youtube.playlistItems().list(
+            part="contentDetails", playlistId=uploads_playlist, maxResults=10
+        ).execute()
+        video_ids = [item["contentDetails"]["videoId"] for item in playlist_response.get("items", [])]
+        if not video_ids:
+            empty_result = {"is_sponsored_active": False, "detected_brands": [], "affiliate_link_count": 0,
+                           "confidence_score": 0, "videos_analyzed": 0, "videos_with_sponsorships": []}
+            await db.channels.update_many(
+                {"channel_id": channel_id},
+                {"$set": {"sponsorship_data": empty_result, "last_sponsorship_check": datetime.now(timezone.utc)}}
+            )
+            return
+        videos_response = youtube.videos().list(part="snippet", id=",".join(video_ids)).execute()
+        videos = [{"video_id": item["id"], "title": item["snippet"]["title"],
+                    "description": item["snippet"]["description"]} for item in videos_response.get("items", [])]
+        result = detect_sponsorships(videos)
+        await db.channels.update_many(
+            {"channel_id": channel_id},
+            {"$set": {"sponsorship_data": result, "last_sponsorship_check": datetime.now(timezone.utc)}}
+        )
+        logger.info(f"Background sponsorship cache complete for {channel_id}")
+    except Exception as e:
+        logger.error(f"Background sponsorship cache error for {channel_id}: {e}")
+
 @api_router.patch("/channels/{channel_id}/outreach-status")
-async def update_outreach_status(channel_id: str, input: UpdateOutreachStatusInput, user=Depends(get_current_user)):
+async def update_outreach_status(channel_id: str, input: UpdateOutreachStatusInput, background_tasks: BackgroundTasks, user=Depends(get_current_user)):
     """Update outreach status and add a contact log entry"""
     # Check pipeline access
     tier = get_user_tier(user)
@@ -2389,6 +2421,13 @@ async def update_outreach_status(channel_id: str, input: UpdateOutreachStatusInp
     channel = await db.channels.find_one({"channel_id": channel_id, "user_id": user["id"]})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
+    
+    # Auto-cache sponsorship data if channel is being added to pipeline and has no cached data
+    was_not_contacted = (channel.get("outreach_status") or "not_contacted") == "not_contacted"
+    is_entering_pipeline = input.status != "not_contacted"
+    has_no_cache = not channel.get("sponsorship_data") or not channel.get("last_sponsorship_check")
+    if was_not_contacted and is_entering_pipeline and has_no_cache:
+        background_tasks.add_task(_cache_sponsorship_data, channel_id)
     
     # Create contact log entry
     log_entry = {

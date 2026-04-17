@@ -37,7 +37,9 @@ import {
   FolderOpen,
   Pencil,
   Check,
+  Info,
 } from "lucide-react";
+import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -82,8 +84,14 @@ export default function OutreachPipeline() {
   const [newStatus, setNewStatus] = useState("");
   const [statusNote, setStatusNote] = useState("");
 
+  // Channel detail sheet
+  const [detailChannel, setDetailChannel] = useState(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [userTier, setUserTier] = useState("free");
+
   useEffect(() => {
     loadProjects();
+    fetchUserTier();
   }, []);
 
   useEffect(() => {
@@ -97,6 +105,20 @@ export default function OutreachPipeline() {
     } catch (e) {
       console.error("Error loading projects:", e);
     }
+  };
+
+  const fetchUserTier = async () => {
+    try {
+      const res = await api.get("/user/usage");
+      setUserTier(res.data.tier || "free");
+    } catch (e) {
+      console.error("Error fetching user tier:", e);
+    }
+  };
+
+  const openChannelDetail = (channel) => {
+    setDetailChannel(channel);
+    setDetailOpen(true);
   };
 
   const loadChannels = async () => {
@@ -452,6 +474,16 @@ export default function OutreachPipeline() {
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => openChannelDetail(channel)}
+                          className="gap-1.5"
+                          data-testid={`info-btn-${channel.channel_id}`}
+                        >
+                          <Info className="h-3.5 w-3.5" />
+                          Info
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => {
                             setUpdatingChannel(channel);
                             setNewStatus(channel.outreach_status || "not_contacted");
@@ -541,6 +573,18 @@ export default function OutreachPipeline() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Channel Detail Sheet */}
+      <ChannelDetailSheet
+        channel={detailChannel}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        api={api}
+        userTier={userTier}
+        onStatusUpdate={() => loadChannels()}
+        onNotesUpdate={() => {}}
+        onUpgradeClick={() => navigate("/pricing")}
+      />
     </div>
   );
 }
