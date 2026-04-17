@@ -10,7 +10,7 @@ Frontend (React + Tailwind + Shadcn UI + Framer Motion)
   ├── Pricing (/pricing) — 3-tier: Free/Starter/Pro with Stripe checkout
   ├── Auth (/login, /signup, /forgot-password)
   ├── Dashboard (/dashboard) — Prospect Finder with Niche Selector
-  ├── Outreach Pipeline (/dashboard/pipeline) — CRM-like channel tracking
+  ├── Outreach Pipeline (/dashboard/pipeline) — CRM-like channel tracking with Info button
   ├── Outreach Templates (/dashboard/outreach) — Email templates
   ├── Getting Started (/dashboard/getting-started) — Tutorials & guides
   ├── Admin Panel (/admin) — Revenue, quota, users, search logs
@@ -27,6 +27,7 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
   ├── Niche-based Scoring (14 niches)
   ├── Channel Health Indicators
   ├── Outreach Pipeline (status tracking, projects, contact logs)
+  ├── Sponsorship Detection with Background Auto-Caching
   ├── Search Results Auto-save & Persistence
   ├── CSV Export, Reports, History, Bug Reports
 ```
@@ -52,23 +53,25 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 | Priority support | No | No | Yes | Yes |
 
 ## Backlog
-- Bulk actions in Pipeline view
-- Priority support system for Pro tier
-- Dashboard.jsx refactoring (3400+ lines → break into smaller components)
+- Bulk actions in Pipeline view (P1)
+- Priority support system for Pro tier (P2)
+- Dashboard.jsx refactoring (3800+ lines → break into smaller components) (P2)
 
-## Completed (Feb 2026)
-- Graceful Tier Restrictions for Free Users: Grey out + lock icon on Export All, Save Report, Save Search, Export Shortlist, Pipeline buttons for free tier; reusable UpgradeDialog component at `/app/frontend/src/components/UpgradeDialog.jsx`; backend returns clean 403 JSON with `{error, message, upgrade_url}`
-- Stripe Checkout Redirect Fix: Fixed success_url using internal cluster URL instead of public URL; now uses x-forwarded-proto/host headers
-- Dashboard Header Cleanup: Removed redundant quota banner, moved Manage Subscription/Bug Report/Logout into user dropdown menu, slimmed auto-save indicator into compact chip
-- Cross-User Data Leakage Fix: SessionStorage + React context cleared on login/logout/register to prevent stale search results showing for different users
-- Checkout Success Page: Shows correct tier name (Starter vs Pro) from backend response
-- Notes Save Fix: Changed axios.put to api.put (auth), onChange to onBlur (debounce)
-- Pricing → Signup Flow: Selected plan preserved through registration via URL param, auto-triggers Stripe checkout
-- /free Landing Page: Dedicated conversion page for YouTube traffic (no nav, hero, how it works, benefits, pricing snapshot, minimal footer)
-- Saved Report Table Parity: Full parity with live results table (Aff Score, Health, Pipeline columns, sorting, filtering, pagination)
-- Sponsorship History / Brand Intelligence: On-demand analysis of last 10 videos via YouTube API with regex-based detection; 7-day cache; Gift icon in table; Brand Intelligence section in detail panel; tier gating (Pro sees brand names, others see blurred + upgrade CTA)
-- Enrichment Cache Bug Fix: Removed line that wiped cached channels when mixing cached + uncached results, causing inconsistent search results between consecutive searches
-- Stripe Live Switchover: Updated all Stripe keys and price IDs to live environment
-- Free Tier Search Limit: Increased from 10 to 50 channels per search
-- Exclude Keywords: New textarea alongside keywords input to filter out channels matching excluded terms during search
-- Exclude Channel: "Exclude from Searches" button in detail panel; excluded channels stored per-user in MongoDB; filtered from both search and enrichment results
+## Completed (Apr 17, 2026)
+- Pipeline Info Button & Auto-Cache Brand Intelligence: Added "Info" button to each channel row in Outreach Pipeline that opens a full Channel Detail Sheet (ChannelDetailSheet.jsx) with Score Breakdown, Outreach Tracking, Affiliate Potential, Statistics, Channel Health, Tags, Brand Intelligence, Notes. Backend auto-caches sponsorship data via BackgroundTasks when a channel is first added to the pipeline.
+
+## Completed (Feb-Apr 2026)
+- Graceful Tier Restrictions for Free Users
+- Stripe Checkout Redirect Fix
+- Dashboard Header Cleanup
+- Cross-User Data Leakage Fix
+- Checkout Success Page dynamic copy
+- Notes Save Fix
+- Pricing → Signup Flow
+- /free Landing Page
+- Saved Report Table Parity
+- Sponsorship History / Brand Intelligence
+- Enrichment Cache Bug Fix
+- Stripe Live Switchover
+- Free Tier Search Limit (raised to 50)
+- Exclude Keywords & Exclude Channel features
