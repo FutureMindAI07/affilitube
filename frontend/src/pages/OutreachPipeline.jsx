@@ -40,6 +40,12 @@ import {
   Info,
   ArrowUpDown,
   SlidersHorizontal,
+  Sparkles,
+  Loader2,
+  Copy,
+  RefreshCcw,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
 
@@ -95,6 +101,11 @@ export default function OutreachPipeline() {
   const [minScore, setMinScore] = useState("");
   const [sortBy, setSortBy] = useState("newest");
 
+  // AI Draft state
+  const [draftOpenId, setDraftOpenId] = useState(null);
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [draftCache, setDraftCache] = useState({});
+
   useEffect(() => {
     loadProjects();
     fetchUserTier();
@@ -125,6 +136,54 @@ export default function OutreachPipeline() {
   const openChannelDetail = (channel) => {
     setDetailChannel(channel);
     setDetailOpen(true);
+  };
+
+  const isAdmin = user?.role === "admin";
+
+  const handleAiDraft = async (channel) => {
+    const cid = channel.channel_id;
+    if (draftOpenId === cid && draftCache[cid]) {
+      setDraftOpenId(draftOpenId === cid ? null : cid);
+      return;
+    }
+    if (draftCache[cid]) {
+      setDraftOpenId(cid);
+      return;
+    }
+    setDraftOpenId(cid);
+    setDraftLoading(true);
+    try {
+      const res = await api.post(`/channels/${cid}/ai-draft`);
+      setDraftCache(prev => ({ ...prev, [cid]: res.data }));
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "AI draft generation failed");
+      setDraftOpenId(null);
+    } finally {
+      setDraftLoading(false);
+    }
+  };
+
+  const regenerateDraft = async (channelId) => {
+    setDraftLoading(true);
+    try {
+      const res = await api.post(`/channels/${channelId}/ai-draft`);
+      setDraftCache(prev => ({ ...prev, [channelId]: res.data }));
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Regeneration failed");
+    } finally {
+      setDraftLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text, label) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied!`);
+  };
+
+  const copyAllDraft = (draft) => {
+    const full = `To: ${draft.business_email}\nSubject: ${draft.subject}\n\n${draft.body}`;
+    navigator.clipboard.writeText(full);
+    toast.success("Full draft copied to clipboard!");
   };
 
   const loadChannels = async () => {
@@ -546,6 +605,23 @@ export default function OutreachPipeline() {
                           <Info className="h-3.5 w-3.5" />
                           Info
                         </Button>
+                        {isAdmin && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAiDraft(channel)}
+                            className={`gap-1.5 ${draftOpenId === channel.channel_id ? "bg-purple-50 border-purple-300 text-purple-700" : ""}`}
+                            disabled={draftLoading && draftOpenId === channel.channel_id}
+                            data-testid={`ai-draft-btn-${channel.channel_id}`}
+                          >
+                            {draftLoading && draftOpenId === channel.channel_id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-3.5 w-3.5" />
+                            )}
+                            AI Draft
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -581,6 +657,98 @@ export default function OutreachPipeline() {
                             </span>
                           )}
                         </div>
+                      </div>
+                    )}
+
+                    {/* AI Draft Panel */}
+                    {draftOpenId === channel.channel_id && (
+                      <div className="mt-3 pt-3 border-t border-purple-100 animate-in slide-in-from-top-2 duration-200" data-testid={`ai-draft-panel-${channel.channel_id}`}>
+                        {draftLoading && !draftCache[channel.channel_id] ? (
+                          <div className="flex items-center gap-3 py-6 justify-center text-sm text-purple-600">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            Generating personalized outreach draft...
+                          </div>
+                        ) : draftCache[channel.channel_id] ? (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-sm font-semibold text-purple-800 flex items-center gap-1.5">
+                                <Sparkles className="h-4 w-4" />
+                                AI Outreach Draft
+                              </h4>
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => regenerateDraft(channel.channel_id)}
+                                  disabled={draftLoading}
+                                  className="h-7 gap-1 text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                  data-testid={`ai-draft-regenerate-${channel.channel_id}`}
+                                >
+                                  {draftLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
+                                  Regenerate
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => copyAllDraft(draftCache[channel.channel_id])}
+                                  className="h-7 gap-1 text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                  data-testid={`ai-draft-copy-all-${channel.channel_id}`}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                  Copy All
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setDraftOpenId(null)}
+                                  className="h-7 w-7 p-0 text-slate-400 hover:text-slate-600"
+                                >
+                                  <ChevronUp className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                            {/* Email To */}
+                            {draftCache[channel.channel_id].business_email && (
+                              <div className="flex items-center gap-2 p-2 rounded-md bg-blue-50 border border-blue-100">
+                                <Mail className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                                <span className="text-sm text-blue-700 font-medium truncate">{draftCache[channel.channel_id].business_email}</span>
+                                <button
+                                  onClick={() => copyToClipboard(draftCache[channel.channel_id].business_email, "Email")}
+                                  className="ml-auto text-blue-400 hover:text-blue-600 shrink-0"
+                                  data-testid={`ai-draft-copy-email-${channel.channel_id}`}
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            )}
+                            {/* Subject */}
+                            <div>
+                              <label className="text-[10px] uppercase tracking-wider text-purple-500 font-semibold mb-1 block">Subject</label>
+                              <div className="flex items-center gap-2 p-2 rounded-md bg-purple-50 border border-purple-100">
+                                <span className="text-sm text-slate-800 flex-1" data-testid={`ai-draft-subject-${channel.channel_id}`}>{draftCache[channel.channel_id].subject}</span>
+                                <button
+                                  onClick={() => copyToClipboard(draftCache[channel.channel_id].subject, "Subject")}
+                                  className="text-purple-400 hover:text-purple-600 shrink-0"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            {/* Body */}
+                            <div>
+                              <label className="text-[10px] uppercase tracking-wider text-purple-500 font-semibold mb-1 block">Message</label>
+                              <div className="relative p-3 rounded-md bg-white border border-purple-100 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed" data-testid={`ai-draft-body-${channel.channel_id}`}>
+                                {draftCache[channel.channel_id].body}
+                                <button
+                                  onClick={() => copyToClipboard(draftCache[channel.channel_id].body, "Message")}
+                                  className="absolute top-2 right-2 text-purple-300 hover:text-purple-600"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </CardContent>

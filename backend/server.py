@@ -2565,6 +2565,79 @@ async def remove_from_pipeline(channel_id: str, user=Depends(get_current_user)):
     )
     return {"success": True}
 
+@api_router.post("/channels/{channel_id}/ai-draft")
+async def generate_ai_draft(channel_id: str, user=Depends(get_current_user)):
+    """Generate an AI outreach email draft for a pipeline channel. Admin only."""
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required for AI drafting")
+
+    channel = await db.channels.find_one({"channel_id": channel_id, "user_id": user["id"]}, {"_id": 0})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    llm_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not llm_key:
+        raise HTTPException(status_code=500, detail="LLM key not configured")
+
+    channel_name = channel.get("channel_name", "Creator")
+    recent_videos = channel.get("recent_videos", [])
+    video_titles = [v.get("title", "") for v in recent_videos[:10]]
+    video_titles_str = "\n".join(f"- {t}" for t in video_titles) if video_titles else "No recent videos available"
+    topic_tags = channel.get("topic_tags", [])
+    affiliate_signals = channel.get("affiliate_signals", [])
+    tags_str = ", ".join(topic_tags + affiliate_signals) if (topic_tags or affiliate_signals) else "General content"
+    aff_score = channel.get("affiliate_score", 0)
+    business_email = channel.get("business_email", "")
+
+    prompt = f"""You are a professional partnership manager for Affilitube, a tool that helps brands find YouTube influencers. Write a short, peer-to-peer outreach email to {channel_name}.
+
+The Hook: Start by mentioning a specific video from their recent list below. Make it sound like a genuine viewer who found real value in their content.
+
+Recent video titles:
+{video_titles_str}
+
+The Connection: Briefly explain why Affilitube fits their {tags_str} audience. Their affiliate score is {aff_score}/100, which means they already show strong signals of affiliate and brand partnership activity.
+
+The Ask: Propose an affiliate partnership where they can earn by recommending Affilitube to their audience.
+
+Constraint: Keep it under 150 words. Do not use corporate jargon or 'marketing-speak'. Use a friendly, casual-professional tone.
+
+Format your response EXACTLY as:
+SUBJECT: [subject line here]
+---
+[email body here]"""
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        import uuid
+
+        chat = LlmChat(
+            api_key=llm_key,
+            session_id=str(uuid.uuid4()),
+            system_message="You are an expert email copywriter specializing in YouTube influencer outreach. Write concise, personalized partnership emails."
+        ).with_model("openai", "gpt-4o")
+
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+
+        subject = ""
+        body = response.strip()
+        if "SUBJECT:" in body and "---" in body:
+            parts = body.split("---", 1)
+            subject = parts[0].replace("SUBJECT:", "").strip()
+            body = parts[1].strip()
+
+        return {
+            "subject": subject,
+            "body": body,
+            "business_email": business_email,
+            "channel_name": channel_name,
+        }
+    except Exception as e:
+        logger.error(f"AI draft error for {channel_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
 class AutoSaveInput(BaseModel):
     channels: List[Dict[str, Any]]
     raw_search_results: Optional[Dict[str, Any]] = None
