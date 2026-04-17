@@ -7,7 +7,7 @@ import requests
 import json
 
 # Test credentials
-base_url = "https://tier-restrictions.preview.emergentagent.com"
+base_url = "https://pipeline-info-cache.preview.emergentagent.com"
 api_url = f"{base_url}/api"
 
 def login_free_user():
