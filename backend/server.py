@@ -2607,7 +2607,7 @@ Follow this structure exactly:
 
 4. THE VALUE: Explain that you'd love to have them as an early affiliate partner because they actually move the needle in the {tags_str} space.
 
-5. THE SHORT CTA: End with "would you be open to a 2-minute look at it? no worries if not."
+5. THE SHORT CTA: End with "would you be open to a 2-minute look at it? no worries if not." Then on a new line add: "if you're interested in how Affilitube works you can see a full demo here:" followed by "[DEMO_LINK]" on its own line. The sender will replace this placeholder with the actual URL.
 
 Constraints:
 - Plain text only. No bolding, no formatting, no markdown.
