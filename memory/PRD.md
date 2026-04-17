@@ -59,6 +59,7 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 
 ## Completed (Apr 17, 2026)
 - Pipeline Info Button & Auto-Cache Brand Intelligence: Added "Info" button to each channel row in Outreach Pipeline that opens a full Channel Detail Sheet (ChannelDetailSheet.jsx) with Score Breakdown, Outreach Tracking, Affiliate Potential, Statistics, Channel Health, Tags, Brand Intelligence, Notes. Backend auto-caches sponsorship data via BackgroundTasks when a channel is first added to the pipeline.
+- Pipeline Search & Sort: Added Min Affiliate Score filter, Sort by dropdown (Score high/low, Subscribers, Name), live channel count, and Clear button to the Pipeline filter bar.
 
 ## Completed (Feb-Apr 2026)
 - Graceful Tier Restrictions for Free Users

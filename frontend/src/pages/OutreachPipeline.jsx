@@ -38,6 +38,8 @@ import {
   Pencil,
   Check,
   Info,
+  ArrowUpDown,
+  SlidersHorizontal,
 } from "lucide-react";
 import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
 
@@ -88,6 +90,10 @@ export default function OutreachPipeline() {
   const [detailChannel, setDetailChannel] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [userTier, setUserTier] = useState("free");
+
+  // Score filter & sort
+  const [minScore, setMinScore] = useState("");
+  const [sortBy, setSortBy] = useState("newest");
 
   useEffect(() => {
     loadProjects();
@@ -187,12 +193,24 @@ export default function OutreachPipeline() {
     }
   };
 
-  const filteredChannels = channels.filter(ch => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return ch.channel_name?.toLowerCase().includes(query) || 
-           ch.business_email?.toLowerCase().includes(query);
-  });
+  const filteredChannels = channels
+    .filter(ch => {
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        if (!ch.channel_name?.toLowerCase().includes(query) && !ch.business_email?.toLowerCase().includes(query)) return false;
+      }
+      if (minScore && (ch.affiliate_score || 0) < parseInt(minScore)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case "score_desc": return (b.affiliate_score || 0) - (a.affiliate_score || 0);
+        case "score_asc": return (a.affiliate_score || 0) - (b.affiliate_score || 0);
+        case "subs_desc": return (b.subscriber_count || 0) - (a.subscriber_count || 0);
+        case "name_asc": return (a.channel_name || "").localeCompare(b.channel_name || "");
+        default: return 0; // newest = default DB order
+      }
+    });
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "—";
@@ -318,6 +336,7 @@ export default function OutreachPipeline() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full"
+                  data-testid="pipeline-search-input"
                 />
               </div>
               <div className="w-48">
@@ -354,6 +373,52 @@ export default function OutreachPipeline() {
                 <AlertCircle className="h-4 w-4" />
                 Overdue Follow-ups
               </Button>
+            </div>
+            {/* Score filter & Sort row */}
+            <div className="flex flex-wrap gap-4 items-end mt-3 pt-3 border-t border-slate-100">
+              <div className="w-40">
+                <label className="text-xs text-slate-500 mb-1 block">Min Affiliate Score</label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="e.g. 40"
+                  value={minScore}
+                  onChange={(e) => setMinScore(e.target.value)}
+                  className="h-9"
+                  data-testid="pipeline-min-score-filter"
+                />
+              </div>
+              <div className="w-48">
+                <label className="text-xs text-slate-500 mb-1 block">Sort by</label>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="h-9" data-testid="pipeline-sort-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Default Order</SelectItem>
+                    <SelectItem value="score_desc">Score: High to Low</SelectItem>
+                    <SelectItem value="score_asc">Score: Low to High</SelectItem>
+                    <SelectItem value="subs_desc">Subscribers: Most</SelectItem>
+                    <SelectItem value="name_asc">Name: A to Z</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(minScore || sortBy !== "newest") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setMinScore(""); setSortBy("newest"); }}
+                  className="text-slate-400 hover:text-slate-600 h-9"
+                  data-testid="pipeline-clear-filters"
+                >
+                  <XCircle className="h-3.5 w-3.5 mr-1" />
+                  Clear
+                </Button>
+              )}
+              <span className="text-xs text-slate-400 ml-auto self-end pb-1.5">
+                {filteredChannels.length} channel{filteredChannels.length !== 1 ? "s" : ""}
+              </span>
             </div>
           </CardContent>
         </Card>
