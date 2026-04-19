@@ -42,15 +42,22 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - "Manage Subscription" button in Dashboard for paid users
 
 ## Tier System
-| Feature | Free | Starter ($39.99/mo) | Pro ($79/mo) | AppSumo |
-|---|---|---|---|---|
-| Searches/month | 3 | 20 | Unlimited | Unlimited |
-| Results/search | 10 | No limit | No limit | No limit |
-| CSV export | No | Yes | Yes | Yes |
-| Saved searches | No | Yes | Yes | Yes |
-| Saved reports | No | Yes | Yes | Yes |
-| Pipeline access | No | Yes (3 projects) | Yes (unlimited) | Yes (unlimited) |
-| Priority support | No | No | Yes | Yes |
+| Feature | Free | Starter ($39.99/mo) | Pro ($79/mo) |
+|---|---|---|---|
+| Searches/month | 3 | 20 | Unlimited |
+| Results/search | 10 | No limit | No limit |
+| CSV export | No | Yes | Yes |
+| Saved searches | No | Yes | Yes |
+| Saved reports | No | Yes | Yes |
+| Pipeline access | No | Yes (3 projects) | Yes (unlimited) |
+| AI Draft | No | Yes (credits) | Yes (credits) |
+| Priority support | No | No | Yes |
+
+## AI Draft Credits
+- $9.99 = 500 draft credits (one-time Stripe purchase, payment mode)
+- Credits never expire, never reset — pure wallet
+- Admin has unlimited drafts (no credits needed)
+- Stripe Price ID: price_1TNvfwBQhyjmku0lRxcunLPq
 
 ## Backlog
 - Bulk actions in Pipeline view (P1)
@@ -60,7 +67,7 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 ## Completed (Apr 17, 2026)
 - Pipeline Info Button & Auto-Cache Brand Intelligence: Added "Info" button to each channel row in Outreach Pipeline that opens a full Channel Detail Sheet (ChannelDetailSheet.jsx) with Score Breakdown, Outreach Tracking, Affiliate Potential, Statistics, Channel Health, Tags, Brand Intelligence, Notes. Backend auto-caches sponsorship data via BackgroundTasks when a channel is first added to the pipeline.
 - Pipeline Search & Sort: Added Min Affiliate Score filter, Sort by dropdown (Score high/low, Subscribers, Name), live channel count, and Clear button to the Pipeline filter bar.
-- AI Outreach Drafter: Admin-only "AI Draft" button on each Pipeline card (between Info and Update Status). Uses OpenAI GPT-4o with "Raw Founder" tone — humble, direct, plain-text emails that feel manually typed. Prompt references specific video titles, uses "we used the tool to find you" reveal, avoids marketing jargon. Slide-down panel shows business email (copy icon), subject line, message body, Copy All, Regenerate buttons. Session-level caching avoids re-triggering paid API calls.
+- AI Outreach Drafter: Admin-only hardcoded "Raw Founder" template with unlimited drafts. Paid tiers (Starter/Pro) get dynamic template powered by user's Outreach Settings (product name, target audience, value prop, tone, closing, product URL, sender name). Credit system: $9.99 = 500 draft credits via Stripe one-time payment, never expire. Each non-admin draft deducts 1 credit. Pipeline header shows credit balance, Buy Credits button, and Settings gear. Onboarding flow: auto-opens Settings modal if config is empty. Free tier: no access.
 
 ## Completed (Feb-Apr 2026)
 - Graceful Tier Restrictions for Free Users
