@@ -44,6 +44,7 @@ import {
   ChevronRight,
   Shield,
   ArrowLeft,
+  Sparkles,
 } from "lucide-react";
 
 const API = `${import.meta.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_BACKEND_URL}/api`;
@@ -82,6 +83,8 @@ export default function AdminPanel() {
   const [editingUser, setEditingUser] = useState(null);
   const [deletingUser, setDeletingUser] = useState(null);
   const [newTier, setNewTier] = useState("");
+  const [creditUser, setCreditUser] = useState(null);
+  const [creditAmount, setCreditAmount] = useState("50");
 
   // Load data based on active tab
   useEffect(() => {
@@ -187,6 +190,18 @@ export default function AdminPanel() {
       loadUsers();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to delete user");
+    }
+  };
+
+  const grantCredits = async () => {
+    if (!creditUser || !creditAmount) return;
+    try {
+      const res = await api.put(`/admin/users/${creditUser.id}/credits`, { credits: parseInt(creditAmount) });
+      toast.success(`${res.data.credits_added} credits granted to ${res.data.email} (balance: ${res.data.new_balance})`);
+      setCreditUser(null);
+      setCreditAmount("50");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to grant credits");
     }
   };
 
@@ -496,6 +511,16 @@ export default function AdminPanel() {
                           <TableCell className="text-right">{u.total_searches || 0}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => { setCreditUser(u); setCreditAmount("50"); }}
+                                title="Grant AI draft credits"
+                                className="text-purple-500 hover:text-purple-700 hover:bg-purple-50"
+                                data-testid={`grant-credits-btn-${u.id}`}
+                              >
+                                <Sparkles className="h-4 w-4" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -873,6 +898,57 @@ export default function AdminPanel() {
             <Button variant="outline" onClick={() => setDeletingUser(null)}>Cancel</Button>
             <Button onClick={deleteUser} variant="destructive">
               Delete User
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Grant Credits Dialog */}
+      <Dialog open={!!creditUser} onOpenChange={() => setCreditUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-purple-500" />
+              Grant AI Draft Credits
+            </DialogTitle>
+            <DialogDescription>
+              Add draft credits to {creditUser?.email}'s account.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label className="text-sm font-medium mb-2 block">Number of credits</Label>
+            <div className="flex gap-2">
+              {["10", "50", "100", "500"].map((val) => (
+                <Button
+                  key={val}
+                  variant={creditAmount === val ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCreditAmount(val)}
+                  className={creditAmount === val ? "bg-purple-600 hover:bg-purple-700" : ""}
+                >
+                  {val}
+                </Button>
+              ))}
+              <Input
+                type="number"
+                min={1}
+                max={10000}
+                value={creditAmount}
+                onChange={(e) => setCreditAmount(e.target.value)}
+                className="w-24 h-9"
+                data-testid="grant-credits-input"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreditUser(null)}>Cancel</Button>
+            <Button
+              onClick={grantCredits}
+              className="bg-purple-600 hover:bg-purple-700 gap-1.5"
+              data-testid="grant-credits-confirm-btn"
+            >
+              <Sparkles className="h-4 w-4" />
+              Grant {creditAmount} Credits
             </Button>
           </DialogFooter>
         </DialogContent>

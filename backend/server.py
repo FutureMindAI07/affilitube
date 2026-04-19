@@ -3256,6 +3256,23 @@ async def admin_delete_user(user_id: str, admin=Depends(get_admin_user)):
     
     return {"success": True, "message": f"User {user['email']} deleted"}
 
+
+class AdminGrantCreditsInput(BaseModel):
+    credits: int = Field(..., gt=0, le=10000)
+
+@api_router.put("/admin/users/{user_id}/credits")
+async def admin_grant_credits(user_id: str, input: AdminGrantCreditsInput, admin=Depends(get_admin_user)):
+    """Grant AI draft credits to a user"""
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    await db.users.update_one(
+        {"id": user_id},
+        {"$inc": {"draft_credits": input.credits}}
+    )
+    new_balance = (await db.users.find_one({"id": user_id}, {"_id": 0, "draft_credits": 1})).get("draft_credits", 0)
+    return {"success": True, "credits_added": input.credits, "new_balance": new_balance, "email": user["email"]}
+
 @api_router.get("/admin/quota")
 async def admin_quota_monitor(admin=Depends(get_admin_user)):
     """Get detailed quota usage for admin monitoring"""
