@@ -1465,6 +1465,7 @@ async def get_user_usage(user=Depends(get_current_user)):
     tier_config = get_tier_config(tier)
     search_limit_info = await check_search_limit(user)
     
+    user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     return {
         "tier": tier,
         "tier_name": tier_config["name"],
@@ -1477,7 +1478,9 @@ async def get_user_usage(user=Depends(get_current_user)):
         "saved_reports": tier_config["saved_reports"],
         "pipeline_access": tier_config.get("pipeline_access", False),
         "max_pipeline_projects": tier_config.get("max_pipeline_projects"),
-        "is_unlimited": tier_config["searches_per_month"] is None
+        "is_unlimited": tier_config["searches_per_month"] is None,
+        "draft_credits": user_data.get("draft_credits", 0) if user_data else 0,
+        "has_outreach_config": bool(user_data.get("outreach_config", {}).get("product_name")) if user_data else False,
     }
 
 # Quota estimation endpoint
@@ -2567,16 +2570,30 @@ async def remove_from_pipeline(channel_id: str, user=Depends(get_current_user)):
 
 @api_router.post("/channels/{channel_id}/ai-draft")
 async def generate_ai_draft(channel_id: str, user=Depends(get_current_user)):
-    """Generate an AI outreach email draft for a pipeline channel. Admin only."""
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required for AI drafting")
+    """Generate an AI outreach email draft for a pipeline channel. Paid tiers only."""
+    tier = get_user_tier(user)
+    is_admin = user.get("role") == "admin"
+    is_paid = tier in ("starter", "pro")
+
+    if not is_admin and not is_paid:
+        raise HTTPException(status_code=403, detail="AI Draft requires a Starter or Pro plan.")
+
+    # Credit check for non-admin users
+    if not is_admin:
+        user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0, "draft_credits": 1, "outreach_config": 1})
+        credits = (user_data or {}).get("draft_credits", 0)
+        if credits <= 0:
+            raise HTTPException(status_code=402, detail="No draft credits remaining. Purchase more to continue.")
+        outreach_config = (user_data or {}).get("outreach_config", {})
+        if not outreach_config.get("product_name"):
+            raise HTTPException(status_code=400, detail="Please complete your Outreach Settings before generating drafts.")
 
     channel = await db.channels.find_one({"channel_id": channel_id, "user_id": user["id"]}, {"_id": 0})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    llm_key = os.environ.get("OPENAI_API_KEY")
-    if not llm_key:
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if not openai_key:
         raise HTTPException(status_code=500, detail="OpenAI API key not configured")
 
     channel_name = channel.get("channel_name", "Creator")
@@ -2589,7 +2606,10 @@ async def generate_ai_draft(channel_id: str, user=Depends(get_current_user)):
     aff_score = channel.get("affiliate_score", 0)
     business_email = channel.get("business_email", "")
 
-    prompt = f"""Write a one-to-one, plain-text outreach email to {channel_name}.
+    # Build prompt based on admin vs paid user
+    if is_admin:
+        system_msg = "You are the solo founder of Affilitube. Your goal is to write a one-to-one, plain-text email that feels like it was typed manually in 30 seconds. Be humble but direct. No marketing speak. No exclamation marks. Calm, professional, slightly casual. Think of how a real person would write a quick email to someone they genuinely respect. IMPORTANT: always separate each thought into its own short paragraph with a blank line between them. Never write a wall of text."
+        prompt = f"""Write a one-to-one, plain-text outreach email to {channel_name}.
 
 Here are their recent video titles (pick ONE to reference):
 {video_titles_str}
@@ -2631,16 +2651,78 @@ SUBJECT: [a short, lowercase, non-marketing subject line]
 [paragraph 4: the value]
 
 [paragraph 5: the CTA and demo link]"""
+    else:
+        # Dynamic template from user's outreach config
+        oc = outreach_config
+        product_name = oc.get("product_name", "our product")
+        target_audience = oc.get("target_audience", "creators and brands")
+        value_prop = oc.get("value_prop", "find the right partners")
+        tone = oc.get("tone", "casual-professional")
+        custom_closing = oc.get("custom_closing", "would you be open to a quick look? no worries if not.")
+        product_url = oc.get("product_url", "")
+        sender_name = oc.get("sender_name", "")
+
+        tone_instruction = {
+            "casual": "Very casual and friendly, like texting a colleague. Use lowercase, contractions, keep it light.",
+            "professional": "Polite and professional but still warm. Proper capitalization, clear sentences.",
+            "bold": "Confident and direct. Short punchy sentences. Get to the point fast.",
+        }.get(tone, "Friendly and casual-professional. Use contractions, be genuine.")
+
+        system_msg = f"You are the founder of {product_name}. Your goal is to write a one-to-one, plain-text email that feels like it was typed manually. {tone_instruction} No marketing jargon. No exclamation marks. IMPORTANT: always separate each thought into its own short paragraph with a blank line between them."
+
+        closing_line = custom_closing
+        if product_url:
+            closing_line += f"\n\nif you want to check it out: {product_url}"
+        sign_off = f"\n\n{sender_name}" if sender_name else ""
+
+        prompt = f"""Write a one-to-one, plain-text outreach email to {channel_name}.
+
+Here are their recent video titles (pick ONE to reference):
+{video_titles_str}
+
+Their niche/tags: {tags_str}
+
+Follow this structure:
+
+1. OPENING: A brief, human opening line acknowledging they probably get lots of emails.
+
+2. THE HOOK: Mention one specific video title from the list above. Reference something specific about it.
+
+3. THE CONNECTION: Explain that {product_name} helps {target_audience} by {value_prop}. Keep it brief and genuine.
+
+4. THE ASK: Propose working together — explain why they specifically would be a great fit for the {tags_str} space.
+
+5. THE CLOSING: End with: "{closing_line}"{sign_off}
+
+Constraints:
+- Plain text only. No bolding, no formatting, no markdown.
+- No exclamation marks. Keep the energy calm.
+- Absolutely avoid: synergy, boost, empower, cutting-edge, leverage, game-changer.
+- Keep it under 150 words.
+- CRITICAL: Each section MUST be its own short paragraph separated by a blank line.
+
+Format your response EXACTLY as:
+SUBJECT: [a short, non-marketing subject line]
+---
+[paragraph 1]
+
+[paragraph 2]
+
+[paragraph 3]
+
+[paragraph 4]
+
+[paragraph 5]"""
 
     try:
         from openai import OpenAI
 
-        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        client = OpenAI(api_key=openai_key)
 
         completion = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are the solo founder of Affilitube. Your goal is to write a one-to-one, plain-text email that feels like it was typed manually in 30 seconds. Be humble but direct. No marketing speak. No exclamation marks. Calm, professional, slightly casual. Think of how a real person would write a quick email to someone they genuinely respect. IMPORTANT: always separate each thought into its own short paragraph with a blank line between them. Never write a wall of text."},
+                {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt},
             ],
             max_tokens=500,
@@ -2656,19 +2738,26 @@ SUBJECT: [a short, lowercase, non-marketing subject line]
             subject = parts[0].replace("SUBJECT:", "").strip()
             body = parts[1].strip()
 
-        # Ensure paragraph breaks — if GPT returned a wall of text, split on sentence boundaries
+        # Ensure paragraph breaks
         if "\n\n" not in body and len(body) > 200:
             import re
-            # Split at key phrase boundaries that should start new paragraphs
             for marker in [
                 r"(?i)(i caught your video)",
                 r"(?i)(we built this tool)",
                 r"(?i)(we'?d love to have)",
                 r"(?i)(would you be open)",
-                r"(?i)(if you'?re interested in how)",
+                r"(?i)(if you'?re interested)",
+                r"(?i)(if you want to check)",
             ]:
                 body = re.sub(marker, r"\n\n\1", body)
             body = body.strip()
+
+        # Deduct credit for non-admin
+        if not is_admin:
+            await db.users.update_one(
+                {"id": user["id"], "draft_credits": {"$gt": 0}},
+                {"$inc": {"draft_credits": -1}}
+            )
 
         return {
             "subject": subject,
@@ -2676,9 +2765,82 @@ SUBJECT: [a short, lowercase, non-marketing subject line]
             "business_email": business_email,
             "channel_name": channel_name,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"AI draft error for {channel_id}: {e}")
         raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
+class OutreachConfigInput(BaseModel):
+    product_name: str
+    target_audience: str
+    value_prop: str
+    tone: str = "casual-professional"
+    custom_closing: str = ""
+    product_url: str = ""
+    sender_name: str = ""
+
+@api_router.get("/user/outreach-config")
+async def get_outreach_config(user=Depends(get_current_user)):
+    """Get user's outreach configuration"""
+    user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0, "outreach_config": 1})
+    return {"outreach_config": (user_data or {}).get("outreach_config", {})}
+
+@api_router.put("/user/outreach-config")
+async def update_outreach_config(config: OutreachConfigInput, user=Depends(get_current_user)):
+    """Save/update user's outreach configuration"""
+    tier = get_user_tier(user)
+    if tier not in ("starter", "pro") and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Outreach config requires a paid plan.")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"outreach_config": config.model_dump()}}
+    )
+    return {"success": True}
+
+@api_router.get("/user/draft-credits")
+async def get_draft_credits(user=Depends(get_current_user)):
+    """Get user's current draft credit balance"""
+    user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0, "draft_credits": 1})
+    return {"draft_credits": (user_data or {}).get("draft_credits", 0)}
+
+@api_router.post("/checkout/credits")
+async def create_credits_checkout(request: Request, user=Depends(get_current_user)):
+    """Create a Stripe checkout session for purchasing 500 AI draft credits ($9.99)"""
+    tier = get_user_tier(user)
+    if tier not in ("starter", "pro"):
+        raise HTTPException(status_code=403, detail="Credit purchase requires a Starter or Pro plan.")
+
+    credits_price_id = os.environ.get("STRIPE_CREDITS_PRICE_ID")
+    if not credits_price_id or not STRIPE_API_KEY:
+        raise HTTPException(status_code=500, detail="Credits checkout not configured")
+
+    stripe_sdk.api_key = STRIPE_API_KEY
+    proto = request.headers.get("x-forwarded-proto", "https")
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    origin = request.headers.get("origin") or f"{proto}://{host}".rstrip("/")
+
+    try:
+        session = stripe_sdk.checkout.Session.create(
+            mode="payment",
+            line_items=[{"price": credits_price_id, "quantity": 1}],
+            success_url=f"{origin}/dashboard/pipeline?credits_purchased=true",
+            cancel_url=f"{origin}/dashboard/pipeline",
+            customer_email=user["email"],
+            metadata={
+                "user_id": user["id"],
+                "user_email": user["email"],
+                "product": "ai_draft_credits",
+                "credits_amount": "500",
+            },
+        )
+    except Exception as e:
+        logger.error(f"Credits checkout error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create checkout session")
+
+    return {"url": session.url, "session_id": session.id}
+
 
 
 class AutoSaveInput(BaseModel):
@@ -3395,6 +3557,18 @@ async def stripe_webhook(request: Request):
         subscription_id = data_obj.get("subscription") if isinstance(data_obj, dict) else data_obj.subscription
         metadata = data_obj.get("metadata", {}) if isinstance(data_obj, dict) else (data_obj.metadata or {})
         
+        # Handle AI draft credit purchase
+        if metadata.get("product") == "ai_draft_credits":
+            user_id = metadata.get("user_id")
+            credits_amount = int(metadata.get("credits_amount", 500))
+            if user_id:
+                await db.users.update_one(
+                    {"id": user_id},
+                    {"$inc": {"draft_credits": credits_amount}}
+                )
+                logger.info(f"Credits purchased: user={user_id}, credits={credits_amount}")
+            return {"status": "ok"}
+
         txn = await db.payment_transactions.find_one({"session_id": session_id})
         if txn and txn.get("payment_status") != "paid":
             await db.payment_transactions.update_one(

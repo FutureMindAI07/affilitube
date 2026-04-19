@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
@@ -46,6 +48,8 @@ import {
   RefreshCcw,
   ChevronDown,
   ChevronUp,
+  Settings,
+  CreditCard,
 } from "lucide-react";
 import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
 
@@ -106,9 +110,28 @@ export default function OutreachPipeline() {
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftCache, setDraftCache] = useState({});
 
+  // Draft credits & outreach config
+  const [draftCredits, setDraftCredits] = useState(0);
+  const [outreachConfig, setOutreachConfig] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsForm, setSettingsForm] = useState({
+    product_name: "", target_audience: "", value_prop: "",
+    tone: "casual-professional", custom_closing: "", product_url: "", sender_name: "",
+  });
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [buyingCredits, setBuyingCredits] = useState(false);
+
   useEffect(() => {
     loadProjects();
     fetchUserTier();
+    // Handle credit purchase return from Stripe
+    if (searchParams.get("credits_purchased") === "true") {
+      toast.success("500 AI draft credits added to your account.");
+      // Clean up URL param
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("credits_purchased");
+      navigate(`/dashboard/pipeline${newParams.toString() ? `?${newParams}` : ""}`, { replace: true });
+    }
   }, []);
 
   useEffect(() => {
@@ -128,8 +151,19 @@ export default function OutreachPipeline() {
     try {
       const res = await api.get("/user/usage");
       setUserTier(res.data.tier || "free");
+      setDraftCredits(res.data.draft_credits || 0);
     } catch (e) {
       console.error("Error fetching user tier:", e);
+    }
+    try {
+      const res = await api.get("/user/outreach-config");
+      const cfg = res.data.outreach_config || {};
+      setOutreachConfig(cfg);
+      if (cfg.product_name) {
+        setSettingsForm(prev => ({ ...prev, ...cfg }));
+      }
+    } catch (e) {
+      console.error("Error fetching outreach config:", e);
     }
   };
 
@@ -139,11 +173,25 @@ export default function OutreachPipeline() {
   };
 
   const isAdmin = user?.role === "admin";
+  const isPaidTier = userTier === "starter" || userTier === "pro";
+  const canUseDraft = isAdmin || isPaidTier;
 
   const handleAiDraft = async (channel) => {
     const cid = channel.channel_id;
+    // If non-admin, check config first
+    if (!isAdmin && (!outreachConfig || !outreachConfig.product_name)) {
+      setSettingsOpen(true);
+      toast.info("Complete your Outreach Settings to start generating drafts.");
+      return;
+    }
+    // If non-admin, check credits
+    if (!isAdmin && draftCredits <= 0) {
+      toast.error("No draft credits remaining. Purchase more to continue.");
+      return;
+    }
+    // Toggle if already open with cached data
     if (draftOpenId === cid && draftCache[cid]) {
-      setDraftOpenId(draftOpenId === cid ? null : cid);
+      setDraftOpenId(null);
       return;
     }
     if (draftCache[cid]) {
@@ -155,8 +203,17 @@ export default function OutreachPipeline() {
     try {
       const res = await api.post(`/channels/${cid}/ai-draft`);
       setDraftCache(prev => ({ ...prev, [cid]: res.data }));
+      if (!isAdmin) setDraftCredits(prev => Math.max(0, prev - 1));
     } catch (e) {
-      toast.error(e.response?.data?.detail || "AI draft generation failed");
+      const detail = e.response?.data?.detail || "AI draft generation failed";
+      if (e.response?.status === 402) {
+        toast.error("No draft credits remaining. Purchase more to continue.");
+      } else if (e.response?.status === 400) {
+        setSettingsOpen(true);
+        toast.info(detail);
+      } else {
+        toast.error(detail);
+      }
       setDraftOpenId(null);
     } finally {
       setDraftLoading(false);
@@ -164,14 +221,49 @@ export default function OutreachPipeline() {
   };
 
   const regenerateDraft = async (channelId) => {
+    if (!isAdmin && draftCredits <= 0) {
+      toast.error("No draft credits remaining.");
+      return;
+    }
     setDraftLoading(true);
     try {
       const res = await api.post(`/channels/${channelId}/ai-draft`);
       setDraftCache(prev => ({ ...prev, [channelId]: res.data }));
+      if (!isAdmin) setDraftCredits(prev => Math.max(0, prev - 1));
     } catch (e) {
       toast.error(e.response?.data?.detail || "Regeneration failed");
     } finally {
       setDraftLoading(false);
+    }
+  };
+
+  const saveOutreachConfig = async () => {
+    if (!settingsForm.product_name || !settingsForm.target_audience || !settingsForm.value_prop) {
+      toast.error("Product Name, Target Audience, and Value Prop are required.");
+      return;
+    }
+    setSettingsSaving(true);
+    try {
+      await api.put("/user/outreach-config", settingsForm);
+      setOutreachConfig({ ...settingsForm });
+      setSettingsOpen(false);
+      toast.success("Outreach settings saved.");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to save settings");
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const handleBuyCredits = async () => {
+    setBuyingCredits(true);
+    try {
+      const res = await api.post("/checkout/credits");
+      if (res.data.url) window.location.href = res.data.url;
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to start checkout");
+    } finally {
+      setBuyingCredits(false);
     }
   };
 
@@ -352,10 +444,45 @@ export default function OutreachPipeline() {
             <h1 className="font-heading text-2xl font-bold text-slate-900">Outreach Pipeline</h1>
             <p className="text-slate-500 text-sm mt-1">Track your outreach progress with YouTube creators</p>
           </div>
-          <Button onClick={loadChannels} variant="outline" className="gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            {canUseDraft && (
+              <>
+                {!isAdmin && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-50 border border-purple-100" data-testid="draft-credits-badge">
+                    <Sparkles className="h-3.5 w-3.5 text-purple-500" />
+                    <span className="text-sm font-medium text-purple-700">{draftCredits} credits</span>
+                  </div>
+                )}
+                {!isAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBuyCredits}
+                    disabled={buyingCredits}
+                    className="gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
+                    data-testid="buy-credits-btn"
+                  >
+                    {buyingCredits ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+                    Buy Credits
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSettingsOpen(true)}
+                  className="h-9 w-9 p-0 text-slate-400 hover:text-purple-600"
+                  data-testid="outreach-settings-btn"
+                  title="Outreach Settings"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+            <Button onClick={loadChannels} variant="outline" className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {/* Status Summary Cards */}
@@ -605,7 +732,7 @@ export default function OutreachPipeline() {
                           <Info className="h-3.5 w-3.5" />
                           Info
                         </Button>
-                        {isAdmin && (
+                        {canUseDraft && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -818,6 +945,106 @@ export default function OutreachPipeline() {
         onNotesUpdate={() => {}}
         onUpgradeClick={() => navigate("/pricing")}
       />
+
+      {/* Outreach Settings Modal */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5 text-purple-500" />
+              Outreach Settings
+            </DialogTitle>
+            <DialogDescription>
+              Configure your AI drafts. These details personalize every email the AI generates for you.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm font-medium">Product / Company Name *</Label>
+              <Input
+                placeholder="e.g. Affilitube"
+                value={settingsForm.product_name}
+                onChange={(e) => setSettingsForm(p => ({ ...p, product_name: e.target.value }))}
+                data-testid="settings-product-name"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Target Audience *</Label>
+              <Input
+                placeholder="e.g. small and medium YouTube creators"
+                value={settingsForm.target_audience}
+                onChange={(e) => setSettingsForm(p => ({ ...p, target_audience: e.target.value }))}
+                data-testid="settings-target-audience"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Value Proposition *</Label>
+              <Textarea
+                placeholder="e.g. find and connect with affiliate partners who genuinely fit their niche"
+                value={settingsForm.value_prop}
+                onChange={(e) => setSettingsForm(p => ({ ...p, value_prop: e.target.value }))}
+                rows={2}
+                data-testid="settings-value-prop"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Tone</Label>
+              <Select value={settingsForm.tone} onValueChange={(v) => setSettingsForm(p => ({ ...p, tone: v }))}>
+                <SelectTrigger data-testid="settings-tone">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="casual">Casual — like texting a friend</SelectItem>
+                  <SelectItem value="casual-professional">Casual-Professional — warm but clear</SelectItem>
+                  <SelectItem value="professional">Professional — polite and structured</SelectItem>
+                  <SelectItem value="bold">Bold — confident and direct</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Custom Closing Line</Label>
+              <Input
+                placeholder="e.g. would you be open to a quick chat? no pressure at all."
+                value={settingsForm.custom_closing}
+                onChange={(e) => setSettingsForm(p => ({ ...p, custom_closing: e.target.value }))}
+                data-testid="settings-custom-closing"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-sm font-medium">Product URL</Label>
+                <Input
+                  placeholder="https://yoursite.com"
+                  value={settingsForm.product_url}
+                  onChange={(e) => setSettingsForm(p => ({ ...p, product_url: e.target.value }))}
+                  data-testid="settings-product-url"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Your Name (sign-off)</Label>
+                <Input
+                  placeholder="e.g. Adrian"
+                  value={settingsForm.sender_name}
+                  onChange={(e) => setSettingsForm(p => ({ ...p, sender_name: e.target.value }))}
+                  data-testid="settings-sender-name"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSettingsOpen(false)}>Cancel</Button>
+            <Button
+              onClick={saveOutreachConfig}
+              disabled={settingsSaving}
+              className="bg-purple-600 hover:bg-purple-700 gap-1.5"
+              data-testid="settings-save-btn"
+            >
+              {settingsSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Save Settings
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
