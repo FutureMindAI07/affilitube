@@ -1150,6 +1150,51 @@ def detect_tools_section(channel_description: str, video_descriptions: str) -> t
 
     return True, score, sorted(matched)
 
+# Non-Latin character ranges for language detection
+_NON_LATIN_RE = re.compile(
+    r'[\u0400-\u04FF]'   # Cyrillic
+    r'|[\u0600-\u06FF]'  # Arabic
+    r'|[\u0E00-\u0E7F]'  # Thai
+    r'|[\u3040-\u309F]'  # Hiragana
+    r'|[\u30A0-\u30FF]'  # Katakana
+    r'|[\u4E00-\u9FFF]'  # CJK Unified
+    r'|[\uAC00-\uD7AF]'  # Korean Hangul
+    r'|[\u0900-\u097F]'  # Devanagari (Hindi)
+    r'|[\u0980-\u09FF]'  # Bengali
+    r'|[\u0A80-\u0AFF]'  # Gujarati
+    r'|[\u0B80-\u0BFF]'  # Tamil
+    r'|[\u0C00-\u0C7F]'  # Telugu
+)
+
+def is_likely_english(video_titles: list, channel_title: str = "", description: str = "") -> bool:
+    """
+    Check if a channel's content is likely English by analyzing video titles.
+    Returns True if the content appears to be English, False otherwise.
+    """
+    if not video_titles:
+        return True  # No titles to check, give benefit of the doubt
+    
+    # Combine all titles into one text block
+    combined = " ".join(video_titles)
+    if not combined.strip():
+        return True
+    
+    # Count non-Latin characters vs total alphabetic characters
+    non_latin_chars = len(_NON_LATIN_RE.findall(combined))
+    total_chars = len(combined.replace(" ", ""))
+    
+    if total_chars == 0:
+        return True
+    
+    # If more than 30% of characters are non-Latin, it's likely non-English
+    non_latin_ratio = non_latin_chars / total_chars
+    if non_latin_ratio > 0.3:
+        return False
+    
+    return True
+
+
+
 def calculate_affiliate_score(score_topic: int, score_tutorial: int, affiliate_signals_count: int, 
                               commercial_signals_count: int, score_engagement: int,
                               brand_contact_signals_count: int = 0, has_business_email: bool = False,
@@ -1603,7 +1648,8 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
                         part="snippet",
                         q=keyword,
                         type="channel",
-                        maxResults=min(filters.max_results_per_keyword, 50)
+                        maxResults=min(filters.max_results_per_keyword, 50),
+                        relevanceLanguage="en"
                     ).execute()
                     
                     # Track API call
@@ -1633,7 +1679,8 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
                         q=keyword,
                         type="video",
                         maxResults=min(filters.max_results_per_keyword, 50),
-                        publishedAfter=(datetime.now(timezone.utc) - timedelta(days=filters.uploaded_within_days)).isoformat()
+                        publishedAfter=(datetime.now(timezone.utc) - timedelta(days=filters.uploaded_within_days)).isoformat(),
+                        relevanceLanguage="en"
                     ).execute()
                     
                     # Track API call
@@ -1915,6 +1962,11 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     
                     # Get video titles for scoring
                     video_titles = [v.get("title", "") for v in recent_videos]
+                    
+                    # Language filter: skip non-English channels
+                    if not is_likely_english(video_titles, snippet.get("title", "")):
+                        logger.info(f"Skipping non-English channel: {snippet.get('title', ch_id)}")
+                        continue
                     
                     # Create pipe-separated latest_video_titles field
                     latest_video_titles = " | ".join(video_titles[:5])

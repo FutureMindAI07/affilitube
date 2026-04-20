@@ -68,6 +68,8 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - Pipeline Info Button & Auto-Cache Brand Intelligence: Added "Info" button to each channel row in Outreach Pipeline that opens a full Channel Detail Sheet (ChannelDetailSheet.jsx) with Score Breakdown, Outreach Tracking, Affiliate Potential, Statistics, Channel Health, Tags, Brand Intelligence, Notes. Backend auto-caches sponsorship data via BackgroundTasks when a channel is first added to the pipeline.
 - Pipeline Search & Sort: Added Min Affiliate Score filter, Sort by dropdown (Score high/low, Subscribers, Name), live channel count, and Clear button to the Pipeline filter bar.
 - AI Outreach Drafter: Admin-only hardcoded "Raw Founder" template with unlimited drafts. Paid tiers (Starter/Pro) get dynamic template powered by user's Outreach Settings (product name, target audience, value prop, tone, closing, product URL, sender name). Credit system: $9.99 = 500 draft credits via Stripe one-time payment, never expire. Each non-admin draft deducts 1 credit. Pipeline header shows credit balance, Buy Credits button, and Settings gear. Onboarding flow: auto-opens Settings modal if config is empty. Free tier: no access.
+- Admin Grant Credits: Purple sparkle button in Admin Panel → Users → Actions column. Opens dialog with quick-select presets (10/50/100/500) + custom input to grant AI draft credits to any user.
+- English Language Filter: Two-layer approach — (1) `relevanceLanguage=en` on YouTube Search API calls biases results toward English, (2) character-set-based language detection during enrichment skips channels with >30% non-Latin video titles (covers CJK, Cyrillic, Arabic, Thai, Hindi, Korean, etc.)
 
 ## Completed (Feb-Apr 2026)
 - Graceful Tier Restrictions for Free Users
