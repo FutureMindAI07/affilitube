@@ -359,7 +359,12 @@ export default function OutreachPipeline() {
         case "score_asc": return (a.affiliate_score || 0) - (b.affiliate_score || 0);
         case "subs_desc": return (b.subscriber_count || 0) - (a.subscriber_count || 0);
         case "name_asc": return (a.channel_name || "").localeCompare(b.channel_name || "");
-        default: return 0; // newest = default DB order
+        case "sponsored_first": {
+          const aSponsored = a.sponsorship_data?.is_sponsored_active ? 1 : 0;
+          const bSponsored = b.sponsorship_data?.is_sponsored_active ? 1 : 0;
+          return bSponsored - aSponsored || (b.affiliate_score || 0) - (a.affiliate_score || 0);
+        }
+        default: return 0;
       }
     });
 
@@ -583,6 +588,7 @@ export default function OutreachPipeline() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="newest">Default Order</SelectItem>
+                    <SelectItem value="sponsored_first">Has Disclosures First</SelectItem>
                     <SelectItem value="score_desc">Score: High to Low</SelectItem>
                     <SelectItem value="score_asc">Score: Low to High</SelectItem>
                     <SelectItem value="subs_desc">Subscribers: Most</SelectItem>
