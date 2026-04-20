@@ -696,6 +696,7 @@ export default function Dashboard() {
         scan_video_descriptions: scanVideoDescriptions,
         max_channels_to_enrich: unlimitedChannels ? null : maxChannelsToEnrich,
         affiliate_platforms: affiliatePlatforms,
+        uploaded_within_days: uploadedWithin,
       });
 
       setEnrichProgress(100);

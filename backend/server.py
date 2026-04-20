@@ -678,6 +678,7 @@ class EnrichRequest(BaseModel):
     scan_video_descriptions: bool = False
     max_channels_to_enrich: Optional[int] = None
     affiliate_platforms: List[str] = []
+    uploaded_within_days: Optional[int] = None
 
 # Affiliate platform URL patterns
 AFFILIATE_PLATFORMS = {
@@ -1962,6 +1963,12 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     
                     # Get video titles for scoring
                     video_titles = [v.get("title", "") for v in recent_videos]
+                    
+                    # Upload recency filter: skip channels that haven't uploaded within the user's threshold
+                    if req.uploaded_within_days and days_since_upload is not None:
+                        if days_since_upload > req.uploaded_within_days:
+                            logger.info(f"Skipping stale channel ({days_since_upload}d since upload): {snippet.get('title', ch_id)}")
+                            continue
                     
                     # Language filter: skip non-English channels
                     if not is_likely_english(video_titles, snippet.get("title", "")):
