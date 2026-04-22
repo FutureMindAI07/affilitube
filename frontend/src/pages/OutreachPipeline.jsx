@@ -50,6 +50,7 @@ import {
   ChevronUp,
   Settings,
   CreditCard,
+  Plus,
 } from "lucide-react";
 import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
 
@@ -90,6 +91,10 @@ export default function OutreachPipeline() {
   // Inline project editing
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [editProjectValue, setEditProjectValue] = useState("");
+
+  // Move to project dialog
+  const [moveChannel, setMoveChannel] = useState(null);
+  const [newProjectName, setNewProjectName] = useState("");
 
   // Quick status update dialog
   const [updatingChannel, setUpdatingChannel] = useState(null);
@@ -330,6 +335,38 @@ export default function OutreachPipeline() {
       loadProjects();
     } catch (e) {
       toast.error("Failed to update project");
+    }
+  };
+
+  const moveToProject = async (projectName) => {
+    if (!moveChannel) return;
+    try {
+      await api.patch(`/channels/${moveChannel.channel_id}/project-name`, {
+        project_name: projectName || null
+      });
+      toast.success(`Moved to ${projectName || "No project"}`);
+      setMoveChannel(null);
+      loadChannels();
+      loadProjects();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to move channel");
+    }
+  };
+
+  const createAndMoveToProject = async () => {
+    const name = newProjectName.trim();
+    if (!name || !moveChannel) return;
+    try {
+      await api.patch(`/channels/${moveChannel.channel_id}/project-name`, {
+        project_name: name
+      });
+      toast.success(`Moved to new project "${name}"`);
+      setMoveChannel(null);
+      setNewProjectName("");
+      loadChannels();
+      loadProjects();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to create project");
     }
   };
 
@@ -676,32 +713,15 @@ export default function OutreachPipeline() {
                         </div>
                         {/* Project Label */}
                         <div className="flex items-center gap-1.5 mt-1">
-                          {editingProjectId === channel.channel_id ? (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                value={editProjectValue}
-                                onChange={(e) => setEditProjectValue(e.target.value)}
-                                placeholder="Project name..."
-                                className="h-6 text-xs w-36 px-1.5"
-                                autoFocus
-                                onKeyDown={(e) => { if (e.key === "Enter") saveProjectName(channel.channel_id); if (e.key === "Escape") setEditingProjectId(null); }}
-                                data-testid={`edit-project-input-${channel.channel_id}`}
-                              />
-                              <button onClick={() => saveProjectName(channel.channel_id)} className="text-emerald-600 hover:text-emerald-700">
-                                <Check className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => { setEditingProjectId(channel.channel_id); setEditProjectValue(channel.project_name || ""); }}
-                              className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600 transition-colors"
-                              data-testid={`project-label-${channel.channel_id}`}
-                            >
-                              <FolderOpen className="h-3 w-3" />
-                              {channel.project_name || "No project"}
-                              <Pencil className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => { setMoveChannel(channel); setNewProjectName(""); }}
+                            className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600 transition-colors"
+                            data-testid={`project-label-${channel.channel_id}`}
+                          >
+                            <FolderOpen className="h-3 w-3" />
+                            {channel.project_name || "No project"}
+                            <Pencil className="h-2.5 w-2.5" />
+                          </button>
                         </div>
                       </div>
 
@@ -951,6 +971,86 @@ export default function OutreachPipeline() {
         onNotesUpdate={() => {}}
         onUpgradeClick={() => navigate("/pricing")}
       />
+
+      {/* Move to Project Dialog */}
+      <Dialog open={!!moveChannel} onOpenChange={() => setMoveChannel(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderOpen className="h-5 w-5 text-indigo-500" />
+              Move to Project
+            </DialogTitle>
+            <DialogDescription>
+              Assign {moveChannel?.channel_name} to a project.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3 space-y-3">
+            {/* Existing projects */}
+            {projects.length > 0 && (
+              <div>
+                <label className="text-xs text-slate-500 mb-2 block">Existing Projects</label>
+                <div className="space-y-1.5">
+                  {projects.map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => moveToProject(p)}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors ${
+                        moveChannel?.project_name === p
+                          ? "bg-indigo-50 border border-indigo-200 text-indigo-700 font-medium"
+                          : "bg-slate-50 border border-slate-100 text-slate-700 hover:bg-indigo-50 hover:border-indigo-200"
+                      }`}
+                      data-testid={`move-to-project-${p}`}
+                    >
+                      <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                      {p}
+                      {moveChannel?.project_name === p && (
+                        <span className="ml-auto text-xs text-indigo-500">current</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Remove from project */}
+            {moveChannel?.project_name && (
+              <button
+                onClick={() => moveToProject(null)}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-500 bg-slate-50 border border-slate-100 hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors"
+                data-testid="remove-from-project"
+              >
+                <XCircle className="h-3.5 w-3.5 shrink-0" />
+                Remove from project
+              </button>
+            )}
+
+            {/* Create new project */}
+            <div>
+              <label className="text-xs text-slate-500 mb-1.5 block">Create New Project</label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="New project name..."
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  className="h-9 flex-1"
+                  onKeyDown={(e) => { if (e.key === "Enter" && newProjectName.trim()) createAndMoveToProject(); }}
+                  data-testid="new-project-input"
+                />
+                <Button
+                  size="sm"
+                  className="h-9 gap-1.5 bg-indigo-600 hover:bg-indigo-700"
+                  disabled={!newProjectName.trim()}
+                  onClick={createAndMoveToProject}
+                  data-testid="create-project-btn"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Create
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Outreach Settings Modal */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
