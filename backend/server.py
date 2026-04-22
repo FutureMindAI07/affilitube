@@ -1816,12 +1816,16 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
     # Remove channels already in pipeline if toggle is on
     if req.hide_pipeline_channels:
         pipeline_channels = await db.channels.find(
-            {"user_id": user["id"], "outreach_status": {"$exists": True, "$ne": "not_contacted"}},
+            {"user_id": user["id"], "$or": [
+                {"outreach_status": {"$exists": True, "$ne": "not_contacted"}},
+                {"project_name": {"$exists": True, "$nin": [None, ""]}}
+            ]},
             {"_id": 0, "channel_id": 1}
         ).to_list(length=10000)
         pipeline_ids = {ch["channel_id"] for ch in pipeline_channels}
         if pipeline_ids:
             channel_ids = [cid for cid in channel_ids if cid not in pipeline_ids]
+            logger.info(f"Hidden {len(pipeline_ids)} pipeline channels from results")
     
     # Apply max channels limit
     if max_channels_to_enrich and len(channel_ids) > max_channels_to_enrich:

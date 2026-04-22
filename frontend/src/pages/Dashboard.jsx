@@ -266,6 +266,7 @@ export default function Dashboard() {
   const [affiliatePlatforms, setAffiliatePlatforms] = useState([]);
   const [availablePlatforms, setAvailablePlatforms] = useState([]);
   const [hidePipelineChannels, setHidePipelineChannels] = useState(false);
+  const [pipelineChannelIds, setPipelineChannelIds] = useState(new Set());
 
   const [quotaEstimate, setQuotaEstimate] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -353,6 +354,7 @@ export default function Dashboard() {
     loadSavedReports();
     loadAffiliatePlatforms();
     loadFollowUpsDue();
+    loadPipelineIds();
     // Restore search results: first try session, then autosave
     if (channels.length === 0) {
       const restored = searchResults.restoreFromSession();
@@ -400,6 +402,15 @@ export default function Dashboard() {
     }
   };
 
+  const loadPipelineIds = async () => {
+    try {
+      const res = await api.get("/channels/by-outreach-status");
+      setPipelineChannelIds(new Set((res.data.channels || []).map(ch => ch.channel_id)));
+    } catch (e) {
+      setPipelineChannelIds(new Set());
+    }
+  };
+
   const loadFollowUpsDue = async () => {
     try {
       const res = await api.get("/channels/follow-ups/due");
@@ -426,6 +437,7 @@ export default function Dashboard() {
       }
       setContactNoteText("");
       loadFollowUpsDue();
+      loadPipelineIds();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to update status");
     } finally {
@@ -1009,6 +1021,7 @@ export default function Dashboard() {
     .filter((ch) => !filterHasPlatformLinks || (ch.affiliate_platforms_found?.length > 0))
     .filter((ch) => filterOutreachStatus === "all" || (ch.outreach_status || "not_contacted") === filterOutreachStatus)
     .filter((ch) => filterEngagementHealth === "all" || (ch.engagement_health || "") === filterEngagementHealth)
+    .filter((ch) => !hidePipelineChannels || !pipelineChannelIds.has(ch.channel_id))
     .sort((a, b) => {
       const aVal = a[sortBy] || 0;
       const bVal = b[sortBy] || 0;
