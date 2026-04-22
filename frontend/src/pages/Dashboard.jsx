@@ -265,6 +265,7 @@ export default function Dashboard() {
   const [unlimitedChannels, setUnlimitedChannels] = useState(false);
   const [affiliatePlatforms, setAffiliatePlatforms] = useState([]);
   const [availablePlatforms, setAvailablePlatforms] = useState([]);
+  const [hidePipelineChannels, setHidePipelineChannels] = useState(false);
 
   const [quotaEstimate, setQuotaEstimate] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -697,6 +698,7 @@ export default function Dashboard() {
         max_channels_to_enrich: unlimitedChannels ? null : maxChannelsToEnrich,
         affiliate_platforms: affiliatePlatforms,
         uploaded_within_days: uploadedWithin,
+        hide_pipeline_channels: hidePipelineChannels,
       });
 
       setEnrichProgress(100);
@@ -1732,6 +1734,21 @@ export default function Dashboard() {
                         : "Will scan channel descriptions only. Enable 'Scan Video Descriptions' for deeper search."}
                     </p>
                   )}
+                </div>
+
+                <Separator />
+
+                {/* Hide Pipeline Channels */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm">Hide Pipeline Channels</Label>
+                    <p className="text-xs text-muted-foreground">Exclude channels already in your Outreach Pipeline from results</p>
+                  </div>
+                  <Switch
+                    checked={hidePipelineChannels}
+                    onCheckedChange={setHidePipelineChannels}
+                    data-testid="hide-pipeline-switch"
+                  />
                 </div>
               </CollapsibleContent>
             </Collapsible>

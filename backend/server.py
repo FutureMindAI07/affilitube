@@ -679,6 +679,7 @@ class EnrichRequest(BaseModel):
     max_channels_to_enrich: Optional[int] = None
     affiliate_platforms: List[str] = []
     uploaded_within_days: Optional[int] = None
+    hide_pipeline_channels: bool = False
 
 # Affiliate platform URL patterns
 AFFILIATE_PLATFORMS = {
@@ -1811,6 +1812,16 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
     excluded_ids = {e["channel_id"] for e in excluded}
     if excluded_ids:
         channel_ids = [cid for cid in channel_ids if cid not in excluded_ids]
+    
+    # Remove channels already in pipeline if toggle is on
+    if req.hide_pipeline_channels:
+        pipeline_channels = await db.channels.find(
+            {"user_id": user["id"], "outreach_status": {"$exists": True, "$ne": "not_contacted"}},
+            {"_id": 0, "channel_id": 1}
+        ).to_list(length=10000)
+        pipeline_ids = {ch["channel_id"] for ch in pipeline_channels}
+        if pipeline_ids:
+            channel_ids = [cid for cid in channel_ids if cid not in pipeline_ids]
     
     # Apply max channels limit
     if max_channels_to_enrich and len(channel_ids) > max_channels_to_enrich:
