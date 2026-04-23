@@ -222,6 +222,7 @@ export default function AffiliatesLanding() {
               desc: "Know who's already promoting products. Affilitube detects affiliate links, sponsorship disclosures, \"tools I use\" sections, and commercial language — then scores each channel 0-100 on affiliate and influencer potential.",
               highlights: ["Affiliate link detection", "Commercial signal analysis", "Brand contact signals", "Tools stack detection"],
               color: "purple",
+              image: "https://customer-assets.emergentagent.com/job_028caec5-f1e6-42b5-a626-d2310908d417/artifacts/8cv1n66l_Enriched%20search%20results.png",
             },
             {
               icon: Gift,
@@ -230,6 +231,7 @@ export default function AffiliatesLanding() {
               desc: "See which brands a creator has worked with before. Our sponsorship detection scans their last 10 videos for disclosure signals, partner mentions, and affiliate link patterns — so you know who's already open to deals.",
               highlights: ["Sponsorship history", "Brand name detection", "Disclosure analysis", "Confidence scoring"],
               color: "pink",
+              image: "https://customer-assets.emergentagent.com/job_028caec5-f1e6-42b5-a626-d2310908d417/artifacts/41nyvbmn_Brand%20intelligence.png",
             },
             {
               icon: Zap,
@@ -238,6 +240,7 @@ export default function AffiliatesLanding() {
               desc: "Generate personalized, non-spammy outreach emails in one click. The AI references the creator's actual videos, uses your product details, and writes in a tone that doesn't sound like a template.",
               highlights: ["References specific videos", "Your brand voice & tone", "Plain text, no marketing jargon", "One-click copy & send"],
               color: "indigo",
+              image: "https://customer-assets.emergentagent.com/job_028caec5-f1e6-42b5-a626-d2310908d417/artifacts/7dcyguk2_AI%20outreach%20email%20draft.png",
             },
             {
               icon: Users,
@@ -246,6 +249,7 @@ export default function AffiliatesLanding() {
               desc: "Track every prospect from first contact to signed deal. Organize by project, set follow-up dates, log notes, and sort by who's most likely to convert — all without leaving Affilitube.",
               highlights: ["Project organization", "Follow-up reminders", "Contact history", "Status tracking"],
               color: "emerald",
+              image: "https://customer-assets.emergentagent.com/job_028caec5-f1e6-42b5-a626-d2310908d417/artifacts/4fdbqp1d_Outreach%20pipeline.png",
             },
           ].map((feature, idx) => {
             const colorMap = {
@@ -272,8 +276,13 @@ export default function AffiliatesLanding() {
                     ))}
                   </div>
                 </div>
-                <div className={`flex-1 w-full h-64 rounded-2xl ${c.bg} border ${c.border} flex items-center justify-center`}>
-                  <feature.icon className={`h-16 w-16 ${c.text} opacity-30`} />
+                <div className={`flex-1 w-full rounded-2xl ${c.bg} border ${c.border} overflow-hidden`}>
+                  <img
+                    src={feature.image}
+                    alt={feature.title}
+                    className="w-full h-auto object-cover"
+                    loading="lazy"
+                  />
                 </div>
               </div>
             );
