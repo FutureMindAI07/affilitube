@@ -2886,17 +2886,34 @@ async def create_credits_checkout(request: Request, user=Depends(get_current_use
     if tier not in ("starter", "pro"):
         raise HTTPException(status_code=403, detail="Credit purchase requires a Starter or Pro plan.")
 
-    credits_price_id = os.environ.get("STRIPE_CREDITS_PRICE_ID")
-    if not credits_price_id or not STRIPE_API_KEY:
-        raise HTTPException(status_code=500, detail="Credits checkout not configured")
+    if not STRIPE_API_KEY:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
 
     stripe_sdk.api_key = STRIPE_API_KEY
+
+    # Get or auto-create the credits price
+    credits_price_id = os.environ.get("STRIPE_CREDITS_PRICE_ID")
+    if credits_price_id:
+        try:
+            stripe_sdk.Price.retrieve(credits_price_id)
+        except Exception:
+            credits_price_id = None
+
+    if not credits_price_id:
+        try:
+            product = stripe_sdk.Product.create(name="AI Draft Credits", description="500 AI outreach email draft credits for Affilitube")
+            price = stripe_sdk.Price.create(product=product.id, unit_amount=999, currency="usd")
+            credits_price_id = price.id
+            logger.info(f"Auto-created credits price: {credits_price_id}")
+        except Exception as e:
+            logger.error(f"Failed to create credits price: {e}")
+            raise HTTPException(status_code=500, detail="Failed to configure credits product")
+
     proto = request.headers.get("x-forwarded-proto", "https")
     host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
     origin = request.headers.get("origin") or f"{proto}://{host}".rstrip("/")
 
     try:
-        # Check if user already has a Stripe customer ID
         user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0, "stripe_customer_id": 1})
         stripe_customer_id = (user_data or {}).get("stripe_customer_id")
 
