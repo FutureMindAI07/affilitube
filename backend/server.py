@@ -1284,6 +1284,22 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        
+        # Check access expiry — auto-downgrade to free if expired
+        expires_at = user.get("access_expires_at")
+        if expires_at and user.get("tier") not in ("free",):
+            try:
+                expiry_dt = datetime.fromisoformat(expires_at) if isinstance(expires_at, str) else expires_at
+                if datetime.now(timezone.utc) > expiry_dt:
+                    await db.users.update_one(
+                        {"id": user_id},
+                        {"$set": {"tier": "free", "access_expired": True}, "$unset": {"access_expires_at": ""}}
+                    )
+                    user["tier"] = "free"
+                    user["access_expired"] = True
+            except Exception:
+                pass
+        
         return user
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
@@ -1528,6 +1544,7 @@ async def get_user_usage(user=Depends(get_current_user)):
         "is_unlimited": tier_config["searches_per_month"] is None,
         "draft_credits": user_data.get("draft_credits", 0) if user_data else 0,
         "has_outreach_config": bool(user_data.get("outreach_config", {}).get("product_name")) if user_data else False,
+        "access_expired": user.get("access_expired", False),
     }
 
 # Quota estimation endpoint
@@ -3356,6 +3373,69 @@ async def admin_delete_user(user_id: str, admin=Depends(get_admin_user)):
     await db.quota_usage.delete_many({"user_id": user_id})
     
     return {"success": True, "message": f"User {user['email']} deleted"}
+
+class AdminCreateUserInput(BaseModel):
+    email: str
+    password: str
+    tier: str = "free"
+    draft_credits: int = 0
+    access_expires_at: Optional[str] = None
+
+@api_router.post("/admin/users")
+async def admin_create_user(data: AdminCreateUserInput, admin=Depends(get_admin_user)):
+    """Admin: manually create a user with a specific tier and optional expiry"""
+    email = data.email.lower().strip()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email")
+    if len(data.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if data.tier not in ("free", "starter", "pro"):
+        raise HTTPException(status_code=400, detail="Tier must be free, starter, or pro")
+    
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    user_id = str(uuid.uuid4())
+    user_doc = {
+        "id": user_id,
+        "email": email,
+        "password_hash": pwd_context.hash(data.password),
+        "role": "user",
+        "tier": data.tier,
+        "monthly_search_count": 0,
+        "search_count_reset_date": datetime.now(timezone.utc).strftime("%Y-%m"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "draft_credits": data.draft_credits,
+    }
+    if data.access_expires_at:
+        user_doc["access_expires_at"] = data.access_expires_at
+    
+    await db.users.insert_one(user_doc)
+    return {"success": True, "user_id": user_id, "email": email, "tier": data.tier}
+
+class AdminUpdateExpiryInput(BaseModel):
+    access_expires_at: Optional[str] = None
+
+@api_router.put("/admin/users/{user_id}/expiry")
+async def admin_update_expiry(user_id: str, data: AdminUpdateExpiryInput, admin=Depends(get_admin_user)):
+    """Admin: set or clear access expiry for a user"""
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if data.access_expires_at:
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {"access_expires_at": data.access_expires_at, "access_expired": False}}
+        )
+    else:
+        await db.users.update_one(
+            {"id": user_id},
+            {"$unset": {"access_expires_at": "", "access_expired": ""}}
+        )
+    
+    return {"success": True}
 
 
 class AdminGrantCreditsInput(BaseModel):

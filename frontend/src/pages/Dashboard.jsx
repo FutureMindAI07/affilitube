@@ -383,6 +383,9 @@ export default function Dashboard() {
     try {
       const res = await api.get("/user/usage");
       setUserUsage(res.data);
+      if (res.data.access_expired) {
+        toast.error("Your trial access has expired. You've been moved to the Free plan.", { id: "access-expired", duration: 10000 });
+      }
     } catch (e) {
       console.error("Error loading user usage:", e);
     }

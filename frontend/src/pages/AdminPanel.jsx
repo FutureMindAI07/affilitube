@@ -45,6 +45,8 @@ import {
   Shield,
   ArrowLeft,
   Sparkles,
+  UserPlus,
+  CalendarClock,
 } from "lucide-react";
 
 const API = `${import.meta.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_BACKEND_URL}/api`;
@@ -83,8 +85,16 @@ export default function AdminPanel() {
   const [editingUser, setEditingUser] = useState(null);
   const [deletingUser, setDeletingUser] = useState(null);
   const [newTier, setNewTier] = useState("");
+  const [newExpiry, setNewExpiry] = useState("");
   const [creditUser, setCreditUser] = useState(null);
   const [creditAmount, setCreditAmount] = useState("50");
+
+  // Create user dialog
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    email: "", password: "", tier: "free", draft_credits: "0", access_expires_at: "",
+  });
+  const [createLoading, setCreateLoading] = useState(false);
 
   // Load data based on active tab
   useEffect(() => {
@@ -203,6 +213,64 @@ export default function AdminPanel() {
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to grant credits");
     }
+  };
+
+  const createUser = async () => {
+    if (!createForm.email || !createForm.password) return;
+    setCreateLoading(true);
+    try {
+      const payload = {
+        email: createForm.email,
+        password: createForm.password,
+        tier: createForm.tier,
+        draft_credits: parseInt(createForm.draft_credits) || 0,
+      };
+      if (createForm.access_expires_at) {
+        payload.access_expires_at = new Date(createForm.access_expires_at).toISOString();
+      }
+      const res = await api.post("/admin/users", payload);
+      toast.success(`User ${res.data.email} created (${res.data.tier} tier)`);
+      setCreateOpen(false);
+      setCreateForm({ email: "", password: "", tier: "free", draft_credits: "0", access_expires_at: "" });
+      loadUsers();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to create user");
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const updateExpiry = async () => {
+    if (!editingUser) return;
+    try {
+      await api.put(`/admin/users/${editingUser.id}/expiry`, {
+        access_expires_at: newExpiry ? new Date(newExpiry).toISOString() : null,
+      });
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to update expiry");
+    }
+  };
+
+  const updateUserTierAndExpiry = async () => {
+    if (!editingUser || !newTier) return;
+    try {
+      await api.put(`/admin/users/${editingUser.id}/tier`, { tier: newTier });
+      await updateExpiry();
+      toast.success(`User updated: ${newTier} tier${newExpiry ? `, expires ${new Date(newExpiry).toLocaleDateString()}` : ""}`);
+      setEditingUser(null);
+      setNewTier("");
+      setNewExpiry("");
+      loadUsers();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to update user");
+    }
+  };
+
+  const generatePassword = () => {
+    const chars = "abcdefghijkmnpqrstuvwxyz23456789";
+    let pass = "";
+    for (let i = 0; i < 10; i++) pass += chars[Math.floor(Math.random() * chars.length)];
+    setCreateForm(p => ({ ...p, password: pass }));
   };
 
   const formatDate = (dateStr) => {
@@ -468,6 +536,10 @@ export default function AdminPanel() {
                     <RefreshCw className="h-4 w-4" />
                     Refresh
                   </Button>
+                  <Button onClick={() => setCreateOpen(true)} className="gap-2 bg-indigo-600 hover:bg-indigo-700" data-testid="create-user-btn">
+                    <UserPlus className="h-4 w-4" />
+                    Create User
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -483,6 +555,7 @@ export default function AdminPanel() {
                         <TableHead>Tier</TableHead>
                         <TableHead>Signup Date</TableHead>
                         <TableHead>Last Active</TableHead>
+                        <TableHead>Expires</TableHead>
                         <TableHead className="text-right">Searches/Mo</TableHead>
                         <TableHead className="text-right">Total Searches</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
@@ -507,6 +580,16 @@ export default function AdminPanel() {
                           <TableCell className="text-sm text-slate-500">
                             {formatDate(u.last_active)}
                           </TableCell>
+                          <TableCell className="text-sm">
+                            {u.access_expires_at ? (
+                              <span className={`flex items-center gap-1 ${new Date(u.access_expires_at) < new Date() ? "text-red-500" : "text-amber-600"}`}>
+                                <CalendarClock className="h-3.5 w-3.5" />
+                                {new Date(u.access_expires_at).toLocaleDateString()}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">{u.searches_this_month || 0}</TableCell>
                           <TableCell className="text-right">{u.total_searches || 0}</TableCell>
                           <TableCell className="text-right">
@@ -524,7 +607,11 @@ export default function AdminPanel() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => { setEditingUser(u); setNewTier(u.tier || "free"); }}
+                                onClick={() => {
+                                  setEditingUser(u);
+                                  setNewTier(u.tier || "free");
+                                  setNewExpiry(u.access_expires_at ? u.access_expires_at.split("T")[0] : "");
+                                }}
                                 disabled={u.role === "admin"}
                               >
                                 <Edit className="h-4 w-4" />
@@ -858,28 +945,71 @@ export default function AdminPanel() {
       <Dialog open={!!editingUser} onOpenChange={() => setEditingUser(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Change User Tier</DialogTitle>
+            <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>
-              Update tier for {editingUser?.email}
+              Update tier and access for {editingUser?.email}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label>New Tier</Label>
-            <Select value={newTier} onValueChange={setNewTier}>
-              <SelectTrigger className="mt-2">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="free">Free</SelectItem>
-                <SelectItem value="pro">Pro</SelectItem>
-                <SelectItem value="appsumo">AppSumo</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Tier</Label>
+              <Select value={newTier} onValueChange={setNewTier}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="free">Free</SelectItem>
+                  <SelectItem value="starter">Starter</SelectItem>
+                  <SelectItem value="pro">Pro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Access Expiry</Label>
+              <p className="text-xs text-slate-500 mb-1.5">Leave empty for permanent access. Account auto-downgrades to Free when expired.</p>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={newExpiry}
+                  onChange={(e) => setNewExpiry(e.target.value)}
+                  className="flex-1"
+                  data-testid="edit-expiry-input"
+                />
+                {newExpiry && (
+                  <Button variant="ghost" size="sm" onClick={() => setNewExpiry("")} className="text-slate-400 hover:text-red-500 h-9 px-2">
+                    Clear
+                  </Button>
+                )}
+              </div>
+              {/* Quick presets */}
+              <div className="flex gap-2 mt-2">
+                {[
+                  { label: "3 days", days: 3 },
+                  { label: "1 week", days: 7 },
+                  { label: "2 weeks", days: 14 },
+                  { label: "1 month", days: 30 },
+                ].map((p) => (
+                  <Button
+                    key={p.label}
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + p.days);
+                      setNewExpiry(d.toISOString().split("T")[0]);
+                    }}
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingUser(null)}>Cancel</Button>
-            <Button onClick={updateUserTier} className="bg-indigo-600 hover:bg-indigo-700">
-              Update Tier
+            <Button onClick={updateUserTierAndExpiry} className="bg-indigo-600 hover:bg-indigo-700">
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -949,6 +1079,117 @@ export default function AdminPanel() {
             >
               <Sparkles className="h-4 w-4" />
               Grant {creditAmount} Credits
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create User Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-indigo-500" />
+              Create User
+            </DialogTitle>
+            <DialogDescription>
+              Manually create a user account with a specific tier and optional time limit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm font-medium">Email *</Label>
+              <Input
+                type="email"
+                placeholder="user@example.com"
+                value={createForm.email}
+                onChange={(e) => setCreateForm(p => ({ ...p, email: e.target.value }))}
+                data-testid="create-user-email"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Password *</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="At least 6 characters"
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm(p => ({ ...p, password: e.target.value }))}
+                  className="flex-1"
+                  data-testid="create-user-password"
+                />
+                <Button variant="outline" size="sm" onClick={generatePassword} className="shrink-0 h-9 text-xs">
+                  Generate
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Tier</Label>
+              <Select value={createForm.tier} onValueChange={(v) => setCreateForm(p => ({ ...p, tier: v }))}>
+                <SelectTrigger className="mt-1" data-testid="create-user-tier">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="free">Free</SelectItem>
+                  <SelectItem value="starter">Starter</SelectItem>
+                  <SelectItem value="pro">Pro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">AI Draft Credits</Label>
+              <Input
+                type="number"
+                min={0}
+                value={createForm.draft_credits}
+                onChange={(e) => setCreateForm(p => ({ ...p, draft_credits: e.target.value }))}
+                className="mt-1"
+                data-testid="create-user-credits"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Access Expiry</Label>
+              <p className="text-xs text-slate-500 mb-1.5">Optional. Account auto-downgrades to Free when this date passes.</p>
+              <Input
+                type="date"
+                value={createForm.access_expires_at}
+                onChange={(e) => setCreateForm(p => ({ ...p, access_expires_at: e.target.value }))}
+                data-testid="create-user-expiry"
+              />
+              <div className="flex gap-2 mt-2">
+                {[
+                  { label: "3 days", days: 3 },
+                  { label: "1 week", days: 7 },
+                  { label: "2 weeks", days: 14 },
+                  { label: "1 month", days: 30 },
+                ].map((p) => (
+                  <Button
+                    key={p.label}
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + p.days);
+                      setCreateForm(prev => ({ ...prev, access_expires_at: d.toISOString().split("T")[0] }));
+                    }}
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button
+              onClick={createUser}
+              disabled={createLoading || !createForm.email || !createForm.password}
+              className="bg-indigo-600 hover:bg-indigo-700 gap-1.5"
+              data-testid="create-user-submit"
+            >
+              <UserPlus className="h-4 w-4" />
+              {createLoading ? "Creating..." : "Create User"}
             </Button>
           </DialogFooter>
         </DialogContent>
