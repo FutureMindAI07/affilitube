@@ -392,6 +392,7 @@ export default function AffiliatesLanding() {
                   "CSV export",
                   "Saved searches & reports",
                   "Pipeline CRM (3 projects)",
+                  "Brand Intelligence (full)",
                   "AI outreach drafts (credits)",
                 ].map((f) => (
                   <li key={f} className="flex items-center gap-2">
