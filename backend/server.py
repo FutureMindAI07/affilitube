@@ -2896,22 +2896,32 @@ async def create_credits_checkout(request: Request, user=Depends(get_current_use
     origin = request.headers.get("origin") or f"{proto}://{host}".rstrip("/")
 
     try:
-        session = stripe_sdk.checkout.Session.create(
-            mode="payment",
-            line_items=[{"price": credits_price_id, "quantity": 1}],
-            success_url=f"{origin}/dashboard/pipeline?credits_purchased=true",
-            cancel_url=f"{origin}/dashboard/pipeline",
-            customer_email=user["email"],
-            metadata={
+        # Check if user already has a Stripe customer ID
+        user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0, "stripe_customer_id": 1})
+        stripe_customer_id = (user_data or {}).get("stripe_customer_id")
+
+        checkout_params = {
+            "mode": "payment",
+            "line_items": [{"price": credits_price_id, "quantity": 1}],
+            "success_url": f"{origin}/dashboard/pipeline?credits_purchased=true",
+            "cancel_url": f"{origin}/dashboard/pipeline",
+            "metadata": {
                 "user_id": user["id"],
                 "user_email": user["email"],
                 "product": "ai_draft_credits",
                 "credits_amount": "500",
             },
-        )
+        }
+
+        if stripe_customer_id:
+            checkout_params["customer"] = stripe_customer_id
+        else:
+            checkout_params["customer_email"] = user["email"]
+
+        session = stripe_sdk.checkout.Session.create(**checkout_params)
     except Exception as e:
         logger.error(f"Credits checkout error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create checkout session")
+        raise HTTPException(status_code=500, detail=f"Failed to create checkout session: {str(e)}")
 
     return {"url": session.url, "session_id": session.id}
 
