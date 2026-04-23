@@ -17,6 +17,7 @@ import Privacy from "@/pages/Privacy";
 import CheckoutSuccess from "@/pages/CheckoutSuccess";
 import ForgotPassword from "@/pages/ForgotPassword";
 import FreeLanding from "@/pages/FreeLanding";
+import AffiliatesLanding from "@/pages/AffiliatesLanding";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -51,6 +52,7 @@ function App() {
             <Route path="/checkout/success" element={<CheckoutSuccess />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/free" element={<FreeLanding />} />
+            <Route path="/affiliates" element={<AffiliatesLanding />} />
             <Route
               path="/dashboard"
               element={
