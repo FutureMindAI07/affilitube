@@ -2718,11 +2718,10 @@ Follow this structure exactly:
 
 4. THE VALUE: Explain that you'd love to have them as an early affiliate partner because they actually move the needle in the {tags_str} space.
 
-5. THE SHORT CTA: End with "would you be open to a 2-minute look at it? no worries if not." Then on a new line add: "if you're interested in how Affilitube works you can see a full demo here:" followed by "[DEMO_LINK]" on its own line. The sender will replace this placeholder with the actual URL.
+5. THE SHORT CTA: End with "would you be open to a 2-minute look at it? no worries if not." Then on a new line add: "if you're interested in how Affilitube works you can see the app here www.affilitube.com. if you'd like a free trial to see how it works let me know and I'll set it up for you." Then sign off with a new line "regards" new line "Adrian" new line "Affilitube Founder"
 
 Constraints:
 - Plain text only. No bolding, no formatting, no markdown.
-- No placeholders like [Your Name] at the end—the sender will add their signature manually.
 - No exclamation marks. Keep the energy calm and professional.
 - Slightly casual style (use contractions like "we've", "don't", start some sentences with "but" or "so").
 - Lowercase is okay for a natural feel.
