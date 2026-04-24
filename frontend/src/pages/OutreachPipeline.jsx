@@ -283,8 +283,8 @@ export default function OutreachPipeline() {
     toast.success("Full draft copied to clipboard!");
   };
 
-  const loadChannels = async () => {
-    setLoading(true);
+  const loadChannels = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       if (showOverdueOnly) {
         const res = await api.get("/channels/follow-ups/due");
@@ -303,7 +303,7 @@ export default function OutreachPipeline() {
     } catch (e) {
       toast.error("Failed to load channels");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -318,7 +318,7 @@ export default function OutreachPipeline() {
       setUpdatingChannel(null);
       setNewStatus("");
       setStatusNote("");
-      loadChannels();
+      loadChannels(true);
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to update status");
     }
@@ -331,7 +331,7 @@ export default function OutreachPipeline() {
       });
       toast.success("Project updated");
       setEditingProjectId(null);
-      loadChannels();
+      loadChannels(true);
       loadProjects();
     } catch (e) {
       toast.error("Failed to update project");
@@ -346,7 +346,7 @@ export default function OutreachPipeline() {
       });
       toast.success(`Moved to ${projectName || "No project"}`);
       setMoveChannel(null);
-      loadChannels();
+      loadChannels(true);
       loadProjects();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to move channel");
@@ -363,7 +363,7 @@ export default function OutreachPipeline() {
       toast.success(`Moved to new project "${name}"`);
       setMoveChannel(null);
       setNewProjectName("");
-      loadChannels();
+      loadChannels(true);
       loadProjects();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to create project");
@@ -374,7 +374,7 @@ export default function OutreachPipeline() {
     try {
       await api.delete(`/channels/${channel.channel_id}/pipeline`);
       toast.success(`${channel.channel_name} removed from pipeline`);
-      loadChannels();
+      loadChannels(true);
       loadProjects();
     } catch (e) {
       toast.error("Failed to remove from pipeline");
@@ -967,7 +967,7 @@ export default function OutreachPipeline() {
         onOpenChange={setDetailOpen}
         api={api}
         userTier={userTier}
-        onStatusUpdate={() => loadChannels()}
+        onStatusUpdate={() => loadChannels(true)}
         onNotesUpdate={() => {}}
         onUpgradeClick={() => navigate("/pricing")}
       />
