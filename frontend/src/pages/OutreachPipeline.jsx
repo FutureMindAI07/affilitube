@@ -263,7 +263,7 @@ export default function OutreachPipeline() {
   const handleBuyCredits = async () => {
     setBuyingCredits(true);
     try {
-      const res = await api.post("/checkout/credits");
+      const res = await api.post("/checkout/credits", { endorsely_referral: window.endorsely_referral || null });
       if (res.data.url) window.location.href = res.data.url;
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to start checkout");

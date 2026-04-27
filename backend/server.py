@@ -2895,8 +2895,11 @@ async def get_draft_credits(user=Depends(get_current_user)):
     user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0, "draft_credits": 1})
     return {"draft_credits": (user_data or {}).get("draft_credits", 0)}
 
+class CreditsCheckoutRequest(BaseModel):
+    endorsely_referral: Optional[str] = None
+
 @api_router.post("/checkout/credits")
-async def create_credits_checkout(request: Request, user=Depends(get_current_user)):
+async def create_credits_checkout(data: CreditsCheckoutRequest, request: Request, user=Depends(get_current_user)):
     """Create a Stripe checkout session for purchasing 500 AI draft credits ($9.99)"""
     tier = get_user_tier(user)
     if tier not in ("starter", "pro"):
@@ -2943,6 +2946,7 @@ async def create_credits_checkout(request: Request, user=Depends(get_current_use
                 "user_email": user["email"],
                 "product": "ai_draft_credits",
                 "credits_amount": "500",
+                **({"endorsely_referral": data.endorsely_referral} if data.endorsely_referral else {}),
             },
         }
 
@@ -3201,7 +3205,8 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
     )
 
 class CheckoutRequest(BaseModel):
-    plan: str = "pro_monthly"  # pro_monthly or pro_yearly
+    plan: str = "pro_monthly"
+    endorsely_referral: Optional[str] = None
 
 # ==================== ADMIN ENDPOINTS ====================
 
@@ -3653,7 +3658,8 @@ async def create_checkout_session(data: CheckoutRequest, request: Request, user=
                 "user_id": user["id"],
                 "user_email": user["email"],
                 "product": f"affilitube_{data.plan}",
-                "plan": data.plan
+                "plan": data.plan,
+                **({"endorsely_referral": data.endorsely_referral} if data.endorsely_referral else {}),
             },
         )
     except Exception as e:

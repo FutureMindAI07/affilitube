@@ -117,7 +117,7 @@ export default function Pricing() {
         : `${plan.planPrefix}_monthly`;
       const res = await axios.post(
         `${API}/api/checkout/create-session`,
-        { plan: planId },
+        { plan: planId, endorsely_referral: window.endorsely_referral || null },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       window.location.href = res.data.url;

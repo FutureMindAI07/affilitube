@@ -42,7 +42,7 @@ export default function AffiliatesLanding() {
       const planId = `${planPrefix}_${billingCycle === "yearly" ? "annual" : "monthly"}`;
       const res = await axios.post(
         `${API}/checkout/create-session`,
-        { plan: planId },
+        { plan: planId, endorsely_referral: window.endorsely_referral || null },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       window.location.href = res.data.url;
