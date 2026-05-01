@@ -18,6 +18,7 @@ import CheckoutSuccess from "@/pages/CheckoutSuccess";
 import ForgotPassword from "@/pages/ForgotPassword";
 import FreeLanding from "@/pages/FreeLanding";
 import AffiliatesLanding from "@/pages/AffiliatesLanding";
+import { CookieConsent } from "@/components/CookieConsent";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -42,6 +43,7 @@ function App() {
       <BrowserRouter>
         <div className="min-h-screen">
           <Toaster position="top-right" richColors />
+          <CookieConsent />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/pricing" element={<Pricing />} />
