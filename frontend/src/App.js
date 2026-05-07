@@ -18,6 +18,7 @@ import CheckoutSuccess from "@/pages/CheckoutSuccess";
 import ForgotPassword from "@/pages/ForgotPassword";
 import FreeLanding from "@/pages/FreeLanding";
 import AffiliatesLanding from "@/pages/AffiliatesLanding";
+import GetStartedFree from "@/pages/GetStartedFree";
 import { CookieConsent } from "@/components/CookieConsent";
 
 function ProtectedRoute({ children }) {
@@ -55,6 +56,7 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/free" element={<FreeLanding />} />
             <Route path="/affiliates" element={<AffiliatesLanding />} />
+            <Route path="/get-started-for-free" element={<GetStartedFree />} />
             <Route
               path="/dashboard"
               element={
