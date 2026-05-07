@@ -19,6 +19,7 @@ import ForgotPassword from "@/pages/ForgotPassword";
 import FreeLanding from "@/pages/FreeLanding";
 import AffiliatesLanding from "@/pages/AffiliatesLanding";
 import GetStartedFree from "@/pages/GetStartedFree";
+import BlogAffiliateSaaS from "@/pages/BlogAffiliateSaaS";
 import { CookieConsent } from "@/components/CookieConsent";
 
 function ProtectedRoute({ children }) {
@@ -57,6 +58,7 @@ function App() {
             <Route path="/free" element={<FreeLanding />} />
             <Route path="/affiliates" element={<AffiliatesLanding />} />
             <Route path="/get-started-for-free" element={<GetStartedFree />} />
+            <Route path="/how-to-find-affiliate-marketers-for-your-ai-saas" element={<BlogAffiliateSaaS />} />
             <Route
               path="/dashboard"
               element={
