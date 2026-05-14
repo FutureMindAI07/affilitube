@@ -836,9 +836,12 @@ class SearchReport(BaseModel):
 
 # ==================== YOUTUBE SERVICE ====================
 
-def get_youtube_service():
-    """Get YouTube service using the backend API key"""
-    api_key = os.environ.get("YOUTUBE_API_KEY")
+def get_youtube_service(user=None):
+    """Get YouTube service — uses admin API key for admin users, default key for everyone else"""
+    if user and user.get("role") == "admin":
+        api_key = os.environ.get("YOUTUBE_API_KEY_ADMIN") or os.environ.get("YOUTUBE_API_KEY")
+    else:
+        api_key = os.environ.get("YOUTUBE_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="YouTube API key not configured on server")
     return build("youtube", "v3", developerKey=api_key, cache_discovery=False)
@@ -1644,7 +1647,7 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
     
     # Get YouTube service with backend API key
     try:
-        youtube = get_youtube_service()
+        youtube = get_youtube_service(user)
     except HTTPException:
         raise
     except Exception as e:
@@ -1799,7 +1802,7 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
     """Enrich channels with statistics and scoring"""
     # Get YouTube service with backend API key
     try:
-        youtube = get_youtube_service()
+        youtube = get_youtube_service(user)
     except HTTPException:
         raise
     except Exception as e:
@@ -2378,7 +2381,7 @@ async def get_sponsorship_data(channel_id: str, user=Depends(get_current_user)):
     
     # Fetch last 10 videos from YouTube
     try:
-        youtube = get_youtube_service()
+        youtube = get_youtube_service(user)
         
         # Get uploads playlist ID
         ch_response = youtube.channels().list(
