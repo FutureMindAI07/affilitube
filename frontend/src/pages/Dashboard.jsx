@@ -386,6 +386,9 @@ export default function Dashboard() {
       if (res.data.access_expired) {
         toast.error("Your trial access has expired. You've been moved to the Free plan.", { id: "access-expired", duration: 10000 });
       }
+      if (res.data.search_warning === "approaching_limit") {
+        toast.warning("You're approaching your monthly search limit. Need more searches? Get in touch and we'll arrange a higher quota for your account.", { id: "search-warning", duration: 10000 });
+      }
     } catch (e) {
       console.error("Error loading user usage:", e);
     }

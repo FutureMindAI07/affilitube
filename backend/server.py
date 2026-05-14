@@ -95,13 +95,13 @@ TIERS = {
     },
     "pro": {
         "name": "Pro",
-        "searches_per_month": None,  # Unlimited
-        "max_results_per_search": None,  # No limit
+        "searches_per_month": 100,
+        "max_results_per_search": None,
         "csv_export": True,
         "saved_searches": True,
         "saved_reports": True,
         "pipeline_access": True,
-        "max_pipeline_projects": None  # Unlimited
+        "max_pipeline_projects": None
     },
     "appsumo": {
         "name": "AppSumo",
@@ -125,12 +125,16 @@ def get_tier_config(tier: str) -> dict:
 
 async def check_search_limit(user: dict) -> dict:
     """Check if user can perform a search based on their tier limits"""
+    # Admin is exempt from all search limits
+    if user.get("role") == "admin":
+        return {"can_search": True, "searches_remaining": None, "tier": "pro", "warning": None}
+
     tier = get_user_tier(user)
     tier_config = get_tier_config(tier)
     
-    # Pro and AppSumo have unlimited searches
+    # Unlimited tier (appsumo legacy)
     if tier_config["searches_per_month"] is None:
-        return {"can_search": True, "searches_remaining": None, "tier": tier}
+        return {"can_search": True, "searches_remaining": None, "tier": tier, "warning": None}
     
     # Get current month's search count
     user_id = user["id"]
@@ -155,12 +159,21 @@ async def check_search_limit(user: dict) -> dict:
     can_search = search_count < max_searches
     searches_remaining = max(0, max_searches - search_count)
     
+    # Warning at 80% threshold
+    warning = None
+    warning_threshold = int(max_searches * 0.8)
+    if search_count >= max_searches:
+        warning = "limit_reached"
+    elif search_count >= warning_threshold:
+        warning = "approaching_limit"
+    
     return {
         "can_search": can_search,
         "searches_used": search_count,
         "searches_remaining": searches_remaining,
         "max_searches": max_searches,
-        "tier": tier
+        "tier": tier,
+        "warning": warning,
     }
 
 async def increment_search_count(user_id: str):
@@ -1544,10 +1557,11 @@ async def get_user_usage(user=Depends(get_current_user)):
         "saved_reports": tier_config["saved_reports"],
         "pipeline_access": tier_config.get("pipeline_access", False),
         "max_pipeline_projects": tier_config.get("max_pipeline_projects"),
-        "is_unlimited": tier_config["searches_per_month"] is None,
+        "is_unlimited": tier_config["searches_per_month"] is None or user.get("role") == "admin",
         "draft_credits": user_data.get("draft_credits", 0) if user_data else 0,
         "has_outreach_config": bool(user_data.get("outreach_config", {}).get("product_name")) if user_data else False,
         "access_expired": user.get("access_expired", False),
+        "search_warning": search_limit_info.get("warning"),
     }
 
 # Quota estimation endpoint
@@ -1639,6 +1653,11 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
     # Check tier-based search limits
     search_limit = await check_search_limit(user)
     if not search_limit["can_search"]:
+        if search_limit.get("tier") == "pro":
+            raise HTTPException(
+                status_code=403,
+                detail="You've reached your monthly search limit. Contact us to discuss a higher quota for your account."
+            )
         tier_config = get_tier_config(search_limit["tier"])
         raise HTTPException(
             status_code=403, 
