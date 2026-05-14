@@ -37,7 +37,7 @@ export default function Terms() {
           <p>The Service offers the following plans:</p>
           <ul>
             <li><strong>Free Plan:</strong> 3 searches per month with up to 10 results per search. No CSV export or saved reports.</li>
-            <li><strong>Pro Plan:</strong> Unlimited searches, full results, CSV export, saved searches and reports. Billed monthly ($39/month) or annually ($299/year).</li>
+            <li><strong>Pro Plan:</strong> 100 searches per month, full results, CSV export, saved searches and reports. Billed monthly ($39/month) or annually ($299/year).</li>
           </ul>
           <p>You may upgrade, downgrade, or cancel your subscription at any time. Refunds are available within 14 days of purchase if you are not satisfied with the Service.</p>
 

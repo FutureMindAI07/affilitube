@@ -647,7 +647,7 @@ export default function Dashboard() {
 
     // Check tier limits
     if (userUsage && !userUsage.is_unlimited && userUsage.searches_remaining <= 0) {
-      toast.error("Monthly search limit reached. Upgrade to Pro for unlimited searches.");
+      toast.error("Monthly search limit reached. Upgrade your plan or contact us for a higher quota.");
       return;
     }
 

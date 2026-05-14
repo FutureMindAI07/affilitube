@@ -128,7 +128,7 @@ const faqs = [
   },
   {
     q: "What's the difference between Free and Pro?",
-    a: "Free gives you 3 searches per month with 10 results per search — great for trying the tool. Pro ($39/month or $299/year) gives unlimited searches, full results, CSV export, and saved searches/reports.",
+    a: "Free gives you 3 searches per month with 10 results per search — great for trying the tool. Pro ($39/month or $299/year) gives 100 searches per month, full results, CSV export, and saved searches/reports.",
   },
   {
     q: "Can I save my results and come back later?",

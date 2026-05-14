@@ -71,7 +71,7 @@ const plans = [
     periodYearly: "year",
     description: "For serious influencer marketers",
     features: [
-      { text: "Unlimited searches", included: true },
+      { text: "100 searches / month", included: true },
       { text: "Full channel results (no limits)", included: true },
       { text: "Full scoring & channel details", included: true },
       { text: "Niche selector (14 niches)", included: true },

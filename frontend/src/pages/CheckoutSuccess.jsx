@@ -71,7 +71,7 @@ export default function CheckoutSuccess() {
           <p className="text-slate-500 mb-8 max-w-sm">
             {planTier === "starter"
               ? "Your Starter access is now active. Enjoy 20 monthly searches and full export capabilities."
-              : "Your Pro access is now active. Enjoy unlimited searches and full export capabilities."}
+              : "Your Pro access is now active. Enjoy 100 searches per month and full export capabilities."}
           </p>
           <Button
             onClick={() => navigate("/dashboard")}

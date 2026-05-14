@@ -426,7 +426,7 @@ export default function GetStartedFree() {
               </Button>
               <ul className="space-y-2.5 text-sm text-slate-600">
                 {[
-                  "Unlimited searches",
+                  "100 searches / month",
                   "Unlimited results",
                   "Everything in Starter",
                   "Unlimited pipeline projects",

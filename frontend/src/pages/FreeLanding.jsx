@@ -52,7 +52,7 @@ const tiers = [
   {
     name: "Pro", price: "$79", period: "/month",
     features: [
-      { text: "Unlimited searches", included: true },
+      { text: "100 searches / month", included: true },
       { text: "Unlimited results", included: true },
       { text: "Channel scoring", included: true },
       { text: "CSV export", included: true },
