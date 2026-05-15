@@ -306,9 +306,12 @@ export default function Landing() {
                 Pro from $39/mo
               </span>
             </motion.div>
-            <motion.div variants={fadeUp} className="mt-6 flex justify-center">
+            <motion.div variants={fadeUp} className="mt-6 flex justify-center items-center gap-4">
               <a href="https://startupfa.me/s/affilitube?utm_source=affilitube.com" target="_blank" rel="noopener noreferrer">
                 <img src="https://startupfa.me/badges/featured-badge.webp" alt="Affilitube - Featured on Startup Fame" width="171" height="54" />
+              </a>
+              <a href="https://twelve.tools" target="_blank" rel="noopener noreferrer">
+                <img src="https://twelve.tools/badge3-light.svg" alt="Featured on Twelve Tools" width="200" height="54" />
               </a>
             </motion.div>
           </motion.div>
