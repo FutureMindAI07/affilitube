@@ -2155,6 +2155,8 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     # Affiliate platform link detection
                     # Combine channel description + video descriptions for scanning
                     full_text_to_scan = description + " " + video_descriptions_text
+                    if affiliate_platforms:
+                        logger.info(f"Platform scan for {snippet.get('title', ch_id)}: text_len={len(full_text_to_scan)}, vid_desc_len={len(video_descriptions_text)}")
                     affiliate_platform_links = {}
                     affiliate_platforms_found = []
                     affiliate_platforms_count = 0
@@ -2163,6 +2165,8 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                         affiliate_platform_links, affiliate_platforms_found, affiliate_platforms_count = detect_affiliate_platform_links(
                             full_text_to_scan, affiliate_platforms
                         )
+                        if affiliate_platforms_found:
+                            logger.info(f"Affiliate platforms detected for {snippet.get('title', ch_id)}: {affiliate_platforms_found}")
                     
                     # Tool Stack Detection
                     tools_section_detected, tools_stack_signal_score, tools_section_phrases = detect_tools_section(
