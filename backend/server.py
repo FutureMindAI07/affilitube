@@ -2052,10 +2052,11 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                                 pub_date = datetime.fromisoformat(latest_upload_date.replace("Z", "+00:00"))
                                 days_since_upload = (datetime.now(timezone.utc) - pub_date).days
                             
-                            # Fetch video statistics (and optionally descriptions)
+                            # Fetch video statistics (and descriptions if scanning or platform detection enabled)
                             if video_ids:
+                                needs_descriptions = scan_video_descriptions or len(affiliate_platforms) > 0
                                 parts = ["statistics"]
-                                if scan_video_descriptions:
+                                if needs_descriptions:
                                     parts.append("snippet")
                                 
                                 vid_response = youtube.videos().list(
@@ -2070,8 +2071,8 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                                 for vid in recent_videos:
                                     vid_info = vid_data.get(vid["video_id"], {})
                                     vid["view_count"] = int(vid_info.get("statistics", {}).get("viewCount", 0))
-                                    # Store video description if scanning enabled
-                                    if scan_video_descriptions and "snippet" in vid_info:
+                                    # Store video description if scanning enabled or platforms selected
+                                    if needs_descriptions and "snippet" in vid_info:
                                         vid["description"] = vid_info["snippet"].get("description", "")
                                         video_descriptions_text += " " + vid["description"]
                         
