@@ -268,6 +268,11 @@ export default function Dashboard() {
   const [hidePipelineChannels, setHidePipelineChannels] = useState(false);
   const [pipelineChannelIds, setPipelineChannelIds] = useState(new Set());
 
+  // Super Search (admin only)
+  const [superSearch, setSuperSearch] = useState(false);
+  const [competitorBrands, setCompetitorBrands] = useState([]);
+  const [competitorInput, setCompetitorInput] = useState("");
+
   const [quotaEstimate, setQuotaEstimate] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchProgress, setSearchProgress] = useState(0);
@@ -355,6 +360,7 @@ export default function Dashboard() {
     loadAffiliatePlatforms();
     loadFollowUpsDue();
     loadPipelineIds();
+    if (user?.role === "admin") loadCompetitorBrands();
     // Restore search results: first try session, then autosave
     if (channels.length === 0) {
       const restored = searchResults.restoreFromSession();
@@ -414,6 +420,28 @@ export default function Dashboard() {
       setPipelineChannelIds(new Set((res.data.channels || []).map(ch => ch.channel_id)));
     } catch (e) {
       setPipelineChannelIds(new Set());
+    }
+  };
+
+  const loadCompetitorBrands = async () => {
+    try {
+      const res = await api.get("/admin/competitor-brands");
+      const brands = res.data.competitor_brands || [];
+      setCompetitorBrands(brands);
+      setCompetitorInput(brands.join(", "));
+    } catch (e) {
+      // not critical
+    }
+  };
+
+  const saveCompetitorBrands = async () => {
+    const brands = competitorInput.split(",").map(b => b.trim()).filter(Boolean);
+    try {
+      await api.put("/admin/competitor-brands", { competitor_brands: brands });
+      setCompetitorBrands(brands);
+      toast.success("Competitor brands saved");
+    } catch (e) {
+      toast.error("Failed to save competitor brands");
     }
   };
 
@@ -717,6 +745,8 @@ export default function Dashboard() {
         affiliate_platforms: affiliatePlatforms,
         uploaded_within_days: uploadedWithin,
         hide_pipeline_channels: hidePipelineChannels,
+        super_search: superSearch && user?.role === "admin",
+        competitor_brands: superSearch && user?.role === "admin" ? competitorBrands : [],
       });
 
       setEnrichProgress(100);
@@ -1769,6 +1799,44 @@ export default function Dashboard() {
                     data-testid="hide-pipeline-switch"
                   />
                 </div>
+
+                {/* Super Search (Admin Only) */}
+                {user?.role === "admin" && (
+                  <>
+                    <Separator />
+                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Shield className="h-4 w-4 text-amber-600" />
+                          <div>
+                            <Label className="text-sm font-semibold text-amber-900">Super Search</Label>
+                            <p className="text-xs text-amber-700">Force Brand Intelligence + hard filters + AI grading on every result</p>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={superSearch}
+                          onCheckedChange={setSuperSearch}
+                          data-testid="super-search-switch"
+                        />
+                      </div>
+                      {superSearch && (
+                        <div>
+                          <Label className="text-xs text-amber-800 mb-1 block">Competitor Brands (comma-separated)</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              value={competitorInput}
+                              onChange={(e) => setCompetitorInput(e.target.value)}
+                              placeholder="e.g. NordVPN, Surfshark, ExpressVPN"
+                              className="h-8 text-xs flex-1 bg-white"
+                              data-testid="competitor-brands-input"
+                            />
+                            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={saveCompetitorBrands}>Save</Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </CollapsibleContent>
             </Collapsible>
 
@@ -2237,6 +2305,13 @@ export default function Dashboard() {
                         <TableHead>Signals</TableHead>
                         <TableHead className="w-20">Health</TableHead>
                         <TableHead className="w-28">Status</TableHead>
+                        {superSearch && user?.role === "admin" && (
+                          <>
+                            <TableHead className="w-16">Grade</TableHead>
+                            <TableHead className="w-24">Sp. Ratio</TableHead>
+                            <TableHead className="w-24">Last Aff</TableHead>
+                          </>
+                        )}
                         <TableHead className="w-12"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -2310,6 +2385,11 @@ export default function Dashboard() {
                                   </span>
                                 )}
                               </div>
+                              {superSearch && channel.ai_assessment?.reason && (
+                                <p className="text-[10px] text-indigo-500 truncate max-w-[200px]" title={channel.ai_assessment.reason}>
+                                  {channel.ai_assessment.reason}
+                                </p>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="text-right font-mono">
@@ -2397,6 +2477,35 @@ export default function Dashboard() {
                               );
                             })()}
                           </TableCell>
+                          {superSearch && user?.role === "admin" && (
+                            <>
+                              <TableCell>
+                                {channel.ai_assessment ? (
+                                  <div className="flex flex-col items-start gap-0.5">
+                                    <Badge className={`text-[10px] px-1.5 py-0 font-bold ${
+                                      channel.ai_assessment.grade === "A" ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+                                      channel.ai_assessment.grade === "B" ? "bg-blue-100 text-blue-700 border-blue-200" :
+                                      channel.ai_assessment.grade === "C" ? "bg-amber-100 text-amber-700 border-amber-200" :
+                                      "bg-slate-100 text-slate-500 border-slate-200"
+                                    }`} data-testid={`ai-grade-${channel.channel_id}`} title={channel.ai_assessment.reason || ""}>
+                                      {channel.ai_assessment.grade}
+                                    </Badge>
+                                    {channel.competitor_brand_overlap && (
+                                      <Badge className="bg-red-100 text-red-700 border-red-200 text-[9px] px-1 py-0" title={`Competitors: ${(channel.competitor_brands_found || []).join(", ")}`}>
+                                        Competitor
+                                      </Badge>
+                                    )}
+                                  </div>
+                                ) : null}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs text-center">
+                                {channel.sponsored_video_ratio || "-"}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">
+                                {channel.affiliate_recency_label || "-"}
+                              </TableCell>
+                            </>
+                          )}
                           <TableCell>
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           </TableCell>

@@ -8,6 +8,7 @@ import os
 import logging
 import re
 import csv
+import json
 import io
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
@@ -693,6 +694,8 @@ class EnrichRequest(BaseModel):
     affiliate_platforms: List[str] = []
     uploaded_within_days: Optional[int] = None
     hide_pipeline_channels: bool = False
+    super_search: bool = False
+    competitor_brands: List[str] = []
 
 # Affiliate platform URL patterns
 AFFILIATE_PLATFORMS = {
@@ -2187,6 +2190,188 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
         # Sort by score
         enriched_channels.sort(key=lambda x: x.get("score_total", 0), reverse=True)
         
+        # ===== SUPER SEARCH PIPELINE (Admin only) =====
+        if req.super_search:
+            if user.get("role") != "admin":
+                raise HTTPException(status_code=403, detail="Super Search is admin-only")
+            
+            logger.info(f"Super Search: Processing {len(enriched_channels)} channels through pipeline")
+            super_channels = []
+            
+            for ch in enriched_channels:
+                ch_id = ch.get("channel_id", "")
+                ch_name = ch.get("channel_name", "Unknown")
+                
+                # Step 3: Force Brand Intelligence on every channel
+                if not ch.get("sponsorship_data"):
+                    try:
+                        yt = get_youtube_service(user)
+                        ch_resp = yt.channels().list(part="contentDetails", id=ch_id).execute()
+                        if ch_resp.get("items"):
+                            uploads_pl = ch_resp["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+                            pl_resp = yt.playlistItems().list(part="contentDetails", playlistId=uploads_pl, maxResults=10).execute()
+                            vid_ids = [item["contentDetails"]["videoId"] for item in pl_resp.get("items", [])]
+                            if vid_ids:
+                                vids_resp = yt.videos().list(part="snippet", id=",".join(vid_ids)).execute()
+                                videos = [{"video_id": v["id"], "title": v["snippet"]["title"],
+                                           "description": v["snippet"]["description"],
+                                           "published_at": v["snippet"].get("publishedAt", "")} for v in vids_resp.get("items", [])]
+                                sp_result = detect_sponsorships(videos)
+                                ch["sponsorship_data"] = sp_result
+                                # Cache to DB
+                                await db.channels.update_many(
+                                    {"channel_id": ch_id},
+                                    {"$set": {"sponsorship_data": sp_result, "last_sponsorship_check": datetime.now(timezone.utc)}}
+                                )
+                            else:
+                                ch["sponsorship_data"] = {"is_sponsored_active": False, "detected_brands": [],
+                                                          "affiliate_link_count": 0, "confidence_score": 0,
+                                                          "videos_analyzed": 0, "videos_with_sponsorships": []}
+                    except Exception as e:
+                        logger.warning(f"Super Search: Brand Intel failed for {ch_name}: {e}")
+                        ch["sponsorship_data"] = {"is_sponsored_active": False, "detected_brands": [],
+                                                  "affiliate_link_count": 0, "confidence_score": 0,
+                                                  "videos_analyzed": 0, "videos_with_sponsorships": []}
+                
+                sp = ch.get("sponsorship_data", {})
+                aff_link_count = sp.get("affiliate_link_count", 0)
+                is_sponsored = sp.get("is_sponsored_active", False)
+                vids_with_sp = sp.get("videos_with_sponsorships", [])
+                
+                # Step 4: Hard filter — affiliate activity required
+                if aff_link_count == 0 and not is_sponsored:
+                    logger.info(f"Super Search: Filtered out {ch_name} — no affiliate activity")
+                    continue
+                
+                # Step 5: Hard filter — minimum 3 affiliate links
+                if aff_link_count < 3:
+                    logger.info(f"Super Search: Filtered out {ch_name} — only {aff_link_count} affiliate links")
+                    continue
+                
+                # Step 6: Hard filter — recency of affiliate activity (90 days)
+                has_recent_sponsored = False
+                cutoff_90 = datetime.now(timezone.utc) - timedelta(days=90)
+                for sv in vids_with_sp:
+                    pub = sv.get("published_at", "")
+                    if pub:
+                        try:
+                            pub_dt = datetime.fromisoformat(pub.replace("Z", "+00:00"))
+                            if pub_dt > cutoff_90:
+                                has_recent_sponsored = True
+                                break
+                        except Exception:
+                            pass
+                if not has_recent_sponsored:
+                    logger.info(f"Super Search: Filtered out {ch_name} — no recent affiliate activity")
+                    continue
+                
+                # Step 7: Hard filter — sponsored video ratio (3+ of last 10)
+                if len(vids_with_sp) < 3:
+                    logger.info(f"Super Search: Filtered out {ch_name} — only {len(vids_with_sp)}/{sp.get('videos_analyzed', 10)} sponsored videos")
+                    continue
+                
+                # Compute super search display fields
+                ch["sponsored_video_ratio"] = f"{len(vids_with_sp)}/{sp.get('videos_analyzed', 10)}"
+                
+                # Most recent affiliate video date
+                most_recent_sp_date = None
+                for sv in vids_with_sp:
+                    pub = sv.get("published_at", "")
+                    if pub:
+                        try:
+                            pub_dt = datetime.fromisoformat(pub.replace("Z", "+00:00"))
+                            if most_recent_sp_date is None or pub_dt > most_recent_sp_date:
+                                most_recent_sp_date = pub_dt
+                        except Exception:
+                            pass
+                if most_recent_sp_date:
+                    days_ago = (datetime.now(timezone.utc) - most_recent_sp_date).days
+                    ch["affiliate_recency_days"] = days_ago
+                    ch["affiliate_recency_label"] = f"{days_ago}d ago" if days_ago > 0 else "Today"
+                
+                super_channels.append(ch)
+            
+            logger.info(f"Super Search: {len(super_channels)} channels passed hard filters (from {len(enriched_channels)})")
+            
+            # Step 8: AI Prospect Assessment (OpenAI GPT-4o)
+            openai_key = os.environ.get("OPENAI_API_KEY")
+            if openai_key and super_channels:
+                from openai import OpenAI
+                ai_client = OpenAI(api_key=openai_key)
+                
+                ss_system_prompt = """You are a prospect quality assessor for an influencer affiliate marketing platform. You will be given enriched data about a YouTube channel. Assess the channel strictly against the following criteria and return a JSON object only — no preamble, no markdown, no code fences.
+
+Criteria:
+- Affiliate links are present and have been posted within the last 90 days
+- The channel is active — has posted at least once in the last 60 days
+- Content is relevant to the niche described
+- The channel communicates professionally and appears commercially aware
+- Content is primarily in English
+- Sponsorship activity is consistent, not a one-off
+
+Return this exact JSON structure:
+{"grade":"A | B | C | Reject","reason":"One sentence explaining the grade","niche_relevant_affiliate_links":true|false,"active_within_60_days":true|false,"consistent_sponsorship":true|false}
+
+Grade definitions:
+- A — Meets all criteria, strong prospect
+- B — Meets most criteria, worth considering
+- C — Meets minimum criteria but has notable weaknesses
+- Reject — Fails one or more hard criteria"""
+                
+                graded_channels = []
+                for ch in super_channels:
+                    try:
+                        ch_payload = {
+                            "channel_name": ch.get("channel_name", ""),
+                            "description": (ch.get("description", "") or "")[:500],
+                            "subscriber_count": ch.get("subscriber_count", 0),
+                            "avg_views_recent": ch.get("avg_views_recent", 0),
+                            "days_since_upload": ch.get("days_since_upload"),
+                            "upload_consistency": ch.get("upload_consistency", ""),
+                            "affiliate_signals": ch.get("affiliate_signals", []),
+                            "affiliate_platforms_found": ch.get("affiliate_platforms_found", []),
+                            "affiliate_link_count": ch.get("sponsorship_data", {}).get("affiliate_link_count", 0),
+                            "videos_with_sponsorships": [{"title": v.get("title", ""), "signals": v.get("signals", []), "published_at": v.get("published_at", "")} for v in ch.get("sponsorship_data", {}).get("videos_with_sponsorships", [])],
+                            "detected_brands": ch.get("sponsorship_data", {}).get("detected_brands", []),
+                            "latest_video_titles": ch.get("latest_video_titles", ""),
+                            "niche": req.niche,
+                        }
+                        completion = ai_client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=[
+                                {"role": "system", "content": ss_system_prompt},
+                                {"role": "user", "content": json.dumps(ch_payload)},
+                            ],
+                            max_tokens=200,
+                            temperature=0.3,
+                        )
+                        raw = completion.choices[0].message.content.strip()
+                        assessment = json.loads(raw)
+                        
+                        if assessment.get("grade") == "Reject":
+                            logger.info(f"Super Search: AI rejected {ch.get('channel_name')} — {assessment.get('reason', '')}")
+                            continue
+                        ch["ai_assessment"] = assessment
+                    except Exception as e:
+                        logger.warning(f"Super Search: AI assessment failed for {ch.get('channel_name')}: {e}")
+                        ch["ai_assessment"] = {"grade": "Ungraded", "reason": "AI assessment unavailable"}
+                    
+                    graded_channels.append(ch)
+                
+                super_channels = graded_channels
+            
+            # Step 9: Competitor Brand Overlap Detection
+            comp_brands = set(b.lower().strip() for b in req.competitor_brands if b.strip())
+            if comp_brands:
+                for ch in super_channels:
+                    detected = set(b.lower() for b in ch.get("sponsorship_data", {}).get("detected_brands", []))
+                    overlap = detected & comp_brands
+                    ch["competitor_brand_overlap"] = len(overlap) > 0
+                    ch["competitor_brands_found"] = [b for b in ch.get("sponsorship_data", {}).get("detected_brands", []) if b.lower() in comp_brands]
+            
+            logger.info(f"Super Search: Final result — {len(super_channels)} qualified channels")
+            enriched_channels = super_channels
+        
         return {"channels": enriched_channels, "total": len(enriched_channels), "cached": len(cached_channels)}
     
     except HTTPException:
@@ -3479,6 +3664,24 @@ async def admin_grant_credits(user_id: str, input: AdminGrantCreditsInput, admin
     )
     new_balance = (await db.users.find_one({"id": user_id}, {"_id": 0, "draft_credits": 1})).get("draft_credits", 0)
     return {"success": True, "credits_added": input.credits, "new_balance": new_balance, "email": user["email"]}
+
+@api_router.get("/admin/competitor-brands")
+async def get_competitor_brands(admin=Depends(get_admin_user)):
+    """Get admin's competitor brand list"""
+    admin_data = await db.users.find_one({"id": admin["id"]}, {"_id": 0, "competitor_brands": 1})
+    return {"competitor_brands": (admin_data or {}).get("competitor_brands", [])}
+
+class CompetitorBrandsInput(BaseModel):
+    competitor_brands: List[str] = []
+
+@api_router.put("/admin/competitor-brands")
+async def update_competitor_brands(data: CompetitorBrandsInput, admin=Depends(get_admin_user)):
+    """Save admin's competitor brand list"""
+    brands = [b.strip() for b in data.competitor_brands if b.strip()]
+    await db.users.update_one({"id": admin["id"]}, {"$set": {"competitor_brands": brands}})
+    return {"success": True, "competitor_brands": brands}
+
+
 
 @api_router.get("/admin/quota")
 async def admin_quota_monitor(admin=Depends(get_admin_user)):
