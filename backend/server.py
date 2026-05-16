@@ -3733,6 +3733,27 @@ async def update_competitor_brands(data: CompetitorBrandsInput, admin=Depends(ge
 
 
 
+
+@api_router.post("/admin/clear-enrichment-cache")
+async def admin_clear_enrichment_cache(admin=Depends(get_admin_user)):
+    """Clear all cached enrichment and sponsorship data to force fresh re-scans"""
+    r1 = await db.channels.update_many(
+        {"enriched_at": {"$exists": True}},
+        {"$unset": {"enriched_at": ""}}
+    )
+    r2 = await db.channels.update_many(
+        {"sponsorship_data": {"$exists": True}},
+        {"$unset": {"sponsorship_data": "", "last_sponsorship_check": ""}}
+    )
+    r3 = await db.autosaved_results.delete_many({})
+    return {
+        "success": True,
+        "enrichment_cleared": r1.modified_count,
+        "sponsorship_cleared": r2.modified_count,
+        "autosave_cleared": r3.deleted_count,
+    }
+
+
 @api_router.get("/admin/quota")
 async def admin_quota_monitor(admin=Depends(get_admin_user)):
     """Get detailed quota usage for admin monitoring"""
