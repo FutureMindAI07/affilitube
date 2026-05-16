@@ -697,7 +697,75 @@ class EnrichRequest(BaseModel):
     super_search: bool = False
     competitor_brands: List[str] = []
 
-# Affiliate platform URL patterns
+# ===== MASTER AFFILIATE LINK PATTERNS (single source of truth) =====
+# Used by BOTH detect_sponsorships() AND detect_affiliate_platform_links()
+MASTER_AFFILIATE_LINK_PATTERNS = [
+    # Amazon
+    r"amzn\.to/",
+    r"amazon\.[\w.]+/.*(?:tag=|ref=)",
+    # AppSumo
+    r"8odi\.net/",
+    r"appsumo\.com/",
+    # Impact / PartnerStack
+    r"impact\.com/",
+    r"impactradius\.com/",
+    r"pxf\.io/",
+    r"sjv\.io/",
+    r"7eer\.net/",
+    r"partnerstack\.com/",
+    r"pstk\.io/",
+    # ShareASale
+    r"shareasale\.com/",
+    # CJ Affiliate
+    r"cj\.com/",
+    r"commission-junction\.com/",
+    r"dpbolvw\.net/",
+    r"jdoqocy\.com/",
+    r"tkqlhce\.com/",
+    r"anrdoezrs\.net/",
+    # Awin
+    r"awin1\.com/",
+    r"zenaps\.com/",
+    # Rakuten
+    r"rakuten\.com/",
+    r"linksynergy\.com/",
+    r"click\.linksynergy\.com/",
+    # ClickBank
+    r"clickbank\.net/",
+    r"hop\.clickbank\.net/",
+    # Gumroad
+    r"gumroad\.com/",
+    r"gum\.co/",
+    # Skimlinks
+    r"skimlinks\.com/",
+    r"skimresources\.com/",
+    r"go\.redirectingat\.com/",
+    # FlexOffers
+    r"flexoffers\.com/",
+    # Shorteners & creator storefronts
+    r"bit\.ly/",
+    r"tinyurl\.com/",
+    r"linktr\.ee/",
+    r"stan\.store/",
+    r"geni\.us/",
+    r"kit\.co/",
+    # Other affiliate networks & tools
+    r"go\.magik\.ly/",
+    r"shrsl\.com/",
+    r"rstyle\.me/",
+    r"howl\.me/",
+    r"shopmy\.us/",
+    r"lvndr\.com/",
+    r"mavely\.co/",
+    r"collabs\.shop/",
+    r"glnk\.io/",
+    r"prf\.hn/",
+    r"partnerize\.com/",
+    # Generic affiliate markers
+    r"(?:commission|affiliate|partner|ref)[_\-]?(?:link|url|id)",
+]
+
+# Affiliate platform URL patterns (for platform-specific detection in enrichment)
 AFFILIATE_PLATFORMS = {
     "appsumo": {
         "name": "AppSumo",
@@ -2463,37 +2531,7 @@ SPONSORSHIP_PATTERNS = [
     (r"(?i)includes?\s+paid\s+(?:promotion|partnership)", "disclosure"),
 ]
 
-AFFILIATE_LINK_PATTERNS = [
-    r"amzn\.to/",
-    r"amazon\.[\w.]+/.*(?:tag=|ref=)",
-    r"bit\.ly/",
-    r"tinyurl\.com/",
-    r"go\.magik\.ly/",
-    r"shrsl\.com/",
-    r"rstyle\.me/",
-    r"linktr\.ee/",
-    r"stan\.store/",
-    r"geni\.us/",
-    r"howl\.me/",
-    r"shopmy\.us/",
-    r"lvndr\.com/",
-    r"mavely\.co/",
-    r"collabs\.shop/",
-    r"glnk\.io/",
-    r"jdoqocy\.com/",
-    r"tkqlhce\.com/",
-    r"anrdoezrs\.net/",
-    r"shareasale\.com/",
-    r"8odi\.net/",
-    r"go\.redirectingat\.com/",
-    r"click\.linksynergy\.com/",
-    r"prf\.hn/",
-    r"partnerize\.com/",
-    r"impact\.com/",
-    r"sjv\.io/",
-    r"pxf\.io/",
-    r"(?:commission|affiliate|partner|ref)[_\-]?(?:link|url|id)",
-]
+AFFILIATE_LINK_PATTERNS = MASTER_AFFILIATE_LINK_PATTERNS
 
 
 def detect_sponsorships(videos):
