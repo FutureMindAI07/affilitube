@@ -42,9 +42,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import TrialBanner from "@/components/TrialBanner";
 import {
   Card,
   CardContent,
@@ -1427,6 +1427,9 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-6">
+        {/* Trial Banner */}
+        <TrialBanner usage={userUsage} />
+
         {/* Follow Ups Due Indicator */}
         {followUpsDueCount > 0 && (
           <button

@@ -53,6 +53,7 @@ import {
   Plus,
 } from "lucide-react";
 import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
+import TrialBanner from "@/components/TrialBanner";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -480,6 +481,9 @@ export default function OutreachPipeline() {
 
       {/* Main Content */}
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-6">
+        {/* Trial Banner */}
+        <TrialBanner />
+
         {/* Page Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>

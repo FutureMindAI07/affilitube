@@ -67,6 +67,8 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - Migrate react-helmet → react-helmet-async (P3, removes StrictMode warning)
 
 ## Completed (Feb 26, 2026)
+- **Soft Trial Expiry Banner** (`/app/frontend/src/components/TrialBanner.jsx`): 3-state banner shown on Dashboard & Pipeline. Active normal (indigo, sparkles, "X days left in your Starter trial", dismissible per session). Urgent ≤3 days (amber/orange, clock, "Only X day(s) left", non-dismissible). Expired (red, alert, "Your Starter trial has ended", non-dismissible). All states route to `/pricing`. Auto-fetches `/api/user/usage` so any tier-aware page can drop in one component. Verified across all 3 states via DB-driven state simulation.
+
 - **SaaS Founders Landing Page (/for-saas-founders) + 14-Day Starter Trial**: New conversion-focused landing for Reddit paid ad traffic. Sections: Hero ("Building was the easy part"), Pain (Reddit-styled cards), Solution, Features (8-card grid), Social Proof, Pricing Teaser (3-card), Final CTA. All 4 CTAs route to /signup?trial=starter_14. Backend `/api/auth/register` accepts `trial` param, creates user with tier=starter, is_trial=true, access_expires_at=+14 days. `get_current_user` auto-downgrades expired trials to tier=free and sets trial_expired=true. CSV export endpoint returns 403 `upgrade_required` for trial users. `/api/user/usage` returns trial_days_remaining + csv_export=false. Signup subtitle now reflects trial context. Tested via testing_agent (7/7 backend pytest + full UI flow).
 
 ## Completed (Apr 17, 2026)
