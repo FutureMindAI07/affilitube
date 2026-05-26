@@ -63,6 +63,11 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - Bulk actions in Pipeline view (P1)
 - Priority support system for Pro tier (P2)
 - Dashboard.jsx refactoring (3800+ lines → break into smaller components) (P2)
+- server.py modularisation (4258 lines → split into routers: auth, search, export, trial, pipeline) (P2)
+- Migrate react-helmet → react-helmet-async (P3, removes StrictMode warning)
+
+## Completed (Feb 26, 2026)
+- **SaaS Founders Landing Page (/for-saas-founders) + 14-Day Starter Trial**: New conversion-focused landing for Reddit paid ad traffic. Sections: Hero ("Building was the easy part"), Pain (Reddit-styled cards), Solution, Features (8-card grid), Social Proof, Pricing Teaser (3-card), Final CTA. All 4 CTAs route to /signup?trial=starter_14. Backend `/api/auth/register` accepts `trial` param, creates user with tier=starter, is_trial=true, access_expires_at=+14 days. `get_current_user` auto-downgrades expired trials to tier=free and sets trial_expired=true. CSV export endpoint returns 403 `upgrade_required` for trial users. `/api/user/usage` returns trial_days_remaining + csv_export=false. Signup subtitle now reflects trial context. Tested via testing_agent (7/7 backend pytest + full UI flow).
 
 ## Completed (Apr 17, 2026)
 - Pipeline Info Button & Auto-Cache Brand Intelligence: Added "Info" button to each channel row in Outreach Pipeline that opens a full Channel Detail Sheet (ChannelDetailSheet.jsx) with Score Breakdown, Outreach Tracking, Affiliate Potential, Statistics, Channel Health, Tags, Brand Intelligence, Notes. Backend auto-caches sponsorship data via BackgroundTasks when a channel is first added to the pipeline.

@@ -80,7 +80,9 @@ export default function Signup() {
               <p className="mt-2 text-sm text-slate-500">
                 {planFromPricing
                   ? `Create your account to continue to ${planFromPricing.includes("starter") ? "Starter" : "Pro"} checkout`
-                  : "Start with 3 free searches — no credit card required"}
+                  : trialParam === "starter_14"
+                    ? "14-Day Starter Trial — no credit card required"
+                    : "Start with 3 free searches — no credit card required"}
               </p>
             </div>
 
