@@ -10,7 +10,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://pipeline-info-cache.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://trial-saas-hub.preview.emergentagent.com').rstrip('/')
 
 # Test credentials
 PRO_USER = {"email": "admin@affilitube.com", "password": "admin123!"}

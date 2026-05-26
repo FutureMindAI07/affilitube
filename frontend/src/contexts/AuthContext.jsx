@@ -35,8 +35,10 @@ export function AuthProvider({ children }) {
     return res.data;
   };
 
-  const register = async (email, password) => {
-    const res = await axios.post(`${API}/auth/register`, { email, password });
+  const register = async (email, password, trial = null) => {
+    const payload = { email, password };
+    if (trial) payload.trial = trial;
+    const res = await axios.post(`${API}/auth/register`, payload);
     sessionStorage.removeItem("affi_channels");
     sessionStorage.removeItem("affi_raw");
     sessionStorage.removeItem("affi_meta");

@@ -29,6 +29,7 @@ export default function Signup() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const planFromPricing = searchParams.get("plan");
+  const trialParam = searchParams.get("trial");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,13 +38,13 @@ export default function Signup() {
     if (password !== confirmPassword) { setError("Passwords do not match"); return; }
     setLoading(true);
     try {
-      const res = await register(email, password);
+      const res = await register(email, password, trialParam || null);
       if (planFromPricing) {
         // User came from pricing page with a paid plan — trigger checkout
         const token = res.token;
         const checkoutRes = await axios.post(
           `${API}/api/checkout/create-session`,
-          { plan: planFromPricing },
+          { plan: planFromPricing, endorsely_referral: window.endorsely_referral || null },
           { headers: { Authorization: `Bearer ${token}` } }
         );
         window.location.href = checkoutRes.data.url;

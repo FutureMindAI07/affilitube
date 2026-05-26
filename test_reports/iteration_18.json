@@ -1,0 +1,43 @@
+{
+  "summary": "Tested SaaS Founders landing page (/for-saas-founders) and 14-Day Starter trial flow end-to-end. All 7 backend pytest tests passed. Landing page renders with all 4 trial CTAs (nav, hero, pricing, final), each correctly navigating to /signup?trial=starter_14. UI signup with trial param creates user with tier=starter & is_trial=true, navigates to dashboard. Backend register / /auth/me / /user/usage / /export/csv gating and auto-downgrade-on-expiry all working as specified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/auth/me", "issue": "Returns the raw user document — does NOT include computed fields trial_days_remaining or csv_export. These computed fields live only on GET /api/user/usage. The review_request expected /auth/me to include them; either expand /auth/me payload or the front-end must call /user/usage to display trial status. Current behavior is functional but inconsistent with the spec wording."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/signup?trial=starter_14", "issues": ["Subtitle still reads 'Start with 3 free searches — no credit card required' even when trial=starter_14 param is present. For trial signups, copy should reflect '14-Day Starter Trial — no credit card required' for clarity. Minor UX/copy gap, not a functional bug."]},
+      {"screen": "Console (all pages)", "issues": ["React StrictMode warning: 'Using UNSAFE_componentWillMount in strict mode is not recommended' — coming from react-helmet's SideEffect(NullComponent). Cosmetic third-party warning; can be addressed later by migrating to react-helmet-async."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_trial_signup.py",
+    "/app/test_reports/pytest/pytest_trial_signup.xml"
+  ],
+  "action_items": [
+    "(Optional) Decide whether GET /api/auth/me should include trial_days_remaining and csv_export — review_request implied yes, current impl exposes them only on /api/user/usage.",
+    "(Optional/Copy) Update Signup.jsx subtitle to show trial-specific messaging when trialParam === 'starter_14' (currently always shows '3 free searches' copy).",
+    "(Optional/Tech debt) Replace react-helmet with react-helmet-async to remove UNSAFE_componentWillMount StrictMode warning."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 4258 lines — well beyond the 700-line guideline. Should be modularised into routers (auth, search, export, trial, pipeline, etc.) for maintainability.",
+    "Trial-block on export uses two separate JSONResponse 403 returns with similar payloads — minor duplication, fine for now.",
+    "Auto-downgrade logic in get_current_user (lines 1376-1395) silently swallows exceptions with bare `except Exception: pass`. Should at least log so expiry parse failures are visible.",
+    "Register endpoint does not enforce minimum password length on backend (only frontend validates). Defence-in-depth: add Pydantic constraint or validator on AuthRegister.password.",
+    "Frontend Signup.jsx subtitle hard-coded — does not branch on trialParam, only on planFromPricing. Minor."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_trial_signup.py (NEW)"
+  ],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (4/4 CTA navigations + full signup flow)"},
+  "test_credentials": "Created dynamic users: trial_test_<ts>@example.com / password123 (trial), free_test_<ts>@example.com / password123 (no-trial), trial_ui_<ts>@example.com / password123 (UI flow). All use throwaway emails.",
+  "seed_data_creation": "Tests create 3 unique users per run (timestamp-suffixed). No cleanup performed — test users remain in DB. Recommend periodic cleanup of trial_test_*/free_test_*/trial_ui_* emails if running frequently.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file at /app/backend/tests/test_trial_signup.py covers register w/ & w/o trial, /auth/me, /user/usage, /export/csv 403 gating, and DB-driven expiry auto-downgrade. To re-run: `pytest /app/backend/tests/test_trial_signup.py -v`. Frontend testids: hero-trial-cta, final-trial-cta on /for-saas-founders; signup-email/password/confirm-password/agree-terms-checkbox/signup-submit-btn on /signup. All 4 landing CTAs lead to /signup?trial=starter_14.",
+  "rca of the issue": "No bug found — all functional acceptance criteria pass. Only minor copy/spec-alignment observations noted above."
+}

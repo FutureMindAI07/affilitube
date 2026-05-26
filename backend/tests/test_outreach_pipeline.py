@@ -12,7 +12,7 @@ import os
 import uuid
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://pipeline-info-cache.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://trial-saas-hub.preview.emergentagent.com')
 
 class TestOutreachPipelineAPIs:
     """Test outreach pipeline endpoints"""

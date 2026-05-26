@@ -16,7 +16,7 @@ from datetime import datetime
 import uuid
 
 class AffliTubePhase1Tester:
-    def __init__(self, base_url="https://pipeline-info-cache.preview.emergentagent.com"):
+    def __init__(self, base_url="https://trial-saas-hub.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.tests_run = 0

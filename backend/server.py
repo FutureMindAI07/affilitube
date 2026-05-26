@@ -649,6 +649,7 @@ def get_quota_reset_time():
 class AuthRegister(BaseModel):
     email: str
     password: str
+    trial: Optional[str] = None
 
 class AuthLogin(BaseModel):
     email: str
@@ -1378,12 +1379,18 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             try:
                 expiry_dt = datetime.fromisoformat(expires_at) if isinstance(expires_at, str) else expires_at
                 if datetime.now(timezone.utc) > expiry_dt:
+                    update_fields = {"tier": "free", "access_expired": True}
+                    if user.get("is_trial"):
+                        update_fields["trial_expired"] = True
+                        update_fields["is_trial"] = False
                     await db.users.update_one(
                         {"id": user_id},
-                        {"$set": {"tier": "free", "access_expired": True}, "$unset": {"access_expires_at": ""}}
+                        {"$set": update_fields, "$unset": {"access_expires_at": ""}}
                     )
                     user["tier"] = "free"
                     user["access_expired"] = True
+                    if user.get("is_trial"):
+                        user["trial_expired"] = True
             except Exception:
                 pass
         
@@ -1404,11 +1411,19 @@ async def register(data: AuthRegister):
         "email": data.email.lower(),
         "password_hash": pwd_context.hash(data.password),
         "role": "user",
-        "tier": "free",  # NEW: Default tier
+        "tier": "free",
         "monthly_search_count": 0,
         "search_count_reset_date": datetime.now(timezone.utc).strftime("%Y-%m"),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    
+    # Handle 14-day trial signup
+    if data.trial == "starter_14":
+        user["tier"] = "starter"
+        user["is_trial"] = True
+        user["trial_started_at"] = datetime.now(timezone.utc).isoformat()
+        user["access_expires_at"] = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
+    
     await db.users.insert_one(user)
     token = create_token(user_id, data.email.lower())
     return {
@@ -1417,8 +1432,9 @@ async def register(data: AuthRegister):
             "id": user_id, 
             "email": data.email.lower(), 
             "role": "user", 
-            "tier": "free",
-            "has_paid": False  # Keep for backwards compatibility
+            "tier": user["tier"],
+            "is_trial": user.get("is_trial", False),
+            "has_paid": False
         }
     }
 
@@ -1616,6 +1632,16 @@ async def get_user_usage(user=Depends(get_current_user)):
     search_limit_info = await check_search_limit(user)
     
     user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    
+    trial_days_remaining = None
+    if user.get("is_trial") and user.get("access_expires_at"):
+        try:
+            exp = datetime.fromisoformat(user["access_expires_at"]) if isinstance(user["access_expires_at"], str) else user["access_expires_at"]
+            remaining = (exp - datetime.now(timezone.utc)).days
+            trial_days_remaining = max(0, remaining)
+        except Exception:
+            pass
+    
     return {
         "tier": tier,
         "tier_name": tier_config["name"],
@@ -1623,7 +1649,7 @@ async def get_user_usage(user=Depends(get_current_user)):
         "searches_remaining": search_limit_info.get("searches_remaining"),
         "max_searches": search_limit_info.get("max_searches"),
         "max_results_per_search": tier_config["max_results_per_search"],
-        "csv_export": tier_config["csv_export"],
+        "csv_export": tier_config["csv_export"] and not user.get("is_trial", False),
         "saved_searches": tier_config["saved_searches"],
         "saved_reports": tier_config["saved_reports"],
         "pipeline_access": tier_config.get("pipeline_access", False),
@@ -1633,6 +1659,9 @@ async def get_user_usage(user=Depends(get_current_user)):
         "has_outreach_config": bool(user_data.get("outreach_config", {}).get("product_name")) if user_data else False,
         "access_expired": user.get("access_expired", False),
         "search_warning": search_limit_info.get("warning"),
+        "is_trial": user.get("is_trial", False),
+        "trial_expired": user.get("trial_expired", False),
+        "trial_days_remaining": trial_days_remaining,
     }
 
 # Quota estimation endpoint
@@ -3358,6 +3387,9 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
     tier_config = get_tier_config(tier)
     if not tier_config["csv_export"]:
         return JSONResponse(status_code=403, content={"error": "upgrade_required", "message": "This feature requires a Starter or Pro plan", "upgrade_url": "/pricing"})
+    # Block trial users from export
+    if user.get("is_trial"):
+        return JSONResponse(status_code=403, content={"error": "upgrade_required", "message": "Export is not available during your trial. Upgrade to a paid plan to export your data.", "upgrade_url": "/pricing"})
     
     channels = await db.channels.find(
         {"channel_id": {"$in": channel_ids}, "user_id": user["id"]},
