@@ -319,7 +319,7 @@ export default function PartnerProgramLanding() {
             </div>
 
             <p className="mt-8 text-sm text-slate-600 max-w-3xl">
-              <span className="font-semibold text-slate-900">Example:</span> Refer just 10 Starter subscribers → <span className="font-semibold">$1,198/mo</span> in recurring commissions at 30%. Scale from there.
+              <span className="font-semibold text-slate-900">Example:</span> Refer just 100 Starter subscribers → <span className="font-semibold">$1,198/mo</span> in recurring commissions at 30%. Scale from there.
             </p>
           </div>
         </section>
