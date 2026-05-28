@@ -306,12 +306,18 @@ export default function Landing() {
                 Pro from $39/mo
               </span>
             </motion.div>
-            <motion.div variants={fadeUp} className="mt-6 flex justify-center items-center gap-4">
+            <motion.div variants={fadeUp} className="mt-6 flex justify-center items-center flex-wrap gap-4">
               <a href="https://startupfa.me/s/affilitube?utm_source=affilitube.com" target="_blank" rel="noopener noreferrer">
                 <img src="https://startupfa.me/badges/featured-badge.webp" alt="Affilitube - Featured on Startup Fame" width="171" height="54" />
               </a>
               <a href="https://twelve.tools" target="_blank" rel="noopener noreferrer">
                 <img src="https://twelve.tools/badge3-light.svg" alt="Featured on Twelve Tools" width="200" height="54" />
+              </a>
+              <a href="https://www.producthunt.com/products/affilitube-find-youtube-affiliates?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-affilitube" target="_blank" rel="noopener noreferrer">
+                <img alt="Affilitube - AI-powered YouTube influencer finder for affiliate marketing | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1146361&theme=neutral&t=1779971522525" />
+              </a>
+              <a href="https://peerpush.net/p/affilitube" target="_blank" rel="noopener noreferrer">
+                <img src="https://peerpush.net/p/affilitube/badge.png" alt="Affilitube on PeerPush" width="230" height="54" style={{ width: "230px" }} />
               </a>
             </motion.div>
           </motion.div>
