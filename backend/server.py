@@ -668,6 +668,11 @@ class BugReportInput(BaseModel):
     steps_to_reproduce: str = ""
     severity: str = "medium"
 
+class PartnerApplicationInput(BaseModel):
+    full_name: str
+    email: str
+    promotion_experience: str = ""
+
 class SearchFilters(BaseModel):
     keywords: List[str]
     exclude_keywords: List[str] = []
@@ -1607,6 +1612,69 @@ async def submit_bug_report(report: BugReportInput, user=Depends(get_current_use
     })
 
     return {"success": True, "message": "Bug report submitted. Thank you!"}
+
+# Partner program application endpoint
+PARTNER_PROGRAM_EMAIL = "adrian@affilitube.com"
+
+def send_partner_application_email(full_name: str, email: str, experience: str):
+    smtp_host = os.environ.get("SMTP_HOST")
+    smtp_port = int(os.environ.get("SMTP_PORT", 587))
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_pass = os.environ.get("SMTP_PASS")
+
+    msg = MIMEMultipart()
+    msg["From"] = smtp_user
+    msg["To"] = PARTNER_PROGRAM_EMAIL
+    msg["Reply-To"] = email
+    msg["Subject"] = f"[Partner Program] New application from {full_name}"
+
+    body = f"""New AffiliTube Partner Program Application
+
+Name: {full_name}
+Email: {email}
+Submitted: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}
+
+--- Promotion experience / about ---
+{experience if experience.strip() else 'Not provided'}
+"""
+    msg.attach(MIMEText(body, "plain"))
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+
+@api_router.post("/partner-program/apply")
+async def submit_partner_application(application: PartnerApplicationInput):
+    """Submit a Partner Program application. Emails the application to the program inbox."""
+    name = (application.full_name or "").strip()
+    email = (application.email or "").strip().lower()
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Full name is required")
+    if not email or not EMAIL_PATTERN.fullmatch(email):
+        raise HTTPException(status_code=400, detail="A valid email address is required")
+
+    try:
+        send_partner_application_email(
+            full_name=name,
+            email=email,
+            experience=application.promotion_experience or "",
+        )
+    except Exception as e:
+        logger.error(f"Failed to send partner application email: {e}")
+        raise HTTPException(status_code=500, detail="Could not submit your application. Please try again.")
+
+    # Persist a copy for reference
+    await db.partner_applications.insert_one({
+        "id": str(uuid.uuid4()),
+        "full_name": name,
+        "email": email,
+        "promotion_experience": application.promotion_experience or "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"success": True, "message": "Application received. We'll be in touch within 1–2 business days."}
 
 # Niche endpoints
 @api_router.get("/niches")
