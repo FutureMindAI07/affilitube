@@ -346,8 +346,13 @@ export default function Pricing() {
 
       {/* Footer */}
       <footer className="py-8 border-t border-slate-100">
-        <div className="max-w-7xl mx-auto px-6 text-center text-sm text-slate-500">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-500">
           <p>&copy; {new Date().getFullYear()} Affilitube. All rights reserved.</p>
+          <div className="flex items-center gap-6">
+            <a href="/terms" className="hover:text-slate-700 transition-colors">Terms</a>
+            <a href="/privacy" className="hover:text-slate-700 transition-colors">Privacy</a>
+            <a href="/affilitube-affiliate-program" className="hover:text-slate-700 transition-colors">Partner Program</a>
+          </div>
         </div>
       </footer>
     </div>

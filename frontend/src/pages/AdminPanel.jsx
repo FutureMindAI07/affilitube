@@ -47,6 +47,7 @@ import {
   Sparkles,
   UserPlus,
   CalendarClock,
+  Handshake,
 } from "lucide-react";
 
 const API = `${import.meta.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_BACKEND_URL}/api`;
@@ -80,6 +81,7 @@ export default function AdminPanel() {
   const [quota, setQuota] = useState(null);
   const [searchActivity, setSearchActivity] = useState([]);
   const [revenue, setRevenue] = useState(null);
+  const [partnerApplications, setPartnerApplications] = useState([]);
   
   // Dialog states
   const [editingUser, setEditingUser] = useState(null);
@@ -103,6 +105,7 @@ export default function AdminPanel() {
     else if (activeTab === "quota") loadQuota();
     else if (activeTab === "activity") loadActivity();
     else if (activeTab === "revenue") loadRevenue();
+    else if (activeTab === "partner-applications") loadPartnerApplications();
   }, [activeTab, usersPage, userSearch, userTierFilter]);
 
   const loadOverview = async () => {
@@ -175,6 +178,29 @@ export default function AdminPanel() {
       toast.error("Failed to load revenue data");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPartnerApplications = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/admin/partner-applications");
+      setPartnerApplications(res.data.applications || []);
+    } catch (e) {
+      toast.error("Failed to load partner applications");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deletePartnerApplication = async (id) => {
+    if (!window.confirm("Delete this partner application? The applicant won't be notified.")) return;
+    try {
+      await api.delete(`/admin/partner-applications/${id}`);
+      toast.success("Application deleted");
+      setPartnerApplications((prev) => prev.filter((a) => a.id !== id));
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to delete application");
     }
   };
 
@@ -356,6 +382,7 @@ export default function AdminPanel() {
             { id: "quota", label: "API Quota", icon: Gauge },
             { id: "activity", label: "Search Activity", icon: Activity },
             { id: "revenue", label: "Revenue", icon: DollarSign },
+            { id: "partner-applications", label: "Partner Apps", icon: Handshake },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -928,6 +955,94 @@ export default function AdminPanel() {
                     </TableBody>
                   </Table>
                 </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Partner Applications Tab */}
+        {activeTab === "partner-applications" && (
+          <div className="space-y-6">
+            <Card className="bg-white">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle>Partner Program Applications</CardTitle>
+                    <CardDescription>
+                      Inbound applications from{" "}
+                      <a href="/affilitube-affiliate-program" className="text-indigo-600 hover:underline" target="_blank" rel="noreferrer">/affilitube-affiliate-program</a>
+                      . Sorted newest first.
+                    </CardDescription>
+                  </div>
+                  <Button variant="outline" onClick={loadPartnerApplications} className="gap-2" data-testid="partner-apps-refresh">
+                    <RefreshCw className="h-4 w-4" />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {partnerApplications.length === 0 && !loading ? (
+                  <div className="text-center py-12 text-sm text-slate-500" data-testid="partner-apps-empty">
+                    No applications yet.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto" data-testid="partner-apps-table">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="whitespace-nowrap">Received</TableHead>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>About / Experience</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {partnerApplications.map((a) => (
+                          <TableRow key={a.id} data-testid={`partner-app-row-${a.id}`}>
+                            <TableCell className="text-xs text-slate-500 whitespace-nowrap align-top pt-3">
+                              {a.created_at ? new Date(a.created_at).toLocaleString() : "—"}
+                            </TableCell>
+                            <TableCell className="font-medium align-top pt-3">{a.full_name}</TableCell>
+                            <TableCell className="align-top pt-3">
+                              <a href={`mailto:${a.email}`} className="text-indigo-600 hover:underline text-sm">
+                                {a.email}
+                              </a>
+                            </TableCell>
+                            <TableCell className="text-sm text-slate-600 align-top pt-3 max-w-xl">
+                              <p className="whitespace-pre-wrap leading-relaxed">
+                                {a.promotion_experience?.trim() || <span className="italic text-slate-400">Not provided</span>}
+                              </p>
+                            </TableCell>
+                            <TableCell className="text-right align-top pt-2">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => window.location.href = `mailto:${a.email}?subject=Re:%20AffiliTube%20Partner%20Program%20Application`}
+                                  className="h-8 gap-1.5"
+                                  data-testid={`partner-app-reply-${a.id}`}
+                                >
+                                  <Mail className="h-3.5 w-3.5" />
+                                  Reply
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => deletePartnerApplication(a.id)}
+                                  className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  data-testid={`partner-app-delete-${a.id}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

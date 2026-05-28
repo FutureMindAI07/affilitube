@@ -279,6 +279,7 @@ export default function FreeLanding() {
           <div className="flex items-center gap-6 text-sm text-slate-400">
             <Link to="/privacy" className="hover:text-slate-600 transition-colors">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-slate-600 transition-colors">Terms of Service</Link>
+            <Link to="/affilitube-affiliate-program" className="hover:text-slate-600 transition-colors">Partner Program</Link>
           </div>
           <p className="text-xs text-slate-400">&copy; {new Date().getFullYear()} Affilitube</p>
         </div>

@@ -3986,6 +3986,25 @@ async def admin_revenue(admin=Depends(get_admin_user)):
         "recent_transactions": transactions,
     }
 
+@api_router.get("/admin/partner-applications")
+async def admin_partner_applications(
+    limit: int = Query(default=200, le=1000),
+    admin=Depends(get_admin_user),
+):
+    """List Partner Program applications (newest first)."""
+    apps = await db.partner_applications.find(
+        {}, {"_id": 0}
+    ).sort("created_at", -1).limit(limit).to_list(limit)
+    return {"applications": apps, "total": len(apps)}
+
+@api_router.delete("/admin/partner-applications/{application_id}")
+async def admin_delete_partner_application(application_id: str, admin=Depends(get_admin_user)):
+    """Delete a Partner Program application."""
+    res = await db.partner_applications.delete_one({"id": application_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return {"success": True}
+
 # ==================== STRIPE CHECKOUT ====================
 
 import stripe as stripe_sdk

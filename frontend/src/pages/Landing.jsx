@@ -546,6 +546,7 @@ export default function Landing() {
             <div className="flex items-center gap-6">
               <a href="/terms" className="hover:text-white transition-colors">Terms</a>
               <a href="/privacy" className="hover:text-white transition-colors">Privacy</a>
+              <a href="/affilitube-affiliate-program" className="hover:text-white transition-colors">Partner Program</a>
               <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
             </div>
             <p>&copy; {new Date().getFullYear()} Affilitube. All rights reserved.</p>

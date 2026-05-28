@@ -478,6 +478,7 @@ export default function AffiliatesLanding() {
             <a href="/terms" className="hover:text-slate-300 transition-colors">Terms</a>
             <a href="/privacy" className="hover:text-slate-300 transition-colors">Privacy</a>
             <a href="/pricing" className="hover:text-slate-300 transition-colors">Pricing</a>
+            <a href="/affilitube-affiliate-program" className="hover:text-slate-300 transition-colors">Partner Program</a>
             <a href="/login" className="hover:text-slate-300 transition-colors">Login</a>
           </div>
         </div>
