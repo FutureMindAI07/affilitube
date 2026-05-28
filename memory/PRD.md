@@ -67,6 +67,7 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - Migrate react-helmet → react-helmet-async (P3, removes StrictMode warning)
 
 ## Completed (Feb 26, 2026)
+- **Partner Program Auto-Reply**: When someone submits the Partner Program form, the backend now sends a best-effort auto-reply to the applicant from `Adrian at AffiliTube` (Reply-To: `adrian@affilitube.com`), confirming receipt, setting the 1–2 business-day expectation, summarising commission terms (30% → 40%, 90-day cookie), and inviting them to reply with anything they want Adrian to look at before the personal reply lands. Failures don't block the submission.
 - **Partner Program Discoverability**: Added "Partner Program" footer link to Landing, Pricing, SaaS Founders, Affiliates, and Free landing pages so warm visitors discover `/affilitube-affiliate-program` organically.
 - **Admin: Partner Applications Tab**: New "Partner Apps" tab in `/admin` (icon: Handshake) backed by `GET /api/admin/partner-applications` (and `DELETE /api/admin/partner-applications/{id}`). Lists every inbound application from the public form with name, email (mailto), submitted-at, full experience text, "Reply" (opens prefilled mailto draft), and Delete. Sorted newest first. Limit 200 per page.
 

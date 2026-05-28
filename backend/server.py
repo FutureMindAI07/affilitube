@@ -1644,6 +1644,48 @@ Submitted: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}
         server.login(smtp_user, smtp_pass)
         server.send_message(msg)
 
+def send_partner_application_autoreply(full_name: str, email: str):
+    """Send an auto-reply to the applicant confirming receipt of their application."""
+    smtp_host = os.environ.get("SMTP_HOST")
+    smtp_port = int(os.environ.get("SMTP_PORT", 587))
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_pass = os.environ.get("SMTP_PASS")
+
+    first_name = full_name.strip().split()[0] if full_name.strip() else "there"
+
+    msg = MIMEMultipart()
+    msg["From"] = f"Adrian at AffiliTube <{smtp_user}>"
+    msg["To"] = email
+    msg["Reply-To"] = PARTNER_PROGRAM_EMAIL
+    msg["Subject"] = "Your AffiliTube Partner Program application — we've got it"
+
+    body = f"""Hi {first_name},
+
+Thanks for applying to the AffiliTube Partner Program — your application is in front of me now.
+
+I read every application personally, so you'll hear back from me directly (not a templated reply) within 1–2 business days. If we're a good fit, I'll send over your tracking link, access to the creative library, and anything else you need to start promoting.
+
+A couple of things worth knowing while you wait:
+
+  • Commissions start at 30% recurring on every Starter ($39.99/mo) and Pro ($79/mo) subscription you refer, and unlock to 40% lifetime for star partners after 12 months.
+  • Cookie window is 90 days, so even slow-to-convert audiences still earn you commission.
+  • If you're newer to affiliate marketing, that's completely fine — we help with positioning, keyword angles, and custom assets when it'll move the needle for your audience.
+
+If anything has changed since you applied (a new project, a new angle, a piece of content you'd like me to look at), just hit reply — this address routes straight to me.
+
+Talk soon,
+
+Adrian
+Founder, AffiliTube
+https://affilitube.com
+"""
+    msg.attach(MIMEText(body, "plain"))
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+
 @api_router.post("/partner-program/apply")
 async def submit_partner_application(application: PartnerApplicationInput):
     """Submit a Partner Program application. Emails the application to the program inbox."""
@@ -1664,6 +1706,12 @@ async def submit_partner_application(application: PartnerApplicationInput):
     except Exception as e:
         logger.error(f"Failed to send partner application email: {e}")
         raise HTTPException(status_code=500, detail="Could not submit your application. Please try again.")
+
+    # Best-effort auto-reply to the applicant — never block the request
+    try:
+        send_partner_application_autoreply(full_name=name, email=email)
+    except Exception as e:
+        logger.error(f"Failed to send partner application auto-reply to {email}: {e}")
 
     # Persist a copy for reference
     await db.partner_applications.insert_one({
