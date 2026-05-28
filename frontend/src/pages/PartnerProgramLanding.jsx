@@ -16,7 +16,7 @@ import {
   Shield,
   TrendingUp,
   Cookie,
-  PoundSterling,
+  DollarSign,
   RefreshCw,
   Sparkles,
   Award,
@@ -199,8 +199,8 @@ export default function PartnerProgramLanding() {
                 ))}
               </ul>
 
-              {/* Right: Mock UI card */}
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/60 shadow-2xl shadow-indigo-100 overflow-hidden">
+              {/* Right: Real dashboard screenshot */}
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-indigo-100 overflow-hidden">
                 <div className="flex items-center gap-1.5 px-4 py-3 bg-slate-100 border-b border-slate-200">
                   <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
@@ -209,37 +209,12 @@ export default function PartnerProgramLanding() {
                     affilitube.com/dashboard
                   </div>
                 </div>
-                <div className="p-5 bg-white">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Search Results</p>
-                      <p className="text-sm font-semibold text-slate-900">"saas tools" · 124 channels</p>
-                    </div>
-                    <Badge className="bg-indigo-50 text-indigo-700 border-indigo-100 rounded-full">Sorted by Score</Badge>
-                  </div>
-                  <div className="divide-y divide-slate-100">
-                    {[
-                      { name: "Bootstrapped Bytes", subs: "248K subs", score: "A+", tone: "bg-emerald-100 text-emerald-700" },
-                      { name: "The SaaS Studio", subs: "187K subs", score: "A", tone: "bg-indigo-100 text-indigo-700" },
-                      { name: "Indie Hacker Daily", subs: "92K subs", score: "A", tone: "bg-indigo-100 text-indigo-700" },
-                      { name: "Tools & Templates", subs: "54K subs", score: "B+", tone: "bg-amber-100 text-amber-700" },
-                      { name: "Founder Tuesdays", subs: "31K subs", score: "B+", tone: "bg-amber-100 text-amber-700" },
-                    ].map((row) => (
-                      <div key={row.name} className="flex items-center justify-between py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center text-xs font-semibold text-indigo-700">
-                            {row.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-slate-900">{row.name}</p>
-                            <p className="text-[11px] text-slate-500">{row.subs}</p>
-                          </div>
-                        </div>
-                        <Badge className={`${row.tone} border-0 rounded-md font-mono font-bold`}>{row.score}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <img
+                  src="/images/dashboard-screenshot.jpeg"
+                  alt="AffiliTube search results dashboard showing YouTube channels scored for affiliate potential"
+                  className="w-full h-auto block"
+                  loading="lazy"
+                />
               </div>
             </div>
           </div>
@@ -308,7 +283,7 @@ export default function PartnerProgramLanding() {
                     "Recurring commission every month the customer stays",
                     "Applies to Starter ($39.99/mo) and Pro ($79/mo)",
                     "90-day cookie window — long lead times still convert",
-                    "Minimum payout just £50",
+                    "Minimum payout just $50",
                   ].map((b) => (
                     <li key={b} className="flex items-start gap-2.5 text-sm text-slate-700">
                       <CheckCircle2 className="h-4 w-4 text-indigo-500 mt-0.5 shrink-0" />
@@ -344,7 +319,7 @@ export default function PartnerProgramLanding() {
             </div>
 
             <p className="mt-8 text-sm text-slate-600 max-w-3xl">
-              <span className="font-semibold text-slate-900">Example:</span> Refer just 10 Starter subscribers → <span className="font-semibold">£1,198/mo</span> in recurring commissions at 30%. Scale from there.
+              <span className="font-semibold text-slate-900">Example:</span> Refer just 10 Starter subscribers → <span className="font-semibold">$1,198/mo</span> in recurring commissions at 30%. Scale from there.
             </p>
           </div>
         </section>
@@ -365,7 +340,7 @@ export default function PartnerProgramLanding() {
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
               {[
                 { icon: Cookie, title: "90-Day Cookie Window", desc: "Visitors who click your link have 90 days to convert. Even slow-consideration buyers earn you commission." },
-                { icon: PoundSterling, title: "£50 Minimum Payout", desc: "Low threshold means you get paid faster. No waiting until you've accumulated hundreds in earnings." },
+                { icon: DollarSign, title: "$50 Minimum Payout", desc: "Low threshold means you get paid faster. No waiting until you've accumulated hundreds in earnings." },
                 { icon: Shield, title: "Secure Platform", desc: "All tracking and payments run through a secure, dedicated affiliate platform with real-time dashboards." },
                 { icon: RefreshCw, title: "Recurring Commissions", desc: "Earn every month your referrals stay subscribed. One good referral pays you again and again." },
               ].map((c) => (
