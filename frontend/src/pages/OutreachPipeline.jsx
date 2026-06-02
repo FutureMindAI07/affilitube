@@ -578,7 +578,7 @@ export default function OutreachPipeline() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
-                    {Object.entries(STATUS_CONFIG).filter(([key]) => key !== "not_contacted").map(([key, config]) => (
+                    {Object.entries(STATUS_CONFIG).map(([key, config]) => (
                       <SelectItem key={key} value={key}>{config.label}</SelectItem>
                     ))}
                   </SelectContent>
