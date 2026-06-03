@@ -386,7 +386,11 @@ export default function OutreachPipeline() {
     .filter(ch => {
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        if (!ch.channel_name?.toLowerCase().includes(query) && !ch.business_email?.toLowerCase().includes(query)) return false;
+        const matchesChannel = ch.channel_name?.toLowerCase().includes(query);
+        const matchesEmail = ch.business_email?.toLowerCase().includes(query);
+        const matchesNotes = Array.isArray(ch.contact_log)
+          && ch.contact_log.some(entry => entry?.note?.toLowerCase().includes(query));
+        if (!matchesChannel && !matchesEmail && !matchesNotes) return false;
       }
       if (minScore && (ch.affiliate_score || 0) < parseInt(minScore)) return false;
       return true;
@@ -564,7 +568,7 @@ export default function OutreachPipeline() {
             <div className="flex flex-wrap gap-4 items-end">
               <div className="flex-1 min-w-[200px]">
                 <Input
-                  placeholder="Search by channel name or email..."
+                  placeholder="Search by channel name, email or notes..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full"
