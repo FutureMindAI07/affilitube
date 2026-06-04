@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { flagEmoji, countryName } from "@/lib/countries";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -168,7 +169,16 @@ export function ChannelDetailSheet({
             </a>
           </SheetTitle>
           <SheetDescription>
-            {channel.subscriber_count?.toLocaleString()} subscribers
+            <span className="inline-flex items-center gap-2">
+              <span>{channel.subscriber_count?.toLocaleString()} subscribers</span>
+              {channel.country && (
+                <span className="inline-flex items-center gap-1 text-slate-500" title={countryName(channel.country)}>
+                  <span>•</span>
+                  <span className="leading-none">{flagEmoji(channel.country)}</span>
+                  <span>{countryName(channel.country)}</span>
+                </span>
+              )}
+            </span>
           </SheetDescription>
         </SheetHeader>
 

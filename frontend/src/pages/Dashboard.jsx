@@ -45,6 +45,8 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import TrialBanner from "@/components/TrialBanner";
+import CountryFilter from "@/components/CountryFilter";
+import { flagEmoji, countryName } from "@/lib/countries";
 import {
   Card,
   CardContent,
@@ -272,6 +274,13 @@ export default function Dashboard() {
   const [superSearch, setSuperSearch] = useState(false);
   const [competitorBrands, setCompetitorBrands] = useState([]);
   const [competitorInput, setCompetitorInput] = useState("");
+
+  // Geography filter (search-time)
+  const [targetCountries, setTargetCountries] = useState([]); // ISO codes
+  const [includeUnknownCountry, setIncludeUnknownCountry] = useState(true);
+  // Geography filter (post-search results filter — independent from search-time selection)
+  const [resultsCountries, setResultsCountries] = useState([]);
+  const [resultsIncludeUnknown, setResultsIncludeUnknown] = useState(true);
 
   const [quotaEstimate, setQuotaEstimate] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -1050,6 +1059,7 @@ export default function Dashboard() {
   };
 
   // Sorting and filtering
+  const resultsCountrySet = new Set(resultsCountries.map((c) => c.toUpperCase()));
   const sortedChannels = [...channels]
     .map(computeHealthIndicators)
     .filter((ch) => ch.score_total >= filterMinScore)
@@ -1058,6 +1068,12 @@ export default function Dashboard() {
     .filter((ch) => filterOutreachStatus === "all" || (ch.outreach_status || "not_contacted") === filterOutreachStatus)
     .filter((ch) => filterEngagementHealth === "all" || (ch.engagement_health || "") === filterEngagementHealth)
     .filter((ch) => !hidePipelineChannels || !pipelineChannelIds.has(ch.channel_id))
+    .filter((ch) => {
+      if (resultsCountries.length === 0) return true;
+      const code = (ch.country || "").toUpperCase();
+      if (!code) return resultsIncludeUnknown;
+      return resultsCountrySet.has(code);
+    })
     .sort((a, b) => {
       const aVal = a[sortBy] || 0;
       const bVal = b[sortBy] || 0;
@@ -1068,7 +1084,7 @@ export default function Dashboard() {
   const paginatedChannels = sortedChannels.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Reset to page 1 when filters/sort change
-  useEffect(() => { setCurrentPage(1); }, [filterMinScore, filterHighAffiliate, filterHasPlatformLinks, filterOutreachStatus, filterEngagementHealth, sortBy, sortOrder, channels]);
+  useEffect(() => { setCurrentPage(1); }, [filterMinScore, filterHighAffiliate, filterHasPlatformLinks, filterOutreachStatus, filterEngagementHealth, resultsCountries, resultsIncludeUnknown, sortBy, sortOrder, channels]);
 
   const getScoreClass = (score) => {
     if (score >= 60) return "score-high";
@@ -1803,6 +1819,25 @@ export default function Dashboard() {
                   />
                 </div>
 
+                <Separator />
+
+                {/* Country / Region targeting */}
+                <div className="space-y-2">
+                  <div>
+                    <Label className="text-sm">Country / Region</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Limit results to creators in specific countries. Country is self-declared on YouTube, so many channels won't have one set.
+                    </p>
+                  </div>
+                  <CountryFilter
+                    value={targetCountries}
+                    onChange={setTargetCountries}
+                    includeUnknown={includeUnknownCountry}
+                    onIncludeUnknownChange={setIncludeUnknownCountry}
+                    testId="search-country-filter"
+                  />
+                </div>
+
                 {/* Super Search (Admin Only) */}
                 {user?.role === "admin" && (
                   <>
@@ -2172,6 +2207,16 @@ export default function Dashboard() {
                 />
               </div>
               <Separator orientation="vertical" className="h-6" />
+              {/* Country filter */}
+              <CountryFilter
+                value={resultsCountries}
+                onChange={setResultsCountries}
+                includeUnknown={resultsIncludeUnknown}
+                onIncludeUnknownChange={setResultsIncludeUnknown}
+                compact
+                testId="results-country-filter"
+              />
+              <Separator orientation="vertical" className="h-6" />
               {/* High Affiliate Potential Filter */}
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -2382,6 +2427,15 @@ export default function Dashboard() {
                                 <span className="text-xs text-muted-foreground truncate max-w-[140px]">
                                   {channel.keywords_found_by?.join(", ")}
                                 </span>
+                                {channel.country && (
+                                  <span
+                                    className="inline-flex items-center gap-0.5 text-[10px] text-slate-500"
+                                    title={countryName(channel.country)}
+                                  >
+                                    <span className="text-xs leading-none">{flagEmoji(channel.country)}</span>
+                                    <span className="font-mono">{channel.country}</span>
+                                  </span>
+                                )}
                                 {channel.tools_section_detected && (
                                   <span className="inline-flex items-center px-1.5 py-0 rounded text-[9px] font-semibold bg-orange-100 text-orange-700 border border-orange-200 whitespace-nowrap">
                                     Likely Affiliate

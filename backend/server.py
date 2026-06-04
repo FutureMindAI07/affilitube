@@ -702,6 +702,8 @@ class EnrichRequest(BaseModel):
     hide_pipeline_channels: bool = False
     super_search: bool = False
     competitor_brands: List[str] = []
+    target_countries: List[str] = []  # ISO 3166-1 alpha-2 codes, empty = no filter
+    include_unknown_country: bool = True  # When target_countries is set, also include channels with no declared country
 
 # ===== MASTER AFFILIATE LINK PATTERNS (single source of truth) =====
 # Used by BOTH detect_sponsorships() AND detect_affiliate_platform_links()
@@ -883,6 +885,9 @@ class ChannelData(BaseModel):
     engagement_health: str = ""  # Healthy, Average, Low, Very Low
     engagement_rate: Optional[float] = None
     growth_indicator: str = ""  # Growing, Stable, Declining
+    # Geography (from YouTube snippet.country — self-declared, often missing)
+    country: str = ""  # ISO 3166-1 alpha-2 code, "" if undeclared
+    country_name: str = ""  # Human-readable name for display
 
 class ShortlistItem(BaseModel):
     channel_id: str
@@ -925,6 +930,49 @@ class SearchReport(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 # ==================== YOUTUBE SERVICE ====================
+
+# Minimal ISO 3166-1 alpha-2 → country name map for display purposes.
+# Anything not listed falls back to the raw 2-letter code on the frontend.
+COUNTRY_CODE_TO_NAME = {
+    "US": "United States", "GB": "United Kingdom", "CA": "Canada", "AU": "Australia",
+    "NZ": "New Zealand", "IE": "Ireland", "ZA": "South Africa", "IN": "India",
+    "PK": "Pakistan", "PH": "Philippines", "SG": "Singapore", "MY": "Malaysia",
+    "HK": "Hong Kong", "JP": "Japan", "KR": "South Korea", "CN": "China",
+    "TW": "Taiwan", "TH": "Thailand", "VN": "Vietnam", "ID": "Indonesia",
+    "AE": "United Arab Emirates", "SA": "Saudi Arabia", "IL": "Israel", "TR": "Turkey",
+    "EG": "Egypt", "NG": "Nigeria", "KE": "Kenya", "GH": "Ghana", "MA": "Morocco",
+    "BR": "Brazil", "MX": "Mexico", "AR": "Argentina", "CL": "Chile", "CO": "Colombia",
+    "PE": "Peru", "VE": "Venezuela", "UY": "Uruguay", "EC": "Ecuador",
+    "DE": "Germany", "FR": "France", "ES": "Spain", "IT": "Italy", "PT": "Portugal",
+    "NL": "Netherlands", "BE": "Belgium", "LU": "Luxembourg", "CH": "Switzerland", "AT": "Austria",
+    "SE": "Sweden", "NO": "Norway", "DK": "Denmark", "FI": "Finland", "IS": "Iceland",
+    "PL": "Poland", "CZ": "Czechia", "SK": "Slovakia", "HU": "Hungary", "RO": "Romania",
+    "BG": "Bulgaria", "GR": "Greece", "HR": "Croatia", "SI": "Slovenia", "RS": "Serbia",
+    "UA": "Ukraine", "RU": "Russia", "BY": "Belarus", "EE": "Estonia", "LV": "Latvia",
+    "LT": "Lithuania", "MT": "Malta", "CY": "Cyprus",
+}
+
+def country_name_for(code: str) -> str:
+    if not code:
+        return ""
+    return COUNTRY_CODE_TO_NAME.get(code.upper(), code.upper())
+
+def filter_channels_by_country(channels, target_countries, include_unknown):
+    """Filter a list of enriched channel dicts by ISO country codes.
+    Empty target_countries = no filter. include_unknown keeps channels with no country declared."""
+    if not target_countries:
+        return channels
+    targets = {c.upper() for c in target_countries if c}
+    out = []
+    for ch in channels:
+        ch_country = (ch.get("country") or "").upper()
+        if not ch_country:
+            if include_unknown:
+                out.append(ch)
+            continue
+        if ch_country in targets:
+            out.append(ch)
+    return out
 
 def get_youtube_service(user=None):
     """Get YouTube service — uses admin API key for admin users, default key for everyone else"""
@@ -2126,6 +2174,7 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
     
     if not channel_ids:
         enriched_channels.sort(key=lambda x: x.get("score_total", 0), reverse=True)
+        enriched_channels = filter_channels_by_country(enriched_channels, req.target_countries, req.include_unknown_country)
         return {"channels": enriched_channels, "total": len(enriched_channels), "cached": len(cached_channels)}
     
     videos_to_fetch = min(videos_to_scan, 20)  # Cap at 20
@@ -2332,6 +2381,10 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     # Get metadata
                     meta = channel_metadata.get(ch_id, {})
                     
+                    # Geography (YouTube self-declared)
+                    ch_country = (snippet.get("country") or "").upper()
+                    ch_country_name = country_name_for(ch_country)
+                    
                     channel_data = ChannelData(
                         channel_id=ch_id,
                         channel_name=snippet.get("title", ""),
@@ -2386,7 +2439,10 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                         upload_avg_days=upload_avg_days,
                         engagement_health=engagement_health,
                         engagement_rate=engagement_rate,
-                        growth_indicator=growth_indicator
+                        growth_indicator=growth_indicator,
+                        # Geography
+                        country=ch_country,
+                        country_name=ch_country_name
                     )
                     
                     enriched_channels.append(channel_data.model_dump())
@@ -2590,6 +2646,7 @@ Grade definitions:
             logger.info(f"Super Search: Final result — {len(super_channels)} qualified channels")
             enriched_channels = super_channels
         
+        enriched_channels = filter_channels_by_country(enriched_channels, req.target_countries, req.include_unknown_country)
         return {"channels": enriched_channels, "total": len(enriched_channels), "cached": len(cached_channels)}
     
     except HTTPException:
@@ -3536,7 +3593,9 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
         # Tool Stack Detection
         "tools_section_detected", "tools_stack_signal_score",
         # Channel Health Indicators
-        "upload_consistency", "upload_avg_days", "engagement_health", "engagement_rate", "growth_indicator"
+        "upload_consistency", "upload_avg_days", "engagement_health", "engagement_rate", "growth_indicator",
+        # Geography
+        "country", "country_name"
     ]
     
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -3597,7 +3656,10 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
             "upload_avg_days": ch.get("upload_avg_days", ""),
             "engagement_health": ch.get("engagement_health", ""),
             "engagement_rate": ch.get("engagement_rate", ""),
-            "growth_indicator": ch.get("growth_indicator", "")
+            "growth_indicator": ch.get("growth_indicator", ""),
+            # Geography
+            "country": ch.get("country", ""),
+            "country_name": ch.get("country_name", "")
         }
         writer.writerow(row)
     

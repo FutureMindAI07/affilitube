@@ -54,6 +54,8 @@ import {
 } from "lucide-react";
 import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
 import TrialBanner from "@/components/TrialBanner";
+import CountryFilter from "@/components/CountryFilter";
+import { flagEmoji, countryName } from "@/lib/countries";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -88,6 +90,10 @@ export default function OutreachPipeline() {
   // Project filter
   const [projects, setProjects] = useState([]);
   const [projectFilter, setProjectFilter] = useState("all");
+
+  // Country filter (post-load)
+  const [pipelineCountries, setPipelineCountries] = useState([]);
+  const [pipelineIncludeUnknown, setPipelineIncludeUnknown] = useState(true);
   
   // Inline project editing
   const [editingProjectId, setEditingProjectId] = useState(null);
@@ -382,6 +388,7 @@ export default function OutreachPipeline() {
     }
   };
 
+  const pipelineCountrySet = new Set(pipelineCountries.map((c) => c.toUpperCase()));
   const filteredChannels = channels
     .filter(ch => {
       if (searchQuery) {
@@ -393,6 +400,14 @@ export default function OutreachPipeline() {
         if (!matchesChannel && !matchesEmail && !matchesNotes) return false;
       }
       if (minScore && (ch.affiliate_score || 0) < parseInt(minScore)) return false;
+      if (pipelineCountries.length > 0) {
+        const code = (ch.country || "").toUpperCase();
+        if (!code) {
+          if (!pipelineIncludeUnknown) return false;
+        } else if (!pipelineCountrySet.has(code)) {
+          return false;
+        }
+      }
       return true;
     })
     .sort((a, b) => {
@@ -625,6 +640,16 @@ export default function OutreachPipeline() {
                   data-testid="pipeline-min-score-filter"
                 />
               </div>
+              <div className="w-56">
+                <label className="text-xs text-slate-500 mb-1 block">Country / Region</label>
+                <CountryFilter
+                  value={pipelineCountries}
+                  onChange={setPipelineCountries}
+                  includeUnknown={pipelineIncludeUnknown}
+                  onIncludeUnknownChange={setPipelineIncludeUnknown}
+                  testId="pipeline-country-filter"
+                />
+              </div>
               <div className="w-48">
                 <label className="text-xs text-slate-500 mb-1 block">Sort by</label>
                 <Select value={sortBy} onValueChange={setSortBy}>
@@ -715,6 +740,15 @@ export default function OutreachPipeline() {
                         <div className="flex items-center gap-4 text-xs text-slate-500">
                           <span>{channel.subscriber_count?.toLocaleString()} subscribers</span>
                           <span>Affiliate Score: {channel.affiliate_score || 0}</span>
+                          {channel.country && (
+                            <span
+                              className="inline-flex items-center gap-1"
+                              title={countryName(channel.country)}
+                            >
+                              <span className="text-sm leading-none">{flagEmoji(channel.country)}</span>
+                              <span>{countryName(channel.country)}</span>
+                            </span>
+                          )}
                           {channel.business_email && (
                             <span className="text-indigo-600">{channel.business_email}</span>
                           )}
