@@ -702,6 +702,7 @@ class EnrichRequest(BaseModel):
     hide_pipeline_channels: bool = False
     super_search: bool = False
     competitor_brands: List[str] = []
+    strict_mode: bool = False  # Super Search: require proven affiliate activity (current legacy hard filters)
     target_countries: List[str] = []  # ISO 3166-1 alpha-2 codes, empty = no filter
     include_unknown_country: bool = True  # When target_countries is set, also include channels with no declared country
 
@@ -2587,65 +2588,68 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                 is_sponsored = sp.get("is_sponsored_active", False)
                 vids_with_sp = sp.get("videos_with_sponsorships", [])
                 
-                # Step 4: Hard filter — affiliate activity required
-                if aff_link_count == 0 and not is_sponsored:
-                    drops.append({
-                        "channel_id": ch_id,
-                        "channel_name": ch_name,
-                        "reason": "super_no_affiliate",
-                        "stage": "super_search",
-                        "detail": "no affiliate links or sponsored activity detected",
-                    })
-                    logger.info(f"Super Search: Filtered out {ch_name} — no affiliate activity")
-                    continue
-                
-                # Step 5: Hard filter — minimum 3 affiliate links
-                if aff_link_count < 3:
-                    drops.append({
-                        "channel_id": ch_id,
-                        "channel_name": ch_name,
-                        "reason": "super_too_few_links",
-                        "stage": "super_search",
-                        "detail": f"affiliate_link_count = {aff_link_count} (min 3)",
-                    })
-                    logger.info(f"Super Search: Filtered out {ch_name} — only {aff_link_count} affiliate links")
-                    continue
-                
-                # Step 6: Hard filter — recency of affiliate activity (90 days)
-                has_recent_sponsored = False
-                cutoff_90 = datetime.now(timezone.utc) - timedelta(days=90)
-                for sv in vids_with_sp:
-                    pub = sv.get("published_at", "")
-                    if pub:
-                        try:
-                            pub_dt = datetime.fromisoformat(pub.replace("Z", "+00:00"))
-                            if pub_dt > cutoff_90:
-                                has_recent_sponsored = True
-                                break
-                        except Exception:
-                            pass
-                if not has_recent_sponsored:
-                    drops.append({
-                        "channel_id": ch_id,
-                        "channel_name": ch_name,
-                        "reason": "super_no_recent_affiliate",
-                        "stage": "super_search",
-                        "detail": "no sponsored video in the last 90 days",
-                    })
-                    logger.info(f"Super Search: Filtered out {ch_name} — no recent affiliate activity")
-                    continue
-                
-                # Step 7: Hard filter — sponsored video ratio (3+ of last 10)
-                if len(vids_with_sp) < 3:
-                    drops.append({
-                        "channel_id": ch_id,
-                        "channel_name": ch_name,
-                        "reason": "super_too_few_sponsored_videos",
-                        "stage": "super_search",
-                        "detail": f"{len(vids_with_sp)}/{sp.get('videos_analyzed', 10)} videos sponsored (min 3)",
-                    })
-                    logger.info(f"Super Search: Filtered out {ch_name} — only {len(vids_with_sp)}/{sp.get('videos_analyzed', 10)} sponsored videos")
-                    continue
+                # Strict mode (legacy behaviour): require proven affiliate activity before AI grading.
+                # When OFF (default), every channel proceeds to AI grading — the AI does the filtering.
+                if req.strict_mode:
+                    # Step 4: Hard filter — affiliate activity required
+                    if aff_link_count == 0 and not is_sponsored:
+                        drops.append({
+                            "channel_id": ch_id,
+                            "channel_name": ch_name,
+                            "reason": "super_no_affiliate",
+                            "stage": "super_search",
+                            "detail": "strict mode: no affiliate links or sponsored activity detected",
+                        })
+                        logger.info(f"Super Search (strict): Filtered out {ch_name} — no affiliate activity")
+                        continue
+                    
+                    # Step 5: Hard filter — minimum 3 affiliate links
+                    if aff_link_count < 3:
+                        drops.append({
+                            "channel_id": ch_id,
+                            "channel_name": ch_name,
+                            "reason": "super_too_few_links",
+                            "stage": "super_search",
+                            "detail": f"strict mode: affiliate_link_count = {aff_link_count} (min 3)",
+                        })
+                        logger.info(f"Super Search (strict): Filtered out {ch_name} — only {aff_link_count} affiliate links")
+                        continue
+                    
+                    # Step 6: Hard filter — recency of affiliate activity (90 days)
+                    has_recent_sponsored = False
+                    cutoff_90 = datetime.now(timezone.utc) - timedelta(days=90)
+                    for sv in vids_with_sp:
+                        pub = sv.get("published_at", "")
+                        if pub:
+                            try:
+                                pub_dt = datetime.fromisoformat(pub.replace("Z", "+00:00"))
+                                if pub_dt > cutoff_90:
+                                    has_recent_sponsored = True
+                                    break
+                            except Exception:
+                                pass
+                    if not has_recent_sponsored:
+                        drops.append({
+                            "channel_id": ch_id,
+                            "channel_name": ch_name,
+                            "reason": "super_no_recent_affiliate",
+                            "stage": "super_search",
+                            "detail": "strict mode: no sponsored video in the last 90 days",
+                        })
+                        logger.info(f"Super Search (strict): Filtered out {ch_name} — no recent affiliate activity")
+                        continue
+                    
+                    # Step 7: Hard filter — sponsored video ratio (3+ of last 10)
+                    if len(vids_with_sp) < 3:
+                        drops.append({
+                            "channel_id": ch_id,
+                            "channel_name": ch_name,
+                            "reason": "super_too_few_sponsored_videos",
+                            "stage": "super_search",
+                            "detail": f"strict mode: {len(vids_with_sp)}/{sp.get('videos_analyzed', 10)} videos sponsored (min 3)",
+                        })
+                        logger.info(f"Super Search (strict): Filtered out {ch_name} — only {len(vids_with_sp)}/{sp.get('videos_analyzed', 10)} sponsored videos")
+                        continue
                 
                 # Compute super search display fields
                 ch["sponsored_video_ratio"] = f"{len(vids_with_sp)}/{sp.get('videos_analyzed', 10)}"
@@ -2668,7 +2672,7 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                 
                 super_channels.append(ch)
             
-            logger.info(f"Super Search: {len(super_channels)} channels passed hard filters (from {len(enriched_channels)})")
+            logger.info(f"Super Search: {len(super_channels)} channels reached AI grading stage (from {len(enriched_channels)} enriched, strict_mode={req.strict_mode})")
             
             # Step 8: AI Prospect Assessment (OpenAI GPT-4o)
             openai_key = os.environ.get("OPENAI_API_KEY")
@@ -2676,35 +2680,57 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                 from openai import OpenAI
                 ai_client = OpenAI(api_key=openai_key)
                 
-                ss_system_prompt = """You are a prospect quality assessor for an influencer affiliate marketing platform. You will be given enriched data about a YouTube channel. Assess the channel strictly against the following criteria and return a JSON object only — no preamble, no markdown, no code fences.
+                ss_system_prompt = """You are a prospect quality assessor for a B2B SaaS affiliate discovery platform.
+You will be given enriched data about a YouTube channel. Your job is to assess
+whether this channel's AUDIENCE would be a good fit for a B2B SaaS affiliate
+programme — not whether the creator has already run affiliate campaigns.
 
-Criteria:
-- Affiliate links are present and have been posted within the last 90 days
-- The channel is active — has posted at least once in the last 60 days
-- Content is relevant to the niche described
-- The channel communicates professionally and appears commercially aware
+Return a JSON object only — no preamble, no markdown, no code fences.
+
+Primary criterion (most important):
+- Audience fit: Are the viewers likely to be SaaS founders, operators, marketers,
+  or business tool buyers? A channel teaching SaaS founders is more valuable than
+  a channel with many affiliate links but a consumer audience.
+
+Secondary criteria:
+- Channel is active (posted within 60 days)
 - Content is primarily in English
-- Sponsorship activity is consistent, not a one-off
+- Creator appears commercially aware (professional tone, product-focused content)
+- Some affiliate or sponsorship history is a positive signal but NOT required
 
-Return this exact JSON structure:
-{"grade":"A | B | C | Reject","reason":"One sentence explaining the grade","niche_relevant_affiliate_links":true|false,"active_within_60_days":true|false,"consistent_sponsorship":true|false}
+Red flags (bias toward Reject if multiple present):
+- Channel name doesn't match YouTube handle (possible broker/operator)
+- Primary contact is a link shortener domain (e.g. ytranker.org, linktree fronting a rate card)
+- Content is consumer-facing (make money online, dropshipping, Amazon FBA, faceless channels)
+- Creator is selling their own course or coaching as primary business model
+- Very high video volume from a recently created channel (content farm signal)
 
 Grade definitions:
-- A — Meets all criteria, strong prospect
-- B — Meets most criteria, worth considering
-- C — Meets minimum criteria but has notable weaknesses
-- Reject — Fails one or more hard criteria"""
+- A — Strong audience fit, active, commercially aware. Prioritise for outreach.
+- B — Good audience fit or strong affiliate history. Worth contacting.
+- C — Partial fit or notable weakness. Low priority.
+- Reject — Wrong audience, red flags present, or inactive.
+
+Return this exact JSON structure:
+{"grade":"A|B|C|Reject","reason":"One sentence explaining the grade",
+"audience_fit":true|false,
+"active_within_60_days":true|false,
+"red_flags_present":true|false}"""
                 
                 graded_channels = []
                 for ch in super_channels:
                     try:
                         ch_payload = {
                             "channel_name": ch.get("channel_name", ""),
+                            "channel_handle": ch.get("custom_url", "") or ch.get("channel_url", ""),
                             "description": (ch.get("description", "") or "")[:500],
                             "subscriber_count": ch.get("subscriber_count", 0),
+                            "video_count": ch.get("video_count", 0),
                             "avg_views_recent": ch.get("avg_views_recent", 0),
                             "days_since_upload": ch.get("days_since_upload"),
                             "upload_consistency": ch.get("upload_consistency", ""),
+                            "country": ch.get("country", ""),
+                            "public_links": ch.get("public_links", {}),
                             "affiliate_signals": ch.get("affiliate_signals", []),
                             "affiliate_platforms_found": ch.get("affiliate_platforms_found", []),
                             "affiliate_link_count": ch.get("sponsorship_data", {}).get("affiliate_link_count", 0),
@@ -2724,18 +2750,9 @@ Grade definitions:
                         )
                         raw = completion.choices[0].message.content.strip()
                         assessment = json.loads(raw)
-                        
-                        if assessment.get("grade") == "Reject":
-                            drops.append({
-                                "channel_id": ch.get("channel_id", ""),
-                                "channel_name": ch.get("channel_name", ""),
-                                "reason": "super_ai_reject",
-                                "stage": "super_search",
-                                "detail": assessment.get("reason", "GPT-4o graded Reject"),
-                            })
-                            logger.info(f"Super Search: AI rejected {ch.get('channel_name')} — {assessment.get('reason', '')}")
-                            continue
                         ch["ai_assessment"] = assessment
+                        # Note: We no longer drop Rejects on the backend. They're returned
+                        # so the frontend can hide them by default and offer a "Show rejected (X)" toggle.
                     except Exception as e:
                         logger.warning(f"Super Search: AI assessment failed for {ch.get('channel_name')}: {e}")
                         ch["ai_assessment"] = {"grade": "Ungraded", "reason": "AI assessment unavailable"}

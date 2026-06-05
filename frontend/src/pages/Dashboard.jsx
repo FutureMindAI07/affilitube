@@ -273,8 +273,11 @@ export default function Dashboard() {
 
   // Super Search (admin only)
   const [superSearch, setSuperSearch] = useState(false);
+  const [strictMode, setStrictMode] = useState(false);
   const [competitorBrands, setCompetitorBrands] = useState([]);
   const [competitorInput, setCompetitorInput] = useState("");
+  // Super Search results: hide Reject-graded channels by default
+  const [showRejected, setShowRejected] = useState(false);
 
   // Geography filter (search-time)
   const [targetCountries, setTargetCountries] = useState([]); // ISO codes
@@ -762,6 +765,7 @@ export default function Dashboard() {
         hide_pipeline_channels: hidePipelineChannels,
         super_search: superSearch && user?.role === "admin",
         competitor_brands: superSearch && user?.role === "admin" ? competitorBrands : [],
+        strict_mode: superSearch && strictMode,
         target_countries: targetCountries,
         include_unknown_country: includeUnknownCountry,
       });
@@ -771,6 +775,13 @@ export default function Dashboard() {
       setChannels(enrichRes.data.channels);
       // Combine pre-enrichment drops (from /search) with enrichment drops
       setDropLog((prev) => [...prev, ...(enrichRes.data.drops || [])]);
+      // When Super Search returns grades, default to sorting by AI grade
+      const anyGrade = (enrichRes.data.channels || []).some((c) => c?.ai_assessment?.grade);
+      if (anyGrade) {
+        setSortBy("ai_grade");
+        setSortOrder("desc");
+        setShowRejected(false);
+      }
       toast.success(`Enriched ${enrichRes.data.total} channels with scores`);
       
       // Auto-save results for persistence
@@ -1070,6 +1081,13 @@ export default function Dashboard() {
 
   // Sorting and filtering
   const resultsCountrySet = new Set(resultsCountries.map((c) => c.toUpperCase()));
+  // AI grade sort weight: A > B > C > Ungraded > Reject
+  const GRADE_RANK = { A: 4, B: 3, C: 2, Ungraded: 1, Reject: 0 };
+  const gradeRank = (ch) => GRADE_RANK[ch?.ai_assessment?.grade] ?? 1;
+
+  // Detect whether any channel has an AI grade — used to decide if Reject hiding applies
+  const hasAnyAIGrade = channels.some((ch) => ch?.ai_assessment?.grade);
+
   const sortedChannels = [...channels]
     .map(computeHealthIndicators)
     .filter((ch) => ch.score_total >= filterMinScore)
@@ -1084,17 +1102,28 @@ export default function Dashboard() {
       if (!code) return resultsIncludeUnknown;
       return resultsCountrySet.has(code);
     })
+    // Hide AI-rejected channels by default (only when grades exist)
+    .filter((ch) => showRejected || ch?.ai_assessment?.grade !== "Reject")
     .sort((a, b) => {
+      if (sortBy === "ai_grade") {
+        const diff = gradeRank(b) - gradeRank(a);
+        if (diff !== 0) return sortOrder === "desc" ? diff : -diff;
+        // Tiebreaker: total score, always desc
+        return (b.score_total || 0) - (a.score_total || 0);
+      }
       const aVal = a[sortBy] || 0;
       const bVal = b[sortBy] || 0;
       return sortOrder === "desc" ? bVal - aVal : aVal - bVal;
     });
 
+  // Count Reject-graded channels so we can label the toggle
+  const rejectedCount = channels.filter((ch) => ch?.ai_assessment?.grade === "Reject").length;
+
   const totalPages = Math.ceil(sortedChannels.length / pageSize);
   const paginatedChannels = sortedChannels.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Reset to page 1 when filters/sort change
-  useEffect(() => { setCurrentPage(1); }, [filterMinScore, filterHighAffiliate, filterHasPlatformLinks, filterOutreachStatus, filterEngagementHealth, resultsCountries, resultsIncludeUnknown, sortBy, sortOrder, channels]);
+  useEffect(() => { setCurrentPage(1); }, [filterMinScore, filterHighAffiliate, filterHasPlatformLinks, filterOutreachStatus, filterEngagementHealth, resultsCountries, resultsIncludeUnknown, sortBy, sortOrder, showRejected, channels]);
 
   const getScoreClass = (score) => {
     if (score >= 60) return "score-high";
@@ -1858,7 +1887,7 @@ export default function Dashboard() {
                           <Shield className="h-4 w-4 text-amber-600" />
                           <div>
                             <Label className="text-sm font-semibold text-amber-900">Super Search</Label>
-                            <p className="text-xs text-amber-700">Force Brand Intelligence + hard filters + AI grading on every result</p>
+                            <p className="text-xs text-amber-700">Run GPT-4o grading on every channel that passes standard filters — A/B grades surface to the top</p>
                           </div>
                         </div>
                         <Switch
@@ -1868,19 +1897,34 @@ export default function Dashboard() {
                         />
                       </div>
                       {superSearch && (
-                        <div>
-                          <Label className="text-xs text-amber-800 mb-1 block">Competitor Brands (comma-separated)</Label>
-                          <div className="flex gap-2">
-                            <Input
-                              value={competitorInput}
-                              onChange={(e) => setCompetitorInput(e.target.value)}
-                              placeholder="e.g. NordVPN, Surfshark, ExpressVPN"
-                              className="h-8 text-xs flex-1 bg-white"
-                              data-testid="competitor-brands-input"
+                        <>
+                          <div className="rounded-md bg-white/70 border border-amber-200 p-3 flex items-start justify-between gap-3">
+                            <div>
+                              <Label className="text-xs font-semibold text-amber-900">Strict mode (require proven affiliate activity)</Label>
+                              <p className="text-[11px] text-amber-700/80 mt-0.5">
+                                When ON, apply the legacy hard filters before AI grading: ≥3 affiliate links, recent affiliate activity (90d), and 3+ sponsored videos in the last 10. Default OFF — let the AI judge.
+                              </p>
+                            </div>
+                            <Switch
+                              checked={strictMode}
+                              onCheckedChange={setStrictMode}
+                              data-testid="strict-mode-switch"
                             />
-                            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={saveCompetitorBrands}>Save</Button>
                           </div>
-                        </div>
+                          <div>
+                            <Label className="text-xs text-amber-800 mb-1 block">Competitor Brands (comma-separated)</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                value={competitorInput}
+                                onChange={(e) => setCompetitorInput(e.target.value)}
+                                placeholder="e.g. NordVPN, Surfshark, ExpressVPN"
+                                className="h-8 text-xs flex-1 bg-white"
+                                data-testid="competitor-brands-input"
+                              />
+                              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={saveCompetitorBrands}>Save</Button>
+                            </div>
+                          </div>
+                        </>
                       )}
                     </div>
                   </>
@@ -2230,6 +2274,23 @@ export default function Dashboard() {
                 testId="results-country-filter"
               />
               <Separator orientation="vertical" className="h-6" />
+              {/* Show Rejected (AI grade) toggle — admin + Super Search only */}
+              {hasAnyAIGrade && rejectedCount > 0 && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="show-rejected"
+                      checked={showRejected}
+                      onCheckedChange={setShowRejected}
+                      data-testid="show-rejected-checkbox"
+                    />
+                    <Label htmlFor="show-rejected" className="text-sm cursor-pointer">
+                      Show rejected ({rejectedCount})
+                    </Label>
+                  </div>
+                  <Separator orientation="vertical" className="h-6" />
+                </>
+              )}
               {/* High Affiliate Potential Filter */}
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -2306,6 +2367,12 @@ export default function Dashboard() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="ai_grade">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                        AI Grade (Super Search)
+                      </span>
+                    </SelectItem>
                     <SelectItem value="score_total">Total Score</SelectItem>
                     <SelectItem value="affiliate_score">
                       <span className="flex items-center gap-1.5">
@@ -2414,6 +2481,20 @@ export default function Dashboard() {
                           <TableCell>
                             <div className="flex flex-col">
                               <div className="flex items-center gap-1.5">
+                                {channel.ai_assessment?.grade && (
+                                  <Badge
+                                    className={`font-mono font-bold text-[10px] px-1.5 py-0 ${
+                                      channel.ai_assessment.grade === "A" ? "bg-emerald-500 text-white border-0"
+                                      : channel.ai_assessment.grade === "B" ? "bg-indigo-500 text-white border-0"
+                                      : channel.ai_assessment.grade === "C" ? "bg-amber-400 text-amber-950 border-0"
+                                      : channel.ai_assessment.grade === "Reject" ? "bg-red-100 text-red-700 border border-red-200"
+                                      : "bg-slate-100 text-slate-600 border border-slate-200"
+                                    }`}
+                                    title={channel.ai_assessment.reason || channel.ai_assessment.grade}
+                                  >
+                                    {channel.ai_assessment.grade === "Ungraded" ? "—" : channel.ai_assessment.grade}
+                                  </Badge>
+                                )}
                                 <span className="font-medium truncate max-w-[180px]">
                                   {channel.channel_name}
                                 </span>
