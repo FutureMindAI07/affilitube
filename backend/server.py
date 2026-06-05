@@ -2688,9 +2688,12 @@ programme — not whether the creator has already run affiliate campaigns.
 Return a JSON object only — no preamble, no markdown, no code fences.
 
 Primary criterion (most important):
-- Audience fit: Are the viewers likely to be SaaS founders, operators, marketers,
-  or business tool buyers? A channel teaching SaaS founders is more valuable than
-  a channel with many affiliate links but a consumer audience.
+- Audience fit (PRIMARY criterion): Are the viewers likely to be SaaS founders,
+  software buyers, digital marketers, or online business operators who purchase
+  and evaluate software tools?
+  DOES NOT qualify: trades/home service businesses, local service businesses,
+  ecommerce sellers (unless they're evaluating SaaS tools specifically),
+  brick-and-mortar operators, or general "business" audiences who don't buy software.
 
 Secondary criteria:
 - Channel is active (posted within 60 days)
@@ -2704,6 +2707,10 @@ Red flags (bias toward Reject if multiple present):
 - Content is consumer-facing (make money online, dropshipping, Amazon FBA, faceless channels)
 - Creator is selling their own course or coaching as primary business model
 - Very high video volume from a recently created channel (content farm signal)
+- Channel appears to be a brand/company publishing content to promote their own product
+  (look for: channel name matches a known software product, description reads as corporate
+  marketing, videos are product demos/case studies/customer stories rather than
+  independent reviews)
 
 Grade definitions:
 - A — Strong audience fit, active, commercially aware. Prioritise for outreach.
