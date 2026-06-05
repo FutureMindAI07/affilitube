@@ -46,6 +46,7 @@ import { Skeleton } from "@/components/ui/skeleton";import { ScrollArea } from "
 import { Separator } from "@/components/ui/separator";
 import TrialBanner from "@/components/TrialBanner";
 import CountryFilter from "@/components/CountryFilter";
+import DropLogPanel from "@/components/DropLogPanel";
 import { flagEmoji, countryName } from "@/lib/countries";
 import {
   Card,
@@ -281,6 +282,9 @@ export default function Dashboard() {
   // Geography filter (post-search results filter — independent from search-time selection)
   const [resultsCountries, setResultsCountries] = useState([]);
   const [resultsIncludeUnknown, setResultsIncludeUnknown] = useState(true);
+
+  // Drop log — combined from /search and /channels/enrich responses
+  const [dropLog, setDropLog] = useState([]);
 
   const [quotaEstimate, setQuotaEstimate] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -693,6 +697,7 @@ export default function Dashboard() {
     setSearchStatus("Searching YouTube...");
     setChannels([]);
     setRawSearchResults(null);
+    setDropLog([]);
 
     try {
       const searchRes = await api.post("/search", {
@@ -708,6 +713,7 @@ export default function Dashboard() {
 
       setSearchProgress(100);
       setRawSearchResults(searchRes.data);
+      setDropLog(searchRes.data.drops || []);
       
       // Show different message for free tier result limiting
       const limitMessage = searchRes.data.total_before_limit > searchRes.data.total_found 
@@ -756,11 +762,15 @@ export default function Dashboard() {
         hide_pipeline_channels: hidePipelineChannels,
         super_search: superSearch && user?.role === "admin",
         competitor_brands: superSearch && user?.role === "admin" ? competitorBrands : [],
+        target_countries: targetCountries,
+        include_unknown_country: includeUnknownCountry,
       });
 
       setEnrichProgress(100);
       setEnrichStatus(`Complete! ${enrichRes.data.total} channels processed.`);
       setChannels(enrichRes.data.channels);
+      // Combine pre-enrichment drops (from /search) with enrichment drops
+      setDropLog((prev) => [...prev, ...(enrichRes.data.drops || [])]);
       toast.success(`Enriched ${enrichRes.data.total} channels with scores`);
       
       // Auto-save results for persistence
@@ -2184,6 +2194,9 @@ export default function Dashboard() {
                 </div>
               </div>
             </CardHeader>
+
+            {/* Drop Log (admin only) */}
+            {user?.role === "admin" && <DropLogPanel drops={dropLog} />}
 
             {/* Filter Bar */}
             <div className="filter-bar">

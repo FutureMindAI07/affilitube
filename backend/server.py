@@ -957,9 +957,10 @@ def country_name_for(code: str) -> str:
         return ""
     return COUNTRY_CODE_TO_NAME.get(code.upper(), code.upper())
 
-def filter_channels_by_country(channels, target_countries, include_unknown):
+def filter_channels_by_country(channels, target_countries, include_unknown, drops=None):
     """Filter a list of enriched channel dicts by ISO country codes.
-    Empty target_countries = no filter. include_unknown keeps channels with no country declared."""
+    Empty target_countries = no filter. include_unknown keeps channels with no country declared.
+    If `drops` is provided, dropped channels are appended to it for diagnostic logging."""
     if not target_countries:
         return channels
     targets = {c.upper() for c in target_countries if c}
@@ -969,9 +970,25 @@ def filter_channels_by_country(channels, target_countries, include_unknown):
         if not ch_country:
             if include_unknown:
                 out.append(ch)
+            elif drops is not None:
+                drops.append({
+                    "channel_id": ch.get("channel_id", ""),
+                    "channel_name": ch.get("channel_name", ""),
+                    "reason": "country_filter",
+                    "stage": "post_enrichment",
+                    "detail": "no country declared (excluded by include_unknown=false)",
+                })
             continue
         if ch_country in targets:
             out.append(ch)
+        elif drops is not None:
+            drops.append({
+                "channel_id": ch.get("channel_id", ""),
+                "channel_name": ch.get("channel_name", ""),
+                "reason": "country_filter",
+                "stage": "post_enrichment",
+                "detail": f"channel country = {ch_country}",
+            })
     return out
 
 def get_youtube_service(user=None):
@@ -2013,13 +2030,27 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
         tier_config = get_tier_config(tier)
         channel_ids = list(channels_map.keys())
         
+        # Track drops for diagnostic panel (admin only on the frontend)
+        drops = []
+
         # Remove user-excluded channels
         excluded = await db.excluded_channels.find(
             {"user_id": user["id"]}, {"_id": 0, "channel_id": 1}
         ).to_list(length=10000)
         excluded_ids = {e["channel_id"] for e in excluded}
         if excluded_ids:
-            channel_ids = [cid for cid in channel_ids if cid not in excluded_ids]
+            kept = []
+            for cid in channel_ids:
+                if cid in excluded_ids:
+                    drops.append({
+                        "channel_id": cid,
+                        "channel_name": channels_map[cid].get("title", ""),
+                        "reason": "excluded_list",
+                        "stage": "pre_enrichment",
+                    })
+                else:
+                    kept.append(cid)
+            channel_ids = kept
         
         # Filter by exclude keywords (match against channel title from search snippets)
         if filters.exclude_keywords:
@@ -2028,12 +2059,31 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
                 filtered_ids = []
                 for ch_id in channel_ids:
                     ch_title = channels_map[ch_id].get("title", "").lower()
-                    if not any(ek in ch_title for ek in exclude_lower):
+                    matched = next((ek for ek in exclude_lower if ek in ch_title), None)
+                    if matched:
+                        drops.append({
+                            "channel_id": ch_id,
+                            "channel_name": channels_map[ch_id].get("title", ""),
+                            "reason": "exclude_keyword",
+                            "stage": "pre_enrichment",
+                            "detail": f"matched '{matched}'",
+                        })
+                    else:
                         filtered_ids.append(ch_id)
                 channel_ids = filtered_ids
         
         if tier_config["max_results_per_search"] is not None:
-            channel_ids = channel_ids[:tier_config["max_results_per_search"]]
+            limit = tier_config["max_results_per_search"]
+            if len(channel_ids) > limit:
+                for cid in channel_ids[limit:]:
+                    drops.append({
+                        "channel_id": cid,
+                        "channel_name": channels_map[cid].get("title", ""),
+                        "reason": "tier_max_results_cap",
+                        "stage": "pre_enrichment",
+                        "detail": f"tier cap = {limit}",
+                    })
+                channel_ids = channel_ids[:limit]
         
         # Determine search source for each channel
         channel_metadata = {}
@@ -2070,7 +2120,8 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
             "channel_metadata": channel_metadata,
             "total_found": len(channel_ids),
             "total_before_limit": len(channels_map),
-            "niche": filters.niche
+            "niche": filters.niche,
+            "drops": drops,
         }
     
     except HTTPException:
@@ -2172,10 +2223,13 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
     enriched_channels = list(cached_channels)
     channel_ids = uncached_ids  # Only fetch uncached channels
     
+    # Drop log — every channel rejected at any filter stage gets recorded here
+    drops = []
+    
     if not channel_ids:
         enriched_channels.sort(key=lambda x: x.get("score_total", 0), reverse=True)
-        enriched_channels = filter_channels_by_country(enriched_channels, req.target_countries, req.include_unknown_country)
-        return {"channels": enriched_channels, "total": len(enriched_channels), "cached": len(cached_channels)}
+        enriched_channels = filter_channels_by_country(enriched_channels, req.target_countries, req.include_unknown_country, drops)
+        return {"channels": enriched_channels, "total": len(enriched_channels), "cached": len(cached_channels), "drops": drops}
     
     videos_to_fetch = min(videos_to_scan, 20)  # Cap at 20
     
@@ -2206,6 +2260,13 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     
                     # Filter by subscriber range (unless hidden)
                     if not hidden_subs and (sub_count < min_subscribers or sub_count > max_subscribers):
+                        drops.append({
+                            "channel_id": ch_id,
+                            "channel_name": snippet.get("title", ""),
+                            "reason": "subscriber_range",
+                            "stage": "enrichment",
+                            "detail": f"subs = {sub_count:,} (range {min_subscribers:,}–{max_subscribers:,})",
+                        })
                         continue
                     
                     # Extract branding links
@@ -2287,11 +2348,25 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     # Upload recency filter: skip channels that haven't uploaded within the user's threshold
                     if req.uploaded_within_days and days_since_upload is not None:
                         if days_since_upload > req.uploaded_within_days:
+                            drops.append({
+                                "channel_id": ch_id,
+                                "channel_name": snippet.get("title", ""),
+                                "reason": "stale_upload",
+                                "stage": "enrichment",
+                                "detail": f"{days_since_upload}d since upload (threshold {req.uploaded_within_days}d)",
+                            })
                             logger.info(f"Skipping stale channel ({days_since_upload}d since upload): {snippet.get('title', ch_id)}")
                             continue
                     
                     # Language filter: skip non-English channels
                     if not is_likely_english(video_titles, snippet.get("title", "")):
+                        drops.append({
+                            "channel_id": ch_id,
+                            "channel_name": snippet.get("title", ""),
+                            "reason": "language_heuristic",
+                            "stage": "enrichment",
+                            "detail": "channel title / recent videos do not look English",
+                        })
                         logger.info(f"Skipping non-English channel: {snippet.get('title', ch_id)}")
                         continue
                     
@@ -2514,11 +2589,25 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                 
                 # Step 4: Hard filter — affiliate activity required
                 if aff_link_count == 0 and not is_sponsored:
+                    drops.append({
+                        "channel_id": ch_id,
+                        "channel_name": ch_name,
+                        "reason": "super_no_affiliate",
+                        "stage": "super_search",
+                        "detail": "no affiliate links or sponsored activity detected",
+                    })
                     logger.info(f"Super Search: Filtered out {ch_name} — no affiliate activity")
                     continue
                 
                 # Step 5: Hard filter — minimum 3 affiliate links
                 if aff_link_count < 3:
+                    drops.append({
+                        "channel_id": ch_id,
+                        "channel_name": ch_name,
+                        "reason": "super_too_few_links",
+                        "stage": "super_search",
+                        "detail": f"affiliate_link_count = {aff_link_count} (min 3)",
+                    })
                     logger.info(f"Super Search: Filtered out {ch_name} — only {aff_link_count} affiliate links")
                     continue
                 
@@ -2536,11 +2625,25 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                         except Exception:
                             pass
                 if not has_recent_sponsored:
+                    drops.append({
+                        "channel_id": ch_id,
+                        "channel_name": ch_name,
+                        "reason": "super_no_recent_affiliate",
+                        "stage": "super_search",
+                        "detail": "no sponsored video in the last 90 days",
+                    })
                     logger.info(f"Super Search: Filtered out {ch_name} — no recent affiliate activity")
                     continue
                 
                 # Step 7: Hard filter — sponsored video ratio (3+ of last 10)
                 if len(vids_with_sp) < 3:
+                    drops.append({
+                        "channel_id": ch_id,
+                        "channel_name": ch_name,
+                        "reason": "super_too_few_sponsored_videos",
+                        "stage": "super_search",
+                        "detail": f"{len(vids_with_sp)}/{sp.get('videos_analyzed', 10)} videos sponsored (min 3)",
+                    })
                     logger.info(f"Super Search: Filtered out {ch_name} — only {len(vids_with_sp)}/{sp.get('videos_analyzed', 10)} sponsored videos")
                     continue
                 
@@ -2623,6 +2726,13 @@ Grade definitions:
                         assessment = json.loads(raw)
                         
                         if assessment.get("grade") == "Reject":
+                            drops.append({
+                                "channel_id": ch.get("channel_id", ""),
+                                "channel_name": ch.get("channel_name", ""),
+                                "reason": "super_ai_reject",
+                                "stage": "super_search",
+                                "detail": assessment.get("reason", "GPT-4o graded Reject"),
+                            })
                             logger.info(f"Super Search: AI rejected {ch.get('channel_name')} — {assessment.get('reason', '')}")
                             continue
                         ch["ai_assessment"] = assessment
@@ -2646,8 +2756,8 @@ Grade definitions:
             logger.info(f"Super Search: Final result — {len(super_channels)} qualified channels")
             enriched_channels = super_channels
         
-        enriched_channels = filter_channels_by_country(enriched_channels, req.target_countries, req.include_unknown_country)
-        return {"channels": enriched_channels, "total": len(enriched_channels), "cached": len(cached_channels)}
+        enriched_channels = filter_channels_by_country(enriched_channels, req.target_countries, req.include_unknown_country, drops)
+        return {"channels": enriched_channels, "total": len(enriched_channels), "cached": len(cached_channels), "drops": drops}
     
     except HTTPException:
         raise
