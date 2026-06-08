@@ -4568,11 +4568,32 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def seed_admin():
+    # 1) One-time migration: rename legacy admin email admin@affilitube.com -> adrian@affilitube.com
+    #    (Original seed used a mailbox that wasn't actually owned. Adrian's real inbox is adrian@affilitube.com.)
+    legacy_admin = await db.users.find_one({"email": "admin@affilitube.com", "role": "admin"})
+    if legacy_admin:
+        existing_adrian = await db.users.find_one({"email": "adrian@affilitube.com"})
+        if existing_adrian:
+            logger.warning(
+                "Admin email migration skipped: a user with adrian@affilitube.com already exists. "
+                f"Legacy admin id={legacy_admin.get('id')} left in place."
+            )
+        else:
+            await db.users.update_one(
+                {"_id": legacy_admin["_id"]},
+                {"$set": {
+                    "email": "adrian@affilitube.com",
+                    "email_updated_at": datetime.now(timezone.utc).isoformat(),
+                }},
+            )
+            logger.info("Admin email migrated: admin@affilitube.com -> adrian@affilitube.com")
+
+    # 2) Seed a fresh admin only if no admin exists at all
     admin = await db.users.find_one({"role": "admin"})
     if not admin:
         admin_user = {
             "id": str(uuid.uuid4()),
-            "email": "admin@affilitube.com",
+            "email": "adrian@affilitube.com",
             "password_hash": pwd_context.hash("admin123!"),
             "role": "admin",
             "tier": "pro",  # Admin gets pro tier
@@ -4581,7 +4602,7 @@ async def seed_admin():
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(admin_user)
-        logger.info("Admin user seeded: admin@affilitube.com")
+        logger.info("Admin user seeded: adrian@affilitube.com")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

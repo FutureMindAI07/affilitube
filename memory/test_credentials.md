@@ -1,9 +1,10 @@
 # Affilitube Test Credentials
 
 ## Admin User
-- Email: admin@affilitube.com
-- Password: admin123!
+- Email: adrian@affilitube.com
+- Password: admin123! (preview only — production password unknown; use the password-reset flow on production)
 - Tier: pro
+- Legacy email admin@affilitube.com auto-migrates to adrian@affilitube.com on backend startup
 
 ## Free Test User
 - Email: freetest@test.com
