@@ -47,6 +47,7 @@ import { Separator } from "@/components/ui/separator";
 import TrialBanner from "@/components/TrialBanner";
 import CountryFilter from "@/components/CountryFilter";
 import DropLogPanel from "@/components/DropLogPanel";
+import SearchTemplatePicker from "@/components/SearchTemplatePicker";
 import { flagEmoji, countryName } from "@/lib/countries";
 import {
   Card,
@@ -289,6 +290,10 @@ export default function Dashboard() {
   // Drop log — combined from /search and /channels/enrich responses
   const [dropLog, setDropLog] = useState([]);
 
+  // Saved Search Templates (Step 1 picker)
+  const [showTemplatePicker, setShowTemplatePicker] = useState(true);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+
   const [quotaEstimate, setQuotaEstimate] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchProgress, setSearchProgress] = useState(0);
@@ -420,6 +425,46 @@ export default function Dashboard() {
     setSelectedNiche(niche);
     setKeywordPlaceholder(niche.placeholder_examples || DEFAULT_KEYWORD_PLACEHOLDER);
   };
+
+  // Pre-fill the search form from a Saved Search Template
+  const applyTemplate = (template) => {
+    if (!template) return;
+    // Resolve niche from loaded niches list (fallback to saas_software if not found)
+    const niche =
+      niches.find((n) => n.key === (template.niche || "saas_software")) ||
+      niches.find((n) => n.key === "saas_software") ||
+      niches[0];
+    if (niche) selectNiche(niche);
+    setKeywords((template.keywords || []).join("\n"));
+    setExcludeKeywords((template.exclude_keywords || []).join("\n"));
+    if (typeof template.min_subscribers === "number") setMinSubs(template.min_subscribers);
+    if (typeof template.max_subscribers === "number") setMaxSubs(template.max_subscribers);
+    if (typeof template.super_search === "boolean") setSuperSearch(template.super_search);
+    if (typeof template.strict_mode === "boolean") setStrictMode(template.strict_mode);
+    setSelectedTemplate(template);
+    setShowTemplatePicker(false);
+    // Scroll user to the keyword input after a tick so they land on the editable form
+    setTimeout(() => {
+      const el = document.querySelector('[data-testid="keywords-input"], textarea');
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+  };
+
+  // Skip the picker — user wants a blank custom search
+  const skipTemplatePicker = () => {
+    setShowTemplatePicker(false);
+    setSelectedTemplate(null);
+  };
+
+  // If the user is returning to the search page with existing state (keywords typed,
+  // results loaded, or a saved report being viewed), skip the template picker.
+  useEffect(() => {
+    if (keywords.trim() || channels.length > 0 || viewingReport) {
+      setShowTemplatePicker(false);
+    }
+    // Only run on first mount — after that, the user explicitly controls visibility
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadAffiliatePlatforms = async () => {
     try {
@@ -1533,6 +1578,57 @@ export default function Dashboard() {
                 <X className="h-3 w-3" />
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Saved Search Templates — Step 1 (only when no search has been run yet) */}
+        {showTemplatePicker && !viewingReport && (
+          <SearchTemplatePicker
+            onSelectTemplate={applyTemplate}
+            onSkip={skipTemplatePicker}
+          />
+        )}
+
+        {/* "Selected template" banner with Change template action */}
+        {!showTemplatePicker && selectedTemplate && !viewingReport && (
+          <div
+            className="rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50/60 to-purple-50/60 px-5 py-3 flex items-center justify-between gap-3"
+            data-testid="active-template-banner"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Sparkles className="h-4 w-4 text-indigo-500 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs text-slate-500">Template applied</p>
+                <p className="text-sm font-semibold text-slate-900 truncate">{selectedTemplate.name}</p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { setShowTemplatePicker(true); setSelectedTemplate(null); }}
+              className="rounded-full h-8 text-xs shrink-0"
+              data-testid="change-template-btn"
+            >
+              Change template
+            </Button>
+          </div>
+        )}
+
+        {/* "Pick a template" hint when picker is dismissed and no template selected */}
+        {!showTemplatePicker && !selectedTemplate && !viewingReport && channels.length === 0 && (
+          <div
+            className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 flex items-center justify-between gap-3"
+            data-testid="template-reopen-row"
+          >
+            <p className="text-xs text-slate-500">Want a head start? Pick a saved template to pre-fill the form.</p>
+            <button
+              type="button"
+              onClick={() => setShowTemplatePicker(true)}
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+              data-testid="template-reopen-btn"
+            >
+              Show templates
+            </button>
           </div>
         )}
 
