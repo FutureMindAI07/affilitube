@@ -808,8 +808,8 @@ export default function Dashboard() {
         affiliate_platforms: affiliatePlatforms,
         uploaded_within_days: uploadedWithin,
         hide_pipeline_channels: hidePipelineChannels,
-        super_search: superSearch && user?.role === "admin",
-        competitor_brands: superSearch && user?.role === "admin" ? competitorBrands : [],
+        super_search: superSearch,
+        competitor_brands: superSearch ? competitorBrands : [],
         strict_mode: superSearch && strictMode,
         target_countries: targetCountries,
         include_unknown_country: includeUnknownCountry,
@@ -828,6 +828,22 @@ export default function Dashboard() {
         setShowRejected(false);
       }
       toast.success(`Enriched ${enrichRes.data.total} channels with scores`);
+
+      // Super Search feedback toast + refresh user usage so credit balance updates in UI
+      const ss = enrichRes.data.super_search;
+      if (ss && ss.requested) {
+        if (ss.refunded) {
+          toast.error(`Super Search refunded — all AI grading attempts failed. Your 12 credits are back.`);
+        } else if (ss.credits_charged > 0) {
+          const cachedNote = ss.cached_grades_used > 0 ? `, ${ss.cached_grades_used} from cache (free)` : "";
+          const cappedNote = ss.soft_capped ? " · capped at 80 channels" : "";
+          toast.success(`Super Search used ${ss.credits_charged} credits — graded ${ss.graded_now} new channels${cachedNote}${cappedNote}`);
+        } else if (ss.cached_grades_used > 0 && ss.to_grade === 0) {
+          toast.success(`Super Search free — all ${ss.cached_grades_used} channels used cached grades`);
+        }
+        // Refresh user usage to pull new credit balance
+        try { loadUserUsage?.(); } catch (_) { /* ignore */ }
+      }
       
       // Auto-save results for persistence
       const meta = {
@@ -839,9 +855,16 @@ export default function Dashboard() {
       searchResults.setSearchMetadata(meta);
       autoSaveResults(enrichRes.data.channels, rawSearchResults, meta);
     } catch (e) {
-      const detail = e.response?.data?.detail || "Enrichment failed";
-      toast.error(detail);
-      setEnrichStatus(`Error: ${detail}`);
+      const detail = e.response?.data?.detail;
+      // Insufficient-credit error from Super Search backend
+      if (e.response?.status === 402 && typeof detail === "object" && detail?.error === "insufficient_credits") {
+        toast.error(detail.message || `Super Search needs 12 credits. You have ${detail.credits_available || 0}.`);
+        setEnrichStatus(`Insufficient credits for Super Search`);
+      } else {
+        const msg = typeof detail === "string" ? detail : (detail?.message || "Enrichment failed");
+        toast.error(msg);
+        setEnrichStatus(`Error: ${msg}`);
+      }
     } finally {
       setIsEnriching(false);
     }
@@ -1973,25 +1996,29 @@ export default function Dashboard() {
                   />
                 </div>
 
-                {/* Super Search (Admin Only) */}
-                {user?.role === "admin" && (
-                  <>
-                    <Separator />
-                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Shield className="h-4 w-4 text-amber-600" />
-                          <div>
-                            <Label className="text-sm font-semibold text-amber-900">Super Search</Label>
-                            <p className="text-xs text-amber-700">Run GPT-4o grading on every channel that passes standard filters — A/B grades surface to the top</p>
-                          </div>
+                {/* Super Search — available to all users, gated by 12-credit cost per run */}
+                <>
+                  <Separator />
+                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-amber-600" />
+                        <div>
+                          <Label className="text-sm font-semibold text-amber-900">Super Search</Label>
+                          <p className="text-xs text-amber-700">
+                            Run GPT-4o grading on every channel that passes standard filters — A/B grades surface to the top.
+                          </p>
+                          <p className="text-[11px] text-amber-700/80 mt-1">
+                            Costs <span className="font-semibold">12 credits per search</span>. Re-running the same search within 24h is free for previously-graded channels.
+                          </p>
                         </div>
-                        <Switch
-                          checked={superSearch}
-                          onCheckedChange={setSuperSearch}
-                          data-testid="super-search-switch"
-                        />
                       </div>
+                      <Switch
+                        checked={superSearch}
+                        onCheckedChange={setSuperSearch}
+                        data-testid="super-search-switch"
+                      />
+                    </div>
                       {superSearch && (
                         <>
                           <div className="rounded-md bg-white/70 border border-amber-200 p-3 flex items-start justify-between gap-3">
@@ -2024,7 +2051,6 @@ export default function Dashboard() {
                       )}
                     </div>
                   </>
-                )}
               </CollapsibleContent>
             </Collapsible>
 

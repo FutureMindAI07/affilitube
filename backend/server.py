@@ -2540,12 +2540,17 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
         # Sort by score
         enriched_channels.sort(key=lambda x: x.get("score_total", 0), reverse=True)
         
-        # ===== SUPER SEARCH PIPELINE (Admin only) =====
+        # ===== SUPER SEARCH PIPELINE =====
+        # Gated by 12 credit (`draft_credits`) deduction per run with auto-refund
+        # on total failure. Soft-capped at 80 channels sent to AI grading.
+        # Cached AI grades (from prior runs within the 24h channel cache window)
+        # are reused for free.
+        SUPER_SEARCH_CREDIT_COST = 12
+        SUPER_SEARCH_MAX_AI_CHANNELS = 80
+        super_search_meta = {"requested": False}
         if req.super_search:
-            if user.get("role") != "admin":
-                raise HTTPException(status_code=403, detail="Super Search is admin-only")
-            
-            logger.info(f"Super Search: Processing {len(enriched_channels)} channels through pipeline")
+            super_search_meta["requested"] = True
+            logger.info(f"Super Search: Processing {len(enriched_channels)} channels through pipeline (strict_mode={req.strict_mode})")
             super_channels = []
             
             for ch in enriched_channels:
@@ -2679,7 +2684,68 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
             if openai_key and super_channels:
                 from openai import OpenAI
                 ai_client = OpenAI(api_key=openai_key)
-                
+
+                # Split channels into "already graded recently" (free) vs "needs fresh grading" (paid).
+                # A channel keeps a usable cached grade as long as it's still in the 24h channel cache
+                # AND has an ai_assessment with a real grade (A/B/C/Reject — Ungraded is not usable).
+                channels_to_grade = []
+                channels_with_cached_grade = []
+                for c in super_channels:
+                    cached_grade = (c.get("ai_assessment") or {}).get("grade")
+                    if cached_grade in ("A", "B", "C", "Reject"):
+                        channels_with_cached_grade.append(c)
+                    else:
+                        channels_to_grade.append(c)
+
+                # Soft cap: never send more than 80 channels to GPT-4o per run.
+                # Cap applies to the to-grade list only; cached ones are free and always returned.
+                capped = False
+                if len(channels_to_grade) > SUPER_SEARCH_MAX_AI_CHANNELS:
+                    extras = channels_to_grade[SUPER_SEARCH_MAX_AI_CHANNELS:]
+                    channels_to_grade = channels_to_grade[:SUPER_SEARCH_MAX_AI_CHANNELS]
+                    capped = True
+                    for c in extras:
+                        c["ai_assessment"] = {"grade": "Ungraded", "reason": f"Soft cap of {SUPER_SEARCH_MAX_AI_CHANNELS} channels reached — re-run search to grade the rest."}
+                    # Extras still flow through to the final result; just not graded.
+
+                # Credit gate — only charge if there is at least one channel that needs fresh grading.
+                will_charge = len(channels_to_grade) > 0
+                user_doc = await db.users.find_one({"id": user["id"]}, {"_id": 0, "draft_credits": 1})
+                current_credits = (user_doc or {}).get("draft_credits", 0)
+
+                super_search_meta.update({
+                    "credits_required": SUPER_SEARCH_CREDIT_COST if will_charge else 0,
+                    "cached_grades_used": len(channels_with_cached_grade),
+                    "to_grade": len(channels_to_grade),
+                    "soft_capped": capped,
+                })
+
+                if will_charge:
+                    if current_credits < SUPER_SEARCH_CREDIT_COST:
+                        raise HTTPException(
+                            status_code=402,
+                            detail={
+                                "error": "insufficient_credits",
+                                "message": f"Super Search costs {SUPER_SEARCH_CREDIT_COST} credits. You have {current_credits}. Purchase more to continue.",
+                                "credits_required": SUPER_SEARCH_CREDIT_COST,
+                                "credits_available": current_credits,
+                            },
+                        )
+                    # Atomic deduction guarded by balance check (prevents race conditions)
+                    deduct_res = await db.users.update_one(
+                        {"id": user["id"], "draft_credits": {"$gte": SUPER_SEARCH_CREDIT_COST}},
+                        {"$inc": {"draft_credits": -SUPER_SEARCH_CREDIT_COST}},
+                    )
+                    if deduct_res.modified_count == 0:
+                        raise HTTPException(status_code=402, detail={"error": "insufficient_credits", "message": "Credits depleted concurrently. Please retry."})
+                    super_search_meta["credits_charged"] = SUPER_SEARCH_CREDIT_COST
+                else:
+                    super_search_meta["credits_charged"] = 0
+
+                # Run the GPT-4o grading loop only on channels that need fresh grading
+                grading_attempts = 0
+                grading_successes = 0
+
                 ss_system_prompt = """You are a prospect quality assessor for a B2B SaaS affiliate discovery platform.
 You will be given enriched data about a YouTube channel. Your job is to assess
 whether this channel's AUDIENCE would be a good fit for a B2B SaaS affiliate
@@ -2725,7 +2791,8 @@ Return this exact JSON structure:
 "red_flags_present":true|false}"""
                 
                 graded_channels = []
-                for ch in super_channels:
+                for ch in channels_to_grade:
+                    grading_attempts += 1
                     try:
                         ch_payload = {
                             "channel_name": ch.get("channel_name", ""),
@@ -2758,15 +2825,42 @@ Return this exact JSON structure:
                         raw = completion.choices[0].message.content.strip()
                         assessment = json.loads(raw)
                         ch["ai_assessment"] = assessment
-                        # Note: We no longer drop Rejects on the backend. They're returned
-                        # so the frontend can hide them by default and offer a "Show rejected (X)" toggle.
+                        grading_successes += 1
+                        # Persist the grade onto the channel cache doc so future runs reuse it for free
+                        try:
+                            await db.channels.update_one(
+                                {"channel_id": ch.get("channel_id"), "user_id": user["id"]},
+                                {"$set": {"ai_assessment": assessment}},
+                            )
+                        except Exception as cache_err:
+                            logger.warning(f"Failed to cache ai_assessment for {ch.get('channel_name')}: {cache_err}")
                     except Exception as e:
                         logger.warning(f"Super Search: AI assessment failed for {ch.get('channel_name')}: {e}")
                         ch["ai_assessment"] = {"grade": "Ungraded", "reason": "AI assessment unavailable"}
-                    
                     graded_channels.append(ch)
-                
-                super_channels = graded_channels
+
+                # Auto-refund if every single AI call failed and we charged credits
+                if will_charge and grading_attempts > 0 and grading_successes == 0:
+                    await db.users.update_one(
+                        {"id": user["id"]},
+                        {"$inc": {"draft_credits": SUPER_SEARCH_CREDIT_COST}},
+                    )
+                    super_search_meta["credits_charged"] = 0
+                    super_search_meta["refunded"] = True
+                    logger.warning(f"Super Search: refunded {SUPER_SEARCH_CREDIT_COST} credits — every AI call failed for user {user.get('email')}")
+
+                super_search_meta["graded_now"] = grading_successes
+                super_search_meta["grading_failed"] = grading_attempts - grading_successes
+
+                # Combine fresh grades + cached grades + any soft-capped extras (already in graded list as Ungraded)
+                # Order is preserved by walking super_channels in original sequence
+                graded_map = {c.get("channel_id"): c for c in graded_channels}
+                cached_map = {c.get("channel_id"): c for c in channels_with_cached_grade}
+                combined = []
+                for c in super_channels:
+                    cid = c.get("channel_id")
+                    combined.append(graded_map.get(cid) or cached_map.get(cid) or c)
+                super_channels = combined
             
             # Step 9: Competitor Brand Overlap Detection
             comp_brands = set(b.lower().strip() for b in req.competitor_brands if b.strip())
@@ -2781,7 +2875,13 @@ Return this exact JSON structure:
             enriched_channels = super_channels
         
         enriched_channels = filter_channels_by_country(enriched_channels, req.target_countries, req.include_unknown_country, drops)
-        return {"channels": enriched_channels, "total": len(enriched_channels), "cached": len(cached_channels), "drops": drops}
+        return {
+            "channels": enriched_channels,
+            "total": len(enriched_channels),
+            "cached": len(cached_channels),
+            "drops": drops,
+            "super_search": super_search_meta if super_search_meta.get("requested") else None,
+        }
     
     except HTTPException:
         raise
