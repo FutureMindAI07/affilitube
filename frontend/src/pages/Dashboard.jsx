@@ -722,8 +722,22 @@ export default function Dashboard() {
     return () => clearTimeout(timer);
   }, [estimateQuota]);
 
-  const runSearch = async () => {
-    if (!selectedNiche) {
+  // Start Stripe checkout for the 500-draft credit pack ($9.99) — reused for the
+  // low-balance "Top up credits" nudge inside the Super Search panel.
+  const [buyingCredits, setBuyingCredits] = useState(false);
+  const handleBuyCredits = async () => {
+    setBuyingCredits(true);
+    try {
+      const res = await api.post("/checkout/credits", { endorsely_referral: window.endorsely_referral || null });
+      if (res.data.url) window.location.href = res.data.url;
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to start checkout");
+    } finally {
+      setBuyingCredits(false);
+    }
+  };
+
+  const runSearch = async () => {    if (!selectedNiche) {
       toast.error("Please select a niche first");
       return;
     }
@@ -2019,6 +2033,32 @@ export default function Dashboard() {
                         data-testid="super-search-switch"
                       />
                     </div>
+
+                    {/* Low-balance nudge — appears once Super Search is enabled and balance < 24 (2 runs) */}
+                    {superSearch && typeof userUsage?.draft_credits === "number" && userUsage.draft_credits < 24 && (
+                      <div
+                        className="rounded-md border border-amber-300 bg-amber-100/80 px-3 py-2 flex items-center justify-between gap-3"
+                        data-testid="super-search-low-balance-nudge"
+                      >
+                        <div className="text-xs text-amber-900 leading-snug">
+                          <span className="font-semibold">{userUsage.draft_credits} credits left</span>
+                          {" — that's "}
+                          <span className="font-semibold">
+                            {Math.floor(userUsage.draft_credits / 12)} more {Math.floor(userUsage.draft_credits / 12) === 1 ? "Super Search" : "Super Searches"}
+                          </span>
+                          {". Top up to avoid hitting zero mid-prospecting."}
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={handleBuyCredits}
+                          disabled={buyingCredits}
+                          className="h-7 rounded-full bg-amber-600 hover:bg-amber-700 text-white text-xs px-3 shrink-0"
+                          data-testid="super-search-top-up-btn"
+                        >
+                          {buyingCredits ? "Loading…" : "Top up credits"}
+                        </Button>
+                      </div>
+                    )}
                       {superSearch && (
                         <>
                           <div className="rounded-md bg-white/70 border border-amber-200 p-3 flex items-start justify-between gap-3">
@@ -2062,6 +2102,11 @@ export default function Dashboard() {
                   disabled={isSearching || !selectedNiche}
                   className="gap-2 btn-gradient"
                   data-testid="search-btn"
+                  title={
+                    superSearch
+                      ? `Super Search: 12 credits per run (~$0.24) · ${userUsage?.draft_credits ?? 0} credits available`
+                      : undefined
+                  }
                 >
                   {isSearching ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -2070,6 +2115,18 @@ export default function Dashboard() {
                   )}
                   {isSearching ? "Searching..." : "Search Channels"}
                 </Button>
+
+                {/* Inline credit cost chip — only when Super Search is on */}
+                {superSearch && (
+                  <span
+                    className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1"
+                    title={`Super Search costs 12 credits per run (~$0.24). You have ${userUsage?.draft_credits ?? 0} credit${userUsage?.draft_credits === 1 ? "" : "s"} available.`}
+                    data-testid="super-search-cost-chip"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    12 credits · {userUsage?.draft_credits ?? 0} available · ~$0.24
+                  </span>
+                )}
                 
                 {/* Save Search Dialog */}
                 <Button

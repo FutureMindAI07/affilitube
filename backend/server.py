@@ -4658,6 +4658,13 @@ async def create_billing_portal_session(request: Request, user=Depends(get_curre
 # Include the router in the main app
 app.include_router(api_router)
 
+# SaaS Radar (admin-only ProductHunt prospecting module)
+from saas_radar import build_router as _build_saas_radar_router
+app.include_router(
+    _build_saas_radar_router(db, get_admin_user),
+    prefix="/api",
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,

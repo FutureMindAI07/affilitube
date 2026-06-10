@@ -48,9 +48,13 @@ import {
   UserPlus,
   CalendarClock,
   Handshake,
+  Radar,
 } from "lucide-react";
+import SaaSRadarPanel from "@/components/SaaSRadarPanel";
 
 const API = `${import.meta.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_BACKEND_URL}/api`;
+
+
 
 export default function AdminPanel() {
   const { user, token, logout } = useAuth();
@@ -383,6 +387,7 @@ export default function AdminPanel() {
             { id: "activity", label: "Search Activity", icon: Activity },
             { id: "revenue", label: "Revenue", icon: DollarSign },
             { id: "partner-applications", label: "Partner Apps", icon: Handshake },
+            { id: "saas-radar", label: "SaaS Radar", icon: Radar },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1046,6 +1051,11 @@ export default function AdminPanel() {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* SaaS Radar Tab */}
+        {activeTab === "saas-radar" && (
+          <SaaSRadarPanel token={token} />
         )}
 
         {/* Loading State */}
