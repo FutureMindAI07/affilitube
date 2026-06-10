@@ -4675,41 +4675,76 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def seed_admin():
-    # 1) One-time migration: rename legacy admin email admin@affilitube.com -> adrian@affilitube.com
-    #    (Original seed used a mailbox that wasn't actually owned. Adrian's real inbox is adrian@affilitube.com.)
-    legacy_admin = await db.users.find_one({"email": "admin@affilitube.com", "role": "admin"})
-    if legacy_admin:
-        existing_adrian = await db.users.find_one({"email": "adrian@affilitube.com"})
-        if existing_adrian:
-            logger.warning(
-                "Admin email migration skipped: a user with adrian@affilitube.com already exists. "
-                f"Legacy admin id={legacy_admin.get('id')} left in place."
-            )
-        else:
+    """Ensure adrian@affilitube.com exists and has role=admin. Idempotent.
+
+    Production history:
+      - Original deploys seeded admin@affilitube.com (wrong inbox).
+      - User signed up separately with adrian@affilitube.com (role=user).
+      - Earlier migration attempted to rename admin@ -> adrian@ but skipped when both existed,
+        leaving adrian@ stuck on role=user. This version actively reconciles either case.
+    """
+    ADMIN_EMAIL = "adrian@affilitube.com"
+    LEGACY_EMAIL = "admin@affilitube.com"
+
+    adrian = await db.users.find_one({"email": ADMIN_EMAIL})
+    legacy = await db.users.find_one({"email": LEGACY_EMAIL})
+
+    if adrian and legacy:
+        # Both exist (most common production case): promote adrian to admin,
+        # carry forward any pro-tier flags from the legacy account, then delete legacy.
+        promote = {
+            "role": "admin",
+            "tier": "pro",
+            "role_promoted_at": datetime.now(timezone.utc).isoformat(),
+        }
+        # Preserve adrian's account; only set fields that aren't already pro/admin.
+        await db.users.update_one({"id": adrian["id"]}, {"$set": promote})
+        await db.users.delete_one({"id": legacy["id"]})
+        logger.info(
+            f"Admin reconciliation: promoted {ADMIN_EMAIL} to role=admin and removed legacy {LEGACY_EMAIL}."
+        )
+        return
+
+    if adrian and not legacy:
+        # Only adrian exists. Make sure they're admin.
+        if adrian.get("role") != "admin":
             await db.users.update_one(
-                {"_id": legacy_admin["_id"]},
+                {"id": adrian["id"]},
                 {"$set": {
-                    "email": "adrian@affilitube.com",
-                    "email_updated_at": datetime.now(timezone.utc).isoformat(),
+                    "role": "admin",
+                    "tier": "pro",
+                    "role_promoted_at": datetime.now(timezone.utc).isoformat(),
                 }},
             )
-            logger.info("Admin email migrated: admin@affilitube.com -> adrian@affilitube.com")
+            logger.info(f"Admin reconciliation: promoted existing {ADMIN_EMAIL} to role=admin.")
+        return
 
-    # 2) Seed a fresh admin only if no admin exists at all
-    admin = await db.users.find_one({"role": "admin"})
-    if not admin:
-        admin_user = {
-            "id": str(uuid.uuid4()),
-            "email": "adrian@affilitube.com",
-            "password_hash": pwd_context.hash("admin123!"),
-            "role": "admin",
-            "tier": "pro",  # Admin gets pro tier
-            "monthly_search_count": 0,
-            "search_count_reset_date": datetime.now(timezone.utc).strftime("%Y-%m"),
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        await db.users.insert_one(admin_user)
-        logger.info("Admin user seeded: adrian@affilitube.com")
+    if legacy and not adrian:
+        # Only the legacy seed exists. Rename it.
+        await db.users.update_one(
+            {"id": legacy["id"]},
+            {"$set": {
+                "email": ADMIN_EMAIL,
+                "role": "admin",
+                "email_updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        logger.info(f"Admin reconciliation: renamed legacy {LEGACY_EMAIL} -> {ADMIN_EMAIL}.")
+        return
+
+    # Neither exists: create fresh admin.
+    admin_user = {
+        "id": str(uuid.uuid4()),
+        "email": ADMIN_EMAIL,
+        "password_hash": pwd_context.hash("admin123!"),
+        "role": "admin",
+        "tier": "pro",
+        "monthly_search_count": 0,
+        "search_count_reset_date": datetime.now(timezone.utc).strftime("%Y-%m"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(admin_user)
+    logger.info(f"Admin reconciliation: seeded fresh admin {ADMIN_EMAIL}.")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
