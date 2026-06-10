@@ -708,8 +708,80 @@ def build_router(db, admin_dep) -> APIRouter:
     async def get_config(admin=Depends(admin_dep)):
         return {
             "token_configured": bool(PH_TOKEN),
+            "token_length": len(PH_TOKEN) if PH_TOKEN else 0,
+            "token_preview": (PH_TOKEN[:4] + "…" + PH_TOKEN[-4:]) if PH_TOKEN and len(PH_TOKEN) > 10 else None,
             "default_topics": DEFAULT_SAAS_TOPICS,
         }
+
+    @router.get("/diagnose")
+    async def diagnose(admin=Depends(admin_dep)):
+        """Run a tiny PH query (last 7 days, no topic filter, first 5 posts) and
+        return everything we can see: HTTP status, errors, raw counts, sample names.
+        Used to figure out why ingest returns 0 from production."""
+        if not PH_TOKEN:
+            return {"ok": False, "stage": "config", "error": "PRODUCTHUNT_TOKEN not configured"}
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=7)
+        # Run a small custom query
+        query = """
+        query Diag($postedAfter: DateTime, $postedBefore: DateTime) {
+          posts(postedAfter: $postedAfter, postedBefore: $postedBefore, first: 5, order: NEWEST) {
+            edges { node { id name tagline website createdAt topics { edges { node { slug } } } } }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+        """
+        variables = {
+            "postedAfter": start.isoformat().replace("+00:00", "Z"),
+            "postedBefore": end.isoformat().replace("+00:00", "Z"),
+        }
+        headers = {
+            "Authorization": f"Bearer {PH_TOKEN}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(PH_GRAPHQL_URL, headers=headers, json={"query": query, "variables": variables})
+            result = {
+                "ok": resp.status_code == 200,
+                "stage": "ph_response",
+                "http_status": resp.status_code,
+                "window_days": 7,
+                "default_topics_count": len(DEFAULT_SAAS_TOPICS),
+            }
+            try:
+                payload = resp.json()
+            except Exception as e:
+                result["error"] = f"JSON parse failed: {e}"
+                result["raw_body_preview"] = resp.text[:400]
+                return result
+
+            if "errors" in payload:
+                result["graphql_errors"] = payload["errors"]
+            posts = (payload.get("data") or {}).get("posts") or {}
+            edges = posts.get("edges") or []
+            result["posts_returned"] = len(edges)
+            result["has_next_page"] = (posts.get("pageInfo") or {}).get("hasNextPage")
+            samples = []
+            topics_seen = set()
+            for e in edges:
+                n = e.get("node") or {}
+                t_slugs = [te["node"]["slug"] for te in (n.get("topics") or {}).get("edges", []) if te.get("node")]
+                topics_seen.update(t_slugs)
+                samples.append({
+                    "name": n.get("name"),
+                    "tagline": (n.get("tagline") or "")[:60],
+                    "topics": t_slugs,
+                    "matches_filter": any(t.lower() in {x.lower() for x in DEFAULT_SAAS_TOPICS} for t in t_slugs),
+                })
+            result["samples"] = samples
+            result["all_topics_seen"] = sorted(topics_seen)
+            result["topic_filter_hits"] = sum(1 for s in samples if s["matches_filter"])
+            return result
+        except Exception as e:
+            return {"ok": False, "stage": "request", "error": str(e)}
 
     @router.get("/stats")
     async def get_stats(admin=Depends(admin_dep)):

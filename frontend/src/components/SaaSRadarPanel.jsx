@@ -77,6 +77,8 @@ export default function SaaSRadarPanel({ token }) {
   const [ingestRunning, setIngestRunning] = useState(false);
   const [enrichRunning, setEnrichRunning] = useState(false);
   const [enrichLimit, setEnrichLimit] = useState(100);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagResult, setDiagResult] = useState(null);
 
   const loadStats = useCallback(async () => {
     try {
@@ -162,8 +164,20 @@ export default function SaaSRadarPanel({ token }) {
     }
   };
 
-  const exportCsv = async () => {
+  const runDiagnose = async () => {
+    setDiagnosing(true);
+    setDiagResult(null);
     try {
+      const res = await api.get("/admin/saas-radar/diagnose");
+      setDiagResult(res.data);
+    } catch (e) {
+      setDiagResult({ ok: false, stage: "client", error: e.message });
+    } finally {
+      setDiagnosing(false);
+    }
+  };
+
+  const exportCsv = async () => {    try {
       const res = await api.get("/admin/saas-radar/products.csv", {
         params: {
           bucket: bucketFilter || undefined,
@@ -218,6 +232,9 @@ export default function SaaSRadarPanel({ token }) {
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => { loadStats(); loadProducts(); }} data-testid="radar-refresh">
                 <RefreshCw className="h-4 w-4 mr-2" /> Refresh
+              </Button>
+              <Button variant="outline" size="sm" onClick={runDiagnose} disabled={diagnosing} data-testid="radar-diagnose">
+                <AlertTriangle className="h-4 w-4 mr-2" /> {diagnosing ? "Testing…" : "Diagnose"}
               </Button>
               <Button variant="outline" size="sm" onClick={exportCsv} data-testid="radar-export">
                 <Download className="h-4 w-4 mr-2" /> CSV
@@ -358,6 +375,62 @@ export default function SaaSRadarPanel({ token }) {
               )}
             </div>
           </div>
+
+          {/* Diagnose result */}
+          {diagResult && (
+            <div
+              className={`border rounded-md p-3 text-xs space-y-1 ${
+                diagResult.ok && diagResult.posts_returned > 0
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                  : "bg-rose-50 border-rose-200 text-rose-900"
+              }`}
+              data-testid="radar-diag-result"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="font-semibold">
+                  Diagnose · {diagResult.ok && diagResult.posts_returned > 0 ? "All good" : "Issue detected"}
+                </div>
+                <button type="button" className="text-xs underline" onClick={() => setDiagResult(null)}>dismiss</button>
+              </div>
+              <div>HTTP: <code>{diagResult.http_status || "—"}</code> · Stage: <code>{diagResult.stage}</code> · Window: last {diagResult.window_days || "?"} days</div>
+              {typeof diagResult.posts_returned === "number" && (
+                <div>
+                  Posts returned by PH: <b>{diagResult.posts_returned}</b>
+                  {" · "}Topic-filter hits: <b>{diagResult.topic_filter_hits ?? "—"}/{diagResult.posts_returned}</b>
+                </div>
+              )}
+              {diagResult.error && (
+                <div>Error: <code className="bg-white/50 px-1 rounded">{diagResult.error}</code></div>
+              )}
+              {diagResult.graphql_errors && (
+                <div>GraphQL errors: <pre className="bg-white/50 p-2 rounded mt-1 text-[11px] overflow-x-auto">{JSON.stringify(diagResult.graphql_errors, null, 2)}</pre></div>
+              )}
+              {diagResult.samples && diagResult.samples.length > 0 && (
+                <details>
+                  <summary className="cursor-pointer">Sample posts ({diagResult.samples.length})</summary>
+                  <ul className="mt-1 space-y-0.5">
+                    {diagResult.samples.map((s, i) => (
+                      <li key={i}>
+                        {s.matches_filter ? "✓" : "✗"} <b>{s.name}</b> · topics: {s.topics.join(", ") || "—"}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              {diagResult.all_topics_seen && diagResult.all_topics_seen.length > 0 && (
+                <details>
+                  <summary className="cursor-pointer">Topics seen in sample</summary>
+                  <div className="mt-1 break-words">{diagResult.all_topics_seen.join(", ")}</div>
+                </details>
+              )}
+              {diagResult.raw_body_preview && (
+                <details>
+                  <summary className="cursor-pointer">Raw body preview</summary>
+                  <pre className="bg-white/50 p-2 rounded mt-1 text-[11px] overflow-x-auto whitespace-pre-wrap">{diagResult.raw_body_preview}</pre>
+                </details>
+              )}
+            </div>
+          )}
 
           {/* Heads-up note */}
           <div className="flex items-start gap-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
