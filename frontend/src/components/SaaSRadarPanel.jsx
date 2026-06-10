@@ -62,6 +62,7 @@ export default function SaaSRadarPanel({ token }) {
 
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
+  const [config, setConfig] = useState(null);
   const [products, setProducts] = useState([]);
   const [total, setTotal] = useState(0);
   const [bucketFilter, setBucketFilter] = useState("");
@@ -79,8 +80,12 @@ export default function SaaSRadarPanel({ token }) {
 
   const loadStats = useCallback(async () => {
     try {
-      const res = await api.get("/admin/saas-radar/stats");
-      setStats(res.data);
+      const [statsRes, cfgRes] = await Promise.all([
+        api.get("/admin/saas-radar/stats"),
+        api.get("/admin/saas-radar/config"),
+      ]);
+      setStats(statsRes.data);
+      setConfig(cfgRes.data);
     } catch (e) {
       console.error(e);
     }
@@ -108,13 +113,14 @@ export default function SaaSRadarPanel({ token }) {
     }
   }, [bucketFilter, hasEmail, search, sortBy, page, token]);
 
-  /* eslint-disable-next-line */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadStats();
     loadProducts();
   }, [loadStats, loadProducts]);
 
   // Poll job status while a job is running
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!ingestRunning && !enrichRunning) return undefined;
     const id = setInterval(async () => {
@@ -220,6 +226,22 @@ export default function SaaSRadarPanel({ token }) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {config && config.token_configured === false && (
+            <div className="flex items-start gap-2 text-sm text-rose-900 bg-rose-50 border border-rose-200 rounded-md px-3 py-2.5" data-testid="radar-token-missing">
+              <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-rose-600" />
+              <div>
+                <div className="font-semibold mb-0.5">ProductHunt token not configured on this server.</div>
+                <div className="text-xs">
+                  Ingest will fail until the <code className="bg-rose-100 px-1 rounded">PRODUCTHUNT_TOKEN</code> environment variable is set
+                  in the backend. On Emergent: open this app → <b>Settings → Environment Variables</b> → add
+                  <code className="bg-rose-100 px-1 mx-1 rounded">PRODUCTHUNT_TOKEN</code> with the value from your
+                  <a href="https://api.producthunt.com/v2/oauth/applications" target="_blank" rel="noreferrer" className="underline ml-1">PH developer dashboard</a>,
+                  then redeploy.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {[
@@ -279,10 +301,18 @@ export default function SaaSRadarPanel({ token }) {
                 </Button>
               </div>
               {stats?.last_ingest && (
-                <div className="text-[11px] text-slate-500 mt-2">
-                  Last: {fmtDate(stats.last_ingest.updated_at)} ·{" "}
-                  {stats.last_ingest.result?.new || 0} new ·{" "}
-                  {stats.last_ingest.result?.seen || 0} seen
+                <div className="text-[11px] mt-2">
+                  {stats.last_ingest.error ? (
+                    <span className="text-rose-700">
+                      Last failed: {stats.last_ingest.error}
+                    </span>
+                  ) : (
+                    <span className="text-slate-500">
+                      Last: {fmtDate(stats.last_ingest.updated_at)} ·{" "}
+                      {stats.last_ingest.result?.new || 0} new ·{" "}
+                      {stats.last_ingest.result?.seen || 0} seen
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -313,9 +343,17 @@ export default function SaaSRadarPanel({ token }) {
                 </Button>
               </div>
               {stats?.last_enrich && (
-                <div className="text-[11px] text-slate-500 mt-2">
-                  Last: {fmtDate(stats.last_enrich.updated_at)} ·{" "}
-                  processed {stats.last_enrich.result?.processed || 0}
+                <div className="text-[11px] mt-2">
+                  {stats.last_enrich.error ? (
+                    <span className="text-rose-700">
+                      Last failed: {stats.last_enrich.error}
+                    </span>
+                  ) : (
+                    <span className="text-slate-500">
+                      Last: {fmtDate(stats.last_enrich.updated_at)} ·{" "}
+                      processed {stats.last_enrich.result?.processed || 0}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
