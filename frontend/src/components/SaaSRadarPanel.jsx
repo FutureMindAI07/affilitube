@@ -79,6 +79,8 @@ export default function SaaSRadarPanel({ token }) {
   const [enrichLimit, setEnrichLimit] = useState(100);
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagResult, setDiagResult] = useState(null);
+  const [liveIngestProgress, setLiveIngestProgress] = useState(null);
+  const [liveEnrichProgress, setLiveEnrichProgress] = useState(null);
 
   const loadStats = useCallback(async () => {
     try {
@@ -131,9 +133,13 @@ export default function SaaSRadarPanel({ token }) {
         const jobs = res.data.jobs || [];
         const runningIngest = jobs.find((j) => j.kind === "ingest" && j.status === "running");
         const runningEnrich = jobs.find((j) => j.kind === "enrich" && j.status === "running");
+        setLiveIngestProgress(runningIngest?.progress || null);
+        setLiveEnrichProgress(runningEnrich?.progress || null);
         if (!runningIngest) setIngestRunning(false);
         if (!runningEnrich) setEnrichRunning(false);
         if (!runningIngest && !runningEnrich) {
+          setLiveIngestProgress(null);
+          setLiveEnrichProgress(null);
           loadStats();
           loadProducts();
         }
@@ -317,6 +323,11 @@ export default function SaaSRadarPanel({ token }) {
                   {ingestRunning ? "Running…" : "Run Ingest"}
                 </Button>
               </div>
+              {ingestRunning && liveIngestProgress && (
+                <div className="text-[11px] text-indigo-700 mt-2">
+                  Live: page {liveIngestProgress.page || 0} · {liveIngestProgress.seen || 0} seen · {liveIngestProgress.new || 0} new
+                </div>
+              )}
               {stats?.last_ingest && (
                 <div className="text-[11px] mt-2">
                   {stats.last_ingest.error ? (

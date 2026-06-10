@@ -141,7 +141,7 @@ query Posts(
     postedAfter: $postedAfter
     postedBefore: $postedBefore
     after: $after
-    first: 50
+    first: 20
     order: NEWEST
   ) {
     edges {
@@ -219,6 +219,19 @@ async def ph_fetch_posts(
         )
     if resp.status_code == 401:
         raise PHClientError("ProductHunt token is invalid (401)")
+    if resp.status_code == 429:
+        # PH sometimes returns rate-limit as HTTP 429 with details in body
+        reset_in = 900
+        try:
+            body = resp.json()
+            for e in body.get("errors", []):
+                details = e.get("details") or {}
+                if details.get("reset_in"):
+                    reset_in = int(details["reset_in"])
+                    break
+        except Exception:
+            pass
+        raise PHRateLimitError(reset_in)
     if resp.status_code != 200:
         raise PHClientError(f"ProductHunt HTTP {resp.status_code}: {resp.text[:200]}")
 
@@ -240,14 +253,16 @@ async def ph_ingest_window(
     posted_before: datetime,
     topics_filter: List[str],
     job_id: str,
-) -> Tuple[int, int]:
+) -> Dict[str, Any]:
     """Single-stream ingest for a date window. Filters topics LOCALLY post-fetch,
     so we don't burn 10x complexity points doing one query per topic.
 
-    Returns (total_seen, total_new).
+    Returns {seen, new, rate_limited, rate_limit_reset, pages}.
     """
     seen = 0
     new = 0
+    rate_limited = False
+    rate_limit_reset = 0
     topic_set = {t.lower() for t in topics_filter} if topics_filter else None
     after_cursor = None
     page = 0
@@ -256,16 +271,20 @@ async def ph_ingest_window(
         try:
             conn = await ph_fetch_posts(posted_after, posted_before, after_cursor)
         except PHRateLimitError as e:
-            # Persist progress + bubble up so the job can mark itself partial
-            logger.warning("Rate limited mid-ingest, sleeping %ss", e.reset_in)
-            await asyncio.sleep(min(e.reset_in + 5, 900))
-            continue
+            # Don't sleep — bubble up partial results so the user sees progress and can re-run later.
+            logger.warning(
+                "Rate limited mid-ingest after seen=%s new=%s page=%s; finishing partial",
+                seen, new, page,
+            )
+            rate_limited = True
+            rate_limit_reset = e.reset_in
+            break
         except PHClientError as e:
             logger.warning("PH fetch failed page=%s: %s", page, e)
             if "401" in str(e):
                 raise
-            await asyncio.sleep(5)
-            break
+            # Don't silently swallow — propagate so the job marks itself errored.
+            raise
 
         edges = conn.get("edges", []) or []
         if not edges:
@@ -338,10 +357,27 @@ async def ph_ingest_window(
         if not page_info.get("hasNextPage"):
             break
         after_cursor = page_info.get("endCursor")
+
+        # Periodic progress write so the user sees live counts
+        if page % 2 == 0:
+            await db.saas_radar_jobs.update_one(
+                {"id": job_id},
+                {"$set": {
+                    "progress": {"seen": seen, "new": new, "page": page},
+                    "updated_at": datetime.now(timezone.utc),
+                }},
+            )
+
         # Small breather between pages.
         await asyncio.sleep(0.4)
 
-    return seen, new
+    return {
+        "seen": seen,
+        "new": new,
+        "rate_limited": rate_limited,
+        "rate_limit_reset": rate_limit_reset,
+        "pages": page,
+    }
 
 
 def _parse_iso(s: Optional[str]) -> Optional[datetime]:
@@ -670,8 +706,16 @@ async def _bg_ingest(db, days_back: int, topics_filter: List[str], job_id: str):
     try:
         end = datetime.now(timezone.utc)
         start = end - timedelta(days=days_back)
-        seen, new = await ph_ingest_window(db, start, end, topics_filter, job_id)
-        await _finish_job(db, job_id, {"seen": seen, "new": new, "days_back": days_back})
+        result = await ph_ingest_window(db, start, end, topics_filter, job_id)
+        result["days_back"] = days_back
+        # If we were rate-limited mid-job, surface that as a soft error so the UI shows it.
+        error = None
+        if result.get("rate_limited"):
+            error = (
+                f"PH rate limit hit after {result['seen']} posts. "
+                f"Re-run in ~{result.get('rate_limit_reset', 900)}s to continue (existing posts kept)."
+            )
+        await _finish_job(db, job_id, result, error=error)
     except Exception as e:
         logger.exception("ingest job failed")
         await _finish_job(db, job_id, {}, error=str(e))
@@ -848,12 +892,12 @@ def build_router(db, admin_dep) -> APIRouter:
             buckets[key] = row["count"]
         total = sum(buckets.values())
         last_ingest = await db.saas_radar_jobs.find_one(
-            {"kind": "ingest", "status": "done"},
+            {"kind": "ingest", "status": {"$in": ["done", "error", "cancelled"]}},
             sort=[("updated_at", -1)],
             projection={"_id": 0},
         )
         last_enrich = await db.saas_radar_jobs.find_one(
-            {"kind": "enrich", "status": "done"},
+            {"kind": "enrich", "status": {"$in": ["done", "error", "cancelled"]}},
             sort=[("updated_at", -1)],
             projection={"_id": 0},
         )
@@ -870,6 +914,15 @@ def build_router(db, admin_dep) -> APIRouter:
     async def ingest(req: IngestRequest, background_tasks: BackgroundTasks, admin=Depends(admin_dep)):
         if not PH_TOKEN:
             raise HTTPException(status_code=400, detail="PRODUCTHUNT_TOKEN not configured")
+        # Mark any stale running ingest jobs as cancelled so the UI updates.
+        await db.saas_radar_jobs.update_many(
+            {"kind": "ingest", "status": "running"},
+            {"$set": {
+                "status": "cancelled",
+                "error": "Superseded by a new ingest run",
+                "updated_at": datetime.now(timezone.utc),
+            }},
+        )
         topics = req.topics or DEFAULT_SAAS_TOPICS
         job_id = await _create_job(db, "ingest", {"days_back": req.days_back, "topics": topics})
         background_tasks.add_task(_bg_ingest, db, req.days_back, topics, job_id)
@@ -877,6 +930,14 @@ def build_router(db, admin_dep) -> APIRouter:
 
     @router.post("/enrich")
     async def enrich(req: EnrichRequest, background_tasks: BackgroundTasks, admin=Depends(admin_dep)):
+        await db.saas_radar_jobs.update_many(
+            {"kind": "enrich", "status": "running"},
+            {"$set": {
+                "status": "cancelled",
+                "error": "Superseded by a new enrich run",
+                "updated_at": datetime.now(timezone.utc),
+            }},
+        )
         job_id = await _create_job(db, "enrich", {"limit": req.limit})
         background_tasks.add_task(_bg_enrich, db, req.limit, job_id)
         return {"job_id": job_id, "status": "running"}
