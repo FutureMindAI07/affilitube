@@ -715,73 +715,129 @@ def build_router(db, admin_dep) -> APIRouter:
 
     @router.get("/diagnose")
     async def diagnose(admin=Depends(admin_dep)):
-        """Run a tiny PH query (last 7 days, no topic filter, first 5 posts) and
-        return everything we can see: HTTP status, errors, raw counts, sample names.
-        Used to figure out why ingest returns 0 from production."""
+        """Layered connectivity check to api.producthunt.com.
+        Each step has its own tight timeout so we never blow past the ingress timeout.
+        """
+        import socket
+        steps: List[Dict[str, Any]] = []
+
+        def add(name: str, ok: bool, detail: Any = None, error: Optional[str] = None):
+            steps.append({"step": name, "ok": ok, "detail": detail, "error": error})
+
+        # 0) Token check
+        add("token_loaded", bool(PH_TOKEN), {
+            "length": len(PH_TOKEN) if PH_TOKEN else 0,
+            "preview": (PH_TOKEN[:4] + "…" + PH_TOKEN[-4:]) if PH_TOKEN and len(PH_TOKEN) > 10 else None,
+        })
         if not PH_TOKEN:
-            return {"ok": False, "stage": "config", "error": "PRODUCTHUNT_TOKEN not configured"}
+            return {"ok": False, "steps": steps}
+
+        # 1) DNS lookup
+        try:
+            ip = await asyncio.get_event_loop().run_in_executor(
+                None, socket.gethostbyname, "api.producthunt.com"
+            )
+            add("dns_resolve", True, {"resolved_ip": ip})
+        except Exception as e:
+            add("dns_resolve", False, error=str(e))
+            return {"ok": False, "steps": steps}
+
+        # 2) HTTPS HEAD to PH root (8s timeout) — pure connectivity check, no auth
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                r = await client.get("https://api.producthunt.com/", headers={"User-Agent": USER_AGENT})
+            add("https_reachable", True, {"status": r.status_code})
+        except Exception as e:
+            add("https_reachable", False, error=f"{type(e).__name__}: {e}")
+            return {"ok": False, "steps": steps}
+
+        # 3) Auth check via tiny viewer query (8s timeout)
+        viewer_q = "query { viewer { user { id name username } } }"
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                r = await client.post(
+                    PH_GRAPHQL_URL,
+                    headers={
+                        "Authorization": f"Bearer {PH_TOKEN}",
+                        "Content-Type": "application/json",
+                        "User-Agent": USER_AGENT,
+                    },
+                    json={"query": viewer_q},
+                )
+            try:
+                vp = r.json()
+            except Exception:
+                vp = {"_raw": r.text[:400]}
+            viewer = (vp.get("data") or {}).get("viewer") or {}
+            add("auth_viewer", r.status_code == 200 and "errors" not in vp, {
+                "status": r.status_code,
+                "viewer": viewer.get("user"),
+                "errors": vp.get("errors"),
+                "body_preview": (r.text[:200] if "_raw" in vp else None),
+            })
+        except Exception as e:
+            add("auth_viewer", False, error=f"{type(e).__name__}: {e}")
+            return {"ok": False, "steps": steps}
+
+        # 4) Posts query (12s timeout) — the actual thing ingest does
         end = datetime.now(timezone.utc)
         start = end - timedelta(days=7)
-        # Run a small custom query
-        query = """
-        query Diag($postedAfter: DateTime, $postedBefore: DateTime) {
-          posts(postedAfter: $postedAfter, postedBefore: $postedBefore, first: 5, order: NEWEST) {
-            edges { node { id name tagline website createdAt topics { edges { node { slug } } } } }
-            pageInfo { hasNextPage endCursor }
+        posts_q = """
+        query Diag($a: DateTime, $b: DateTime) {
+          posts(postedAfter: $a, postedBefore: $b, first: 5, order: NEWEST) {
+            edges { node { id name tagline createdAt topics { edges { node { slug } } } } }
+            pageInfo { hasNextPage }
           }
         }
         """
-        variables = {
-            "postedAfter": start.isoformat().replace("+00:00", "Z"),
-            "postedBefore": end.isoformat().replace("+00:00", "Z"),
-        }
-        headers = {
-            "Authorization": f"Bearer {PH_TOKEN}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": USER_AGENT,
-        }
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(PH_GRAPHQL_URL, headers=headers, json={"query": query, "variables": variables})
-            result = {
-                "ok": resp.status_code == 200,
-                "stage": "ph_response",
-                "http_status": resp.status_code,
-                "window_days": 7,
-                "default_topics_count": len(DEFAULT_SAAS_TOPICS),
-            }
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                r = await client.post(
+                    PH_GRAPHQL_URL,
+                    headers={
+                        "Authorization": f"Bearer {PH_TOKEN}",
+                        "Content-Type": "application/json",
+                        "User-Agent": USER_AGENT,
+                    },
+                    json={
+                        "query": posts_q,
+                        "variables": {
+                            "a": start.isoformat().replace("+00:00", "Z"),
+                            "b": end.isoformat().replace("+00:00", "Z"),
+                        },
+                    },
+                )
             try:
-                payload = resp.json()
-            except Exception as e:
-                result["error"] = f"JSON parse failed: {e}"
-                result["raw_body_preview"] = resp.text[:400]
-                return result
-
-            if "errors" in payload:
-                result["graphql_errors"] = payload["errors"]
-            posts = (payload.get("data") or {}).get("posts") or {}
+                pp = r.json()
+            except Exception:
+                pp = {"_raw": r.text[:400]}
+            posts = ((pp.get("data") or {}).get("posts") or {})
             edges = posts.get("edges") or []
-            result["posts_returned"] = len(edges)
-            result["has_next_page"] = (posts.get("pageInfo") or {}).get("hasNextPage")
             samples = []
-            topics_seen = set()
+            topics_seen: set = set()
             for e in edges:
                 n = e.get("node") or {}
                 t_slugs = [te["node"]["slug"] for te in (n.get("topics") or {}).get("edges", []) if te.get("node")]
                 topics_seen.update(t_slugs)
                 samples.append({
                     "name": n.get("name"),
-                    "tagline": (n.get("tagline") or "")[:60],
                     "topics": t_slugs,
                     "matches_filter": any(t.lower() in {x.lower() for x in DEFAULT_SAAS_TOPICS} for t in t_slugs),
                 })
-            result["samples"] = samples
-            result["all_topics_seen"] = sorted(topics_seen)
-            result["topic_filter_hits"] = sum(1 for s in samples if s["matches_filter"])
-            return result
+            add("posts_query", r.status_code == 200 and "errors" not in pp, {
+                "status": r.status_code,
+                "posts_returned": len(edges),
+                "errors": pp.get("errors"),
+                "samples": samples,
+                "topic_filter_hits": sum(1 for s in samples if s["matches_filter"]),
+                "all_topics_seen": sorted(topics_seen),
+                "body_preview": (r.text[:200] if "_raw" in pp else None),
+            })
         except Exception as e:
-            return {"ok": False, "stage": "request", "error": str(e)}
+            add("posts_query", False, error=f"{type(e).__name__}: {e}")
+
+        all_ok = all(s["ok"] for s in steps)
+        return {"ok": all_ok, "steps": steps}
 
     @router.get("/stats")
     async def get_stats(admin=Depends(admin_dep)):

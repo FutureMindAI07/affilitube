@@ -379,55 +379,42 @@ export default function SaaSRadarPanel({ token }) {
           {/* Diagnose result */}
           {diagResult && (
             <div
-              className={`border rounded-md p-3 text-xs space-y-1 ${
-                diagResult.ok && diagResult.posts_returned > 0
+              className={`border rounded-md p-3 text-xs space-y-2 ${
+                diagResult.ok
                   ? "bg-emerald-50 border-emerald-200 text-emerald-900"
                   : "bg-rose-50 border-rose-200 text-rose-900"
               }`}
               data-testid="radar-diag-result"
             >
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between">
                 <div className="font-semibold">
-                  Diagnose · {diagResult.ok && diagResult.posts_returned > 0 ? "All good" : "Issue detected"}
+                  Diagnose · {diagResult.ok ? "All layers OK" : "Issue detected"}
                 </div>
                 <button type="button" className="text-xs underline" onClick={() => setDiagResult(null)}>dismiss</button>
               </div>
-              <div>HTTP: <code>{diagResult.http_status || "—"}</code> · Stage: <code>{diagResult.stage}</code> · Window: last {diagResult.window_days || "?"} days</div>
-              {typeof diagResult.posts_returned === "number" && (
-                <div>
-                  Posts returned by PH: <b>{diagResult.posts_returned}</b>
-                  {" · "}Topic-filter hits: <b>{diagResult.topic_filter_hits ?? "—"}/{diagResult.posts_returned}</b>
+              {diagResult.steps ? (
+                <div className="space-y-1.5">
+                  {diagResult.steps.map((s, i) => (
+                    <div key={i} className="border-l-2 pl-2 py-0.5" style={{ borderColor: s.ok ? "#10b981" : "#e11d48" }}>
+                      <div className="font-mono text-[11px]">
+                        {s.ok ? "✓" : "✗"} <b>{s.step}</b>
+                        {s.error && <span className="ml-2 text-rose-700">{s.error}</span>}
+                      </div>
+                      {s.detail && (
+                        <details className="mt-0.5">
+                          <summary className="cursor-pointer text-[10px] opacity-70">details</summary>
+                          <pre className="bg-white/60 p-2 rounded mt-1 text-[10px] overflow-x-auto whitespace-pre-wrap">{JSON.stringify(s.detail, null, 2)}</pre>
+                        </details>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              )}
-              {diagResult.error && (
-                <div>Error: <code className="bg-white/50 px-1 rounded">{diagResult.error}</code></div>
-              )}
-              {diagResult.graphql_errors && (
-                <div>GraphQL errors: <pre className="bg-white/50 p-2 rounded mt-1 text-[11px] overflow-x-auto">{JSON.stringify(diagResult.graphql_errors, null, 2)}</pre></div>
-              )}
-              {diagResult.samples && diagResult.samples.length > 0 && (
-                <details>
-                  <summary className="cursor-pointer">Sample posts ({diagResult.samples.length})</summary>
-                  <ul className="mt-1 space-y-0.5">
-                    {diagResult.samples.map((s, i) => (
-                      <li key={i}>
-                        {s.matches_filter ? "✓" : "✗"} <b>{s.name}</b> · topics: {s.topics.join(", ") || "—"}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              {diagResult.all_topics_seen && diagResult.all_topics_seen.length > 0 && (
-                <details>
-                  <summary className="cursor-pointer">Topics seen in sample</summary>
-                  <div className="mt-1 break-words">{diagResult.all_topics_seen.join(", ")}</div>
-                </details>
-              )}
-              {diagResult.raw_body_preview && (
-                <details>
-                  <summary className="cursor-pointer">Raw body preview</summary>
-                  <pre className="bg-white/50 p-2 rounded mt-1 text-[11px] overflow-x-auto whitespace-pre-wrap">{diagResult.raw_body_preview}</pre>
-                </details>
+              ) : (
+                <div>
+                  HTTP: <code>{diagResult.http_status || "—"}</code>{" "}
+                  Stage: <code>{diagResult.stage}</code>{" "}
+                  {diagResult.error && <span>Error: <code className="bg-white/50 px-1 rounded">{diagResult.error}</code></span>}
+                </div>
               )}
             </div>
           )}
