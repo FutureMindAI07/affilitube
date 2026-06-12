@@ -959,6 +959,25 @@ async def _shutdown_playwright():
 # Job tracking
 # ============================================================================
 
+async def _reap_stale_jobs(db, stale_after_secs: int = 180):
+    """Mark any 'running' job that hasn't updated progress in stale_after_secs as orphaned.
+
+    FastAPI BackgroundTasks live in worker memory, so a redeploy or worker restart
+    kills the in-flight task while leaving the DB row stuck on 'running'. Without
+    this, the UI would show 'Running…' forever and the button would stay disabled.
+    Idempotent — safe to call on every read.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=stale_after_secs)
+    await db.saas_radar_jobs.update_many(
+        {"status": "running", "updated_at": {"$lt": cutoff}},
+        {"$set": {
+            "status": "error",
+            "error": "Job orphaned (worker likely restarted by a deploy or crash). Re-run to continue — existing progress is kept.",
+            "updated_at": datetime.now(timezone.utc),
+        }},
+    )
+
+
 async def _create_job(db, kind: str, payload: Dict[str, Any]) -> str:
     job_id = str(uuid.uuid4())
     await db.saas_radar_jobs.insert_one({
@@ -1056,20 +1075,30 @@ async def _bg_ingest(db, days_back: int, topics_filter: List[str], job_id: str):
                         "Chunk %s/%s rate-limited after %s posts; sleeping %ss",
                         idx + 1, len(chunks), res["seen"], wait,
                     )
-                    await db.saas_radar_jobs.update_one(
-                        {"id": job_id},
-                        {"$set": {
-                            "progress": {
-                                "chunk": idx + 1,
-                                "total_chunks": len(chunks),
-                                "seen": cumulative["seen"],
-                                "new": cumulative["new"],
-                                "stage": f"chunk {idx+1}/{len(chunks)} · paused {wait}s (PH rate limit)",
-                            },
-                            "updated_at": datetime.now(timezone.utc),
-                        }},
-                    )
-                    await asyncio.sleep(wait)
+                    # Tick progress every 30s during sleep so the UI shows a live countdown.
+                    elapsed = 0
+                    tick = 30
+                    while elapsed < wait:
+                        remaining = wait - elapsed
+                        await db.saas_radar_jobs.update_one(
+                            {"id": job_id},
+                            {"$set": {
+                                "progress": {
+                                    "chunk": idx + 1,
+                                    "total_chunks": len(chunks),
+                                    "seen": cumulative["seen"],
+                                    "new": cumulative["new"],
+                                    "stage": (
+                                        f"chunk {idx+1}/{len(chunks)} · waiting for PH rate-limit reset "
+                                        f"({remaining}s remaining)"
+                                    ),
+                                    "paused_remaining": remaining,
+                                },
+                                "updated_at": datetime.now(timezone.utc),
+                            }},
+                        )
+                        await asyncio.sleep(min(tick, remaining))
+                        elapsed += tick
                     resume_cursor = res.get("last_cursor")
                     chunk_retries += 1
                 else:
@@ -1336,8 +1365,23 @@ def build_router(db, admin_dep) -> APIRouter:
         background_tasks.add_task(_bg_enrich, db, req.limit, req.use_llm, req.use_playwright, job_id)
         return {"job_id": job_id, "status": "running"}
 
+    @router.post("/cancel-stuck")
+    async def cancel_stuck(admin=Depends(admin_dep)):
+        """Manual override — mark ALL currently 'running' jobs as cancelled.
+        Use this if the UI is stuck on Running… after a deploy."""
+        res = await db.saas_radar_jobs.update_many(
+            {"status": "running"},
+            {"$set": {
+                "status": "cancelled",
+                "error": "Manually cancelled by admin (orphaned after deploy/restart).",
+                "updated_at": datetime.now(timezone.utc),
+            }},
+        )
+        return {"cancelled": res.modified_count}
+
     @router.get("/jobs")
     async def list_jobs(limit: int = Query(20, ge=1, le=100), admin=Depends(admin_dep)):
+        await _reap_stale_jobs(db)
         jobs = await db.saas_radar_jobs.find({}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
         return {"jobs": jobs}
 

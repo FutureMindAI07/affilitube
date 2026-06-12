@@ -189,6 +189,21 @@ export default function SaaSRadarPanel({ token }) {
     }
   };
 
+  const cancelStuck = async () => {
+    if (!window.confirm("Force-cancel all running ingest/enrich jobs? Existing data is preserved; you can Run Ingest again to resume.")) return;
+    try {
+      const res = await api.post("/admin/saas-radar/cancel-stuck");
+      toast.success(`Cancelled ${res.data.cancelled} stuck job(s)`);
+      setIngestRunning(false);
+      setEnrichRunning(false);
+      setLiveIngestProgress(null);
+      setLiveEnrichProgress(null);
+      loadStats();
+    } catch (e) {
+      toast.error("Failed to cancel");
+    }
+  };
+
   const setVerdict = async (phId, verdict) => {
     try {
       await api.patch(`/admin/saas-radar/products/${phId}/verdict`, { verdict });
@@ -376,15 +391,28 @@ export default function SaaSRadarPanel({ token }) {
                 </Button>
               </div>
               {ingestRunning && liveIngestProgress && (
-                <div className="text-[11px] text-indigo-700 mt-2">
-                  {liveIngestProgress.stage && <div>{liveIngestProgress.stage}</div>}
-                  Live: {liveIngestProgress.seen || 0} seen · {liveIngestProgress.new || 0} new
-                  {liveIngestProgress.total_chunks && (
-                    <span> · chunk {liveIngestProgress.chunk}/{liveIngestProgress.total_chunks}</span>
+                <div className="text-[11px] text-indigo-700 mt-2 space-y-0.5">
+                  {liveIngestProgress.stage && <div className="font-medium">{liveIngestProgress.stage}</div>}
+                  <div>
+                    {liveIngestProgress.seen || 0} seen · {liveIngestProgress.new || 0} new
+                  </div>
+                  {liveIngestProgress.stage && liveIngestProgress.stage.includes("paused") && (
+                    <div className="text-amber-700 text-[10px]">
+                      ⏸ PH rate-limit pause is normal — the job is healthy and will resume automatically.
+                      <br />Progress is already saved; you can leave this page and come back later.
+                    </div>
                   )}
+                  <button
+                    type="button"
+                    className="text-rose-600 text-[10px] underline hover:text-rose-800 mt-1"
+                    onClick={cancelStuck}
+                    data-testid="radar-cancel-stuck"
+                  >
+                    force-cancel (use if stuck after a deploy)
+                  </button>
                 </div>
               )}
-              {stats?.last_ingest && (
+              {!ingestRunning && stats?.last_ingest && (
                 <div className="text-[11px] mt-2">
                   {stats.last_ingest.error ? (
                     <span className="text-rose-700">
