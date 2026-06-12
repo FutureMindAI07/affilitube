@@ -95,6 +95,7 @@ export default function SaaSRadarPanel({ token }) {
   const [diagResult, setDiagResult] = useState(null);
   const [liveIngestProgress, setLiveIngestProgress] = useState(null);
   const [liveEnrichProgress, setLiveEnrichProgress] = useState(null);
+  const [ingestBaseline, setIngestBaseline] = useState(null);
 
   const loadStats = useCallback(async () => {
     try {
@@ -150,12 +151,13 @@ export default function SaaSRadarPanel({ token }) {
         const runningEnrich = jobs.find((j) => j.kind === "enrich" && j.status === "running");
         setLiveIngestProgress(runningIngest?.progress || null);
         setLiveEnrichProgress(runningEnrich?.progress || null);
+        // Refresh stats every poll so the top counters tick up live as the job runs.
+        loadStats();
         if (!runningIngest) setIngestRunning(false);
         if (!runningEnrich) setEnrichRunning(false);
         if (!runningIngest && !runningEnrich) {
           setLiveIngestProgress(null);
           setLiveEnrichProgress(null);
-          loadStats();
           loadProducts();
         }
       } catch (err) {
@@ -167,6 +169,8 @@ export default function SaaSRadarPanel({ token }) {
 
   const runIngest = async () => {
     try {
+      // Snapshot the current total so the user can see "started from X" while it runs.
+      setIngestBaseline(stats?.total ?? 0);
       const res = await api.post("/admin/saas-radar/ingest", { days_back: Number(daysBack) });
       toast.success(`Ingest started · job ${res.data.job_id.slice(0, 8)}…`);
       setIngestRunning(true);
@@ -392,9 +396,17 @@ export default function SaaSRadarPanel({ token }) {
               </div>
               {ingestRunning && liveIngestProgress && (
                 <div className="text-[11px] text-indigo-700 mt-2 space-y-0.5">
+                  {ingestBaseline !== null && (
+                    <div className="text-slate-600">
+                      Started from <b>{ingestBaseline.toLocaleString()}</b> existing products
+                      {stats?.total !== undefined && stats.total !== ingestBaseline && (
+                        <span> · now at <b className="text-indigo-700">{stats.total.toLocaleString()}</b> (+{(stats.total - ingestBaseline).toLocaleString()} new)</span>
+                      )}
+                    </div>
+                  )}
                   {liveIngestProgress.stage && <div className="font-medium">{liveIngestProgress.stage}</div>}
                   <div>
-                    {liveIngestProgress.seen || 0} seen · {liveIngestProgress.new || 0} new
+                    This run: {liveIngestProgress.seen || 0} seen · {liveIngestProgress.new || 0} new (in this chunk)
                   </div>
                   {liveIngestProgress.stage && liveIngestProgress.stage.includes("paused") && (
                     <div className="text-amber-700 text-[10px]">
