@@ -4748,4 +4748,61 @@ async def seed_admin():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    try:
+        from saas_radar import _shutdown_playwright
+        await _shutdown_playwright()
+    except Exception:
+        pass
+    if _saas_radar_scheduler is not None:
+        _saas_radar_scheduler.shutdown(wait=False)
     client.close()
+
+
+# ============================================================================
+# SaaS Radar: daily auto-ingest scheduler (9am UTC)
+# ============================================================================
+_saas_radar_scheduler = None
+
+
+@app.on_event("startup")
+async def _start_saas_radar_scheduler():
+    """Schedules a daily ingest of the previous 2 days at 09:00 UTC, plus an
+    auto-enrich of up to 200 newly ingested products. Idempotent — re-running
+    a daily ingest just upserts existing products."""
+    global _saas_radar_scheduler
+    if os.environ.get("DISABLE_SAAS_RADAR_CRON", "").lower() in ("1", "true", "yes"):
+        logger.info("SaaS Radar cron disabled via env DISABLE_SAAS_RADAR_CRON")
+        return
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from apscheduler.triggers.cron import CronTrigger
+        from saas_radar import _bg_ingest, _bg_enrich, _create_job, DEFAULT_SAAS_TOPICS, PH_TOKEN
+
+        async def _daily_run():
+            if not PH_TOKEN:
+                logger.warning("SaaS Radar daily cron skipped: PRODUCTHUNT_TOKEN not configured.")
+                return
+            try:
+                logger.info("SaaS Radar daily cron: starting ingest (2-day window)")
+                job_id = await _create_job(db, "ingest", {"days_back": 2, "topics": DEFAULT_SAAS_TOPICS, "source": "cron"})
+                await _bg_ingest(db, 2, DEFAULT_SAAS_TOPICS, job_id)
+
+                logger.info("SaaS Radar daily cron: starting enrich (200 products)")
+                enrich_job_id = await _create_job(db, "enrich", {"limit": 200, "use_llm": False, "use_playwright": False, "source": "cron"})
+                await _bg_enrich(db, 200, False, False, enrich_job_id)
+                logger.info("SaaS Radar daily cron: complete")
+            except Exception as e:
+                logger.exception("SaaS Radar daily cron failed: %s", e)
+
+        _saas_radar_scheduler = AsyncIOScheduler(timezone="UTC")
+        _saas_radar_scheduler.add_job(
+            _daily_run,
+            CronTrigger(hour=9, minute=0, timezone="UTC"),
+            id="saas_radar_daily",
+            max_instances=1,
+            coalesce=True,
+        )
+        _saas_radar_scheduler.start()
+        logger.info("SaaS Radar daily cron scheduled for 09:00 UTC")
+    except Exception as e:
+        logger.exception("Failed to start SaaS Radar scheduler: %s", e)

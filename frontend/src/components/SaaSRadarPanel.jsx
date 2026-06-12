@@ -36,6 +36,10 @@ import {
   Sparkles,
   Globe,
   Trash2,
+  ThumbsUp,
+  ThumbsDown,
+  Bookmark,
+  Send,
 } from "lucide-react";
 
 const API = `${import.meta.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_BACKEND_URL}/api`;
@@ -52,6 +56,13 @@ const BUCKET_LABELS = {
   green: "Green · Has aff. prog",
   red: "Red · No paid pricing",
   unknown: "Unknown",
+};
+
+const VERDICT_META = {
+  customer: { label: "Customer", icon: ThumbsUp, color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+  pass: { label: "Pass", icon: ThumbsDown, color: "text-rose-700 bg-rose-50 border-rose-200" },
+  later: { label: "Later", icon: Bookmark, color: "text-amber-700 bg-amber-50 border-amber-200" },
+  sent: { label: "Sent", icon: Send, color: "text-indigo-700 bg-indigo-50 border-indigo-200" },
 };
 
 export default function SaaSRadarPanel({ token }) {
@@ -77,6 +88,9 @@ export default function SaaSRadarPanel({ token }) {
   const [ingestRunning, setIngestRunning] = useState(false);
   const [enrichRunning, setEnrichRunning] = useState(false);
   const [enrichLimit, setEnrichLimit] = useState(100);
+  const [useLlm, setUseLlm] = useState(false);
+  const [usePlaywright, setUsePlaywright] = useState(false);
+  const [verdictFilter, setVerdictFilter] = useState("");
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagResult, setDiagResult] = useState(null);
   const [liveIngestProgress, setLiveIngestProgress] = useState(null);
@@ -101,6 +115,7 @@ export default function SaaSRadarPanel({ token }) {
       const res = await api.get("/admin/saas-radar/products", {
         params: {
           bucket: bucketFilter || undefined,
+          verdict: verdictFilter || undefined,
           has_email: hasEmail || undefined,
           search: search || undefined,
           sort: sortBy,
@@ -115,7 +130,7 @@ export default function SaaSRadarPanel({ token }) {
     } finally {
       setLoading(false);
     }
-  }, [bucketFilter, hasEmail, search, sortBy, page, token]);
+  }, [bucketFilter, verdictFilter, hasEmail, search, sortBy, page, token]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -162,11 +177,26 @@ export default function SaaSRadarPanel({ token }) {
 
   const runEnrich = async () => {
     try {
-      const res = await api.post("/admin/saas-radar/enrich", { limit: Number(enrichLimit) });
-      toast.success(`Enrichment started for ${enrichLimit} products · job ${res.data.job_id.slice(0, 8)}…`);
+      const res = await api.post("/admin/saas-radar/enrich", {
+        limit: Number(enrichLimit),
+        use_llm: useLlm,
+        use_playwright: usePlaywright,
+      });
+      toast.success(`Enrichment started · ${enrichLimit} products${useLlm ? " · LLM ON" : ""}${usePlaywright ? " · Headless ON" : ""}`);
       setEnrichRunning(true);
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to start enrichment");
+    }
+  };
+
+  const setVerdict = async (phId, verdict) => {
+    try {
+      await api.patch(`/admin/saas-radar/products/${phId}/verdict`, { verdict });
+      // Optimistically update locally
+      setProducts((prev) => prev.map((p) => (p.ph_id === phId ? { ...p, verdict } : p)));
+      loadStats();
+    } catch (e) {
+      toast.error("Failed to save verdict");
     }
   };
 
@@ -295,6 +325,28 @@ export default function SaaSRadarPanel({ token }) {
             ))}
           </div>
 
+          {/* Verdict counts */}
+          {stats?.verdicts && (
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <span className="text-slate-500">Verdicts:</span>
+              {Object.entries(VERDICT_META).map(([key, meta]) => {
+                const Icon = meta.icon;
+                return (
+                  <button
+                    type="button"
+                    key={key}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border ${meta.color} hover:opacity-80`}
+                    onClick={() => { setVerdictFilter(key); setPage(0); }}
+                    data-testid={`radar-verdict-stat-${key}`}
+                  >
+                    <Icon className="h-3 w-3" />
+                    <b>{stats.verdicts[key] || 0}</b> {meta.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Action row */}
           <div className="grid md:grid-cols-2 gap-3 pt-2">
             <div className="border rounded-lg p-3 bg-slate-50">
@@ -325,7 +377,11 @@ export default function SaaSRadarPanel({ token }) {
               </div>
               {ingestRunning && liveIngestProgress && (
                 <div className="text-[11px] text-indigo-700 mt-2">
-                  Live: page {liveIngestProgress.page || 0} · {liveIngestProgress.seen || 0} seen · {liveIngestProgress.new || 0} new
+                  {liveIngestProgress.stage && <div>{liveIngestProgress.stage}</div>}
+                  Live: {liveIngestProgress.seen || 0} seen · {liveIngestProgress.new || 0} new
+                  {liveIngestProgress.total_chunks && (
+                    <span> · chunk {liveIngestProgress.chunk}/{liveIngestProgress.total_chunks}</span>
+                  )}
                 </div>
               )}
               {stats?.last_ingest && (
@@ -370,6 +426,21 @@ export default function SaaSRadarPanel({ token }) {
                   {enrichRunning ? "Running…" : "Run Enrich"}
                 </Button>
               </div>
+              <div className="flex flex-wrap gap-3 mt-2 text-[11px] text-slate-700">
+                <label className="inline-flex items-center gap-1.5 cursor-pointer" data-testid="radar-llm-toggle">
+                  <input type="checkbox" checked={useLlm} onChange={(e) => setUseLlm(e.target.checked)} className="h-3 w-3" />
+                  <span>GPT-4o-mini reclassify (~$0.0001/product)</span>
+                </label>
+                <label className="inline-flex items-center gap-1.5 cursor-pointer" data-testid="radar-pw-toggle">
+                  <input type="checkbox" checked={usePlaywright} onChange={(e) => setUsePlaywright(e.target.checked)} className="h-3 w-3" />
+                  <span>Headless browser redirect fallback <span className="text-amber-700">(slow, usually CF-blocked)</span></span>
+                </label>
+              </div>
+              {enrichRunning && liveEnrichProgress && (
+                <div className="text-[11px] text-indigo-700 mt-2">
+                  Enriching… {JSON.stringify(liveEnrichProgress)}
+                </div>
+              )}
               {stats?.last_enrich && (
                 <div className="text-[11px] mt-2">
                   {stats.last_enrich.error ? (
@@ -380,6 +451,7 @@ export default function SaaSRadarPanel({ token }) {
                     <span className="text-slate-500">
                       Last: {fmtDate(stats.last_enrich.updated_at)} ·{" "}
                       processed {stats.last_enrich.result?.processed || 0}
+                      {stats.last_enrich.result?.use_llm ? " · LLM ON" : ""}
                     </span>
                   )}
                 </div>
@@ -448,7 +520,7 @@ export default function SaaSRadarPanel({ token }) {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid md:grid-cols-4 gap-3">
+          <div className="grid md:grid-cols-5 gap-3">
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">Bucket</label>
               <Select value={bucketFilter || "_all"} onValueChange={(v) => { setBucketFilter(v === "_all" ? "" : v); setPage(0); }}>
@@ -462,6 +534,22 @@ export default function SaaSRadarPanel({ token }) {
                   <SelectItem value="green">Green only</SelectItem>
                   <SelectItem value="red">Red only</SelectItem>
                   <SelectItem value="unknown">Unknown only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Verdict</label>
+              <Select value={verdictFilter || "_all"} onValueChange={(v) => { setVerdictFilter(v === "_all" ? "" : v); setPage(0); }}>
+                <SelectTrigger className="h-9" data-testid="radar-verdict-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_all">All</SelectItem>
+                  <SelectItem value="unset">Unjudged</SelectItem>
+                  <SelectItem value="customer">👍 Customer</SelectItem>
+                  <SelectItem value="pass">👎 Pass</SelectItem>
+                  <SelectItem value="later">🔖 Later</SelectItem>
+                  <SelectItem value="sent">📧 Sent</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -685,6 +773,26 @@ export default function SaaSRadarPanel({ token }) {
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
+                        </div>
+                        {/* Verdict row */}
+                        <div className="flex items-center justify-end gap-1 mt-1">
+                          {Object.entries(VERDICT_META).map(([key, meta]) => {
+                            const Icon = meta.icon;
+                            const active = p.verdict === key;
+                            return (
+                              <Button
+                                key={key}
+                                size="sm"
+                                variant="ghost"
+                                className={`h-6 px-1.5 text-[10px] ${active ? meta.color + " border" : "text-slate-400 hover:text-slate-700"}`}
+                                onClick={() => setVerdict(p.ph_id, active ? null : key)}
+                                title={meta.label}
+                                data-testid={`radar-verdict-${key}-${p.ph_id}`}
+                              >
+                                <Icon className="h-3 w-3" />
+                              </Button>
+                            );
+                          })}
                         </div>
                       </TableCell>
                     </TableRow>

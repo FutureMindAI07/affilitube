@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import json
 import logging
 import os
 import re
@@ -116,9 +117,40 @@ PRICING_KEYWORDS_RX = re.compile(
 
 # Match common email pattern, allow plus addressing, exclude obvious junk later.
 EMAIL_RX = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+
+# Domains that are clearly placeholders (IANA-reserved or convention).
+EMAIL_BLACKLIST_DOMAINS = {
+    "example.com", "example.org", "example.net", "example.io",
+    "test.com", "test.org", "domain.com", "yourdomain.com",
+    "company.com", "yourcompany.com", "mycompany.com", "samplecompany.com",
+    "yoursite.com", "mysite.com", "site.com", "samplesite.com",
+    "yourbusiness.com", "mybusiness.com", "business.com",
+    "youremail.com", "myemail.com", "email.com", "mail.com",
+    "yourdomain.io", "yourwebsite.com", "mywebsite.com", "website.com",
+    "localhost", "localhost.com",
+    "wixsite.com", "wixpress.com",
+}
+
+# Local-parts that are obviously placeholder names.
+EMAIL_BLACKLIST_LOCAL_EXACT = {
+    "your", "you", "yourname", "your.name", "your_name",
+    "name", "yourfullname", "fullname",
+    "jane", "janedoe", "jane.doe", "jane_doe",
+    "john", "johndoe", "john.doe", "john_doe",
+    "mary", "marydoe", "mary.doe",
+    "doe", "joe", "alice", "bob",
+    "foo", "bar", "baz", "qux",
+    "example", "sample", "test", "tester", "demo", "demouser",
+    "user", "username",
+    "firstname.lastname", "first.last", "firstname",
+    "noreply", "no-reply", "donotreply", "do-not-reply",
+}
+
+# Generic substrings that indicate noise/non-contact emails.
 EMAIL_BLACKLIST_SUBSTRINGS = (
-    "sentry", "wixpress", "example.com", "yourdomain", "domain.com",
-    ".png", ".jpg", ".webp", ".svg", "sentry.io",
+    "sentry", "wixpress",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
+    "mailer-daemon", "postmaster",
 )
 
 # Concurrency limits.
@@ -253,18 +285,20 @@ async def ph_ingest_window(
     posted_before: datetime,
     topics_filter: List[str],
     job_id: str,
+    resume_cursor: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Single-stream ingest for a date window. Filters topics LOCALLY post-fetch,
     so we don't burn 10x complexity points doing one query per topic.
 
-    Returns {seen, new, rate_limited, rate_limit_reset, pages}.
+    Returns {seen, new, rate_limited, rate_limit_reset, last_cursor, pages}.
+    `last_cursor` lets the caller resume the same window after a rate-limit pause.
     """
     seen = 0
     new = 0
     rate_limited = False
     rate_limit_reset = 0
     topic_set = {t.lower() for t in topics_filter} if topics_filter else None
-    after_cursor = None
+    after_cursor = resume_cursor
     page = 0
     while True:
         page += 1
@@ -376,6 +410,7 @@ async def ph_ingest_window(
         "new": new,
         "rate_limited": rate_limited,
         "rate_limit_reset": rate_limit_reset,
+        "last_cursor": after_cursor,
         "pages": page,
     }
 
@@ -417,8 +452,20 @@ def _extract_emails(html: str, domain: str) -> List[str]:
         m_low = m.lower()
         if any(b in m_low for b in EMAIL_BLACKLIST_SUBSTRINGS):
             continue
-        # Filter obvious image/asset filename matches that the regex picked up.
         if m_low.endswith((".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp")):
+            continue
+        # Split into local + domain parts for stricter checks.
+        try:
+            local, dom = m_low.split("@", 1)
+        except ValueError:
+            continue
+        if dom in EMAIL_BLACKLIST_DOMAINS:
+            continue
+        if local in EMAIL_BLACKLIST_LOCAL_EXACT:
+            continue
+        # Placeholder patterns like "your.name", "jane.doe", "first.last"
+        normalized_local = local.replace("_", ".").replace("-", ".")
+        if normalized_local in EMAIL_BLACKLIST_LOCAL_EXACT:
             continue
         found.add(m_low)
     # Prefer emails matching the product's domain.
@@ -616,7 +663,7 @@ async def enrich_one_product(client: httpx.AsyncClient, product: Dict[str, Any])
     return update
 
 
-async def enrich_pending_products(db, limit: int = 200) -> Dict[str, int]:
+async def enrich_pending_products(db, limit: int = 200, use_llm: bool = False, use_playwright: bool = False) -> Dict[str, int]:
     """Enrich products that have never been checked OR that were checked >24h ago.
 
     Returns counts by bucket after this run.
@@ -653,6 +700,44 @@ async def enrich_pending_products(db, limit: int = 200) -> Dict[str, int]:
                         "score": 0,
                         "notes": ["enrich_exception"],
                     }
+
+                # Optional headless-browser fallback for PH redirect-blocked products.
+                if use_playwright and update.get("notes") and "ph_redirect_blocked" in update["notes"]:
+                    resolved = await _playwright_resolve_redirect(p.get("website_url"))
+                    if resolved and "producthunt.com" not in (resolved.get("final_url") or ""):
+                        # We got the real domain via headless browser — re-enrich with it.
+                        p_resolved = dict(p)
+                        p_resolved["website_url"] = resolved["final_url"]
+                        try:
+                            update = await enrich_one_product(client, p_resolved)
+                            update.setdefault("notes", []).append("resolved_via_playwright")
+                            update["resolved_via"] = "playwright"
+                        except Exception as e:
+                            logger.warning("re-enrich after playwright resolve failed: %s", e)
+
+                # Optional LLM-based reclassification (gpt-4o-mini)
+                if use_llm:
+                    try:
+                        llm_result = await _llm_classify(p, update)
+                        if llm_result:
+                            update["llm_assessment"] = llm_result
+                            # Apply LLM override only when LLM confidently disagrees with regex bucket
+                            new_bucket = llm_result.get("bucket")
+                            if new_bucket and new_bucket in BUCKET_SCORES and llm_result.get("confidence", 0) >= 0.7:
+                                old_bucket = update.get("bucket", "unknown")
+                                if new_bucket != old_bucket:
+                                    update["bucket_regex"] = old_bucket
+                                    update["bucket"] = new_bucket
+                                    # Recompute score with bonuses preserved
+                                    score = BUCKET_SCORES[new_bucket]
+                                    if update.get("multiple_paid_tiers"):
+                                        score += 5
+                                    if update.get("emails_found"):
+                                        score += 10
+                                    update["score"] = score
+                    except Exception as e:
+                        logger.warning("LLM classify failed for %s: %s", p.get("name"), e)
+
                 await db.saas_radar_products.update_one(
                     {"ph_id": p["ph_id"]},
                     {"$set": update},
@@ -668,7 +753,206 @@ async def enrich_pending_products(db, limit: int = 200) -> Dict[str, int]:
     async for row in db.saas_radar_products.aggregate(pipeline):
         counts[row["_id"] or "unknown"] = row["count"]
     counts["processed"] = len(products)
+    counts["use_llm"] = use_llm
     return counts
+
+
+# ============================================================================
+# Optional LLM classifier (gpt-4o-mini)
+# ============================================================================
+
+_OPENAI_CLIENT = None
+
+
+def _get_openai_client():
+    global _OPENAI_CLIENT
+    if _OPENAI_CLIENT is None:
+        key = os.environ.get("OPENAI_API_KEY")
+        if not key:
+            return None
+        from openai import OpenAI
+        _OPENAI_CLIENT = OpenAI(api_key=key)
+    return _OPENAI_CLIENT
+
+
+async def _llm_classify(product: Dict[str, Any], current: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Ask gpt-4o-mini to refine the bucket assignment based on product metadata.
+
+    Returns {bucket, confidence, reasoning, is_b2b_saas, has_paid_pricing, has_affiliate_program}
+    or None if OpenAI is not configured.
+    """
+    client = _get_openai_client()
+    if not client:
+        return None
+
+    name = product.get("name") or ""
+    tagline = product.get("tagline") or ""
+    topics = ", ".join(product.get("topics") or [])
+    resolved_domain = current.get("resolved_domain") or "(blocked)"
+    regex_signals = {
+        "has_pricing": current.get("has_pricing", False),
+        "multiple_paid_tiers": current.get("multiple_paid_tiers", False),
+        "has_affiliate_program": current.get("has_affiliate_program", False),
+        "affiliate_platform": current.get("affiliate_platform_detected"),
+        "regex_bucket": current.get("bucket"),
+    }
+    prompt = f"""You are classifying ProductHunt launches for an outreach tool that helps SaaS founders find YouTube affiliate partners. We want to identify SaaS companies that should run an affiliate program but probably don't yet (target customers) OR already run one (warm prospects).
+
+Product: {name}
+Tagline: {tagline}
+Topics: {topics}
+Website domain: {resolved_domain}
+
+Existing regex signals (may be incomplete if website was blocked):
+{json.dumps(regex_signals, indent=2)}
+
+Buckets:
+- "yellow" = paid B2B SaaS WITHOUT an affiliate program (best target — they should run one)
+- "green"  = SaaS WITH an existing affiliate program (warm prospect — show our better partners)
+- "red"    = not a paid SaaS (free tool, pre-revenue, consumer app, hardware, etc.)
+- "unknown" = insufficient info
+
+Respond with ONLY a JSON object (no prose, no markdown) with keys:
+- bucket: "yellow" | "green" | "red" | "unknown"
+- confidence: 0.0-1.0
+- is_b2b_saas: bool
+- has_paid_pricing: bool (estimate, may differ from regex if you have higher signal from name/tagline)
+- has_affiliate_program: bool
+- reasoning: one-sentence justification (max 25 words)
+"""
+
+    def _call():
+        return client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.0,
+            max_tokens=200,
+        )
+
+    # The SDK is sync; run in threadpool to keep async loop free.
+    resp = await asyncio.get_event_loop().run_in_executor(None, _call)
+    content = resp.choices[0].message.content
+    try:
+        data = json.loads(content)
+    except Exception:
+        return None
+    # Coerce + bound
+    bucket = data.get("bucket")
+    if bucket not in BUCKET_SCORES:
+        bucket = None
+    try:
+        confidence = float(data.get("confidence", 0))
+    except Exception:
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+    return {
+        "bucket": bucket,
+        "confidence": confidence,
+        "is_b2b_saas": bool(data.get("is_b2b_saas", False)),
+        "has_paid_pricing": bool(data.get("has_paid_pricing", False)),
+        "has_affiliate_program": bool(data.get("has_affiliate_program", False)),
+        "reasoning": (data.get("reasoning") or "")[:200],
+        "model": "gpt-4o-mini",
+    }
+
+
+# ============================================================================
+# Optional headless-browser redirect resolver (Playwright)
+# ============================================================================
+
+_PLAYWRIGHT_INSTANCE = None
+_PLAYWRIGHT_BROWSER = None
+_PLAYWRIGHT_LOCK = asyncio.Lock()
+
+
+async def _playwright_get_browser():
+    """Lazy singleton browser. Kept alive across calls to amortize startup cost."""
+    global _PLAYWRIGHT_INSTANCE, _PLAYWRIGHT_BROWSER
+    if _PLAYWRIGHT_BROWSER is not None:
+        return _PLAYWRIGHT_BROWSER
+    async with _PLAYWRIGHT_LOCK:
+        if _PLAYWRIGHT_BROWSER is not None:
+            return _PLAYWRIGHT_BROWSER
+        try:
+            from playwright.async_api import async_playwright
+            _PLAYWRIGHT_INSTANCE = await async_playwright().start()
+            _PLAYWRIGHT_BROWSER = await _PLAYWRIGHT_INSTANCE.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+            )
+        except Exception as e:
+            logger.warning("Playwright init failed: %s", e)
+            _PLAYWRIGHT_BROWSER = None
+        return _PLAYWRIGHT_BROWSER
+
+
+async def _playwright_resolve_redirect(url: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Use headless Chromium to follow a PH /r/ tracking URL to the real website.
+
+    Returns {final_url} or None. Best-effort; Cloudflare may still block from
+    cloud IPs, in which case we return None and the caller leaves the product
+    marked ph_redirect_blocked.
+    """
+    if not url or "producthunt.com/r/" not in url.lower():
+        return None
+    browser = await _playwright_get_browser()
+    if browser is None:
+        return None
+    context = None
+    try:
+        context = await browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ),
+            viewport={"width": 1280, "height": 800},
+            locale="en-US",
+        )
+        page = await context.new_page()
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+        except Exception as e:
+            logger.debug("Playwright goto failed for %s: %s", url, e)
+            return None
+        final = page.url
+        if final and "producthunt.com" not in final:
+            return {"final_url": final}
+        # PH might use a JS redirect — wait a tick and check again
+        try:
+            await page.wait_for_timeout(2000)
+            final = page.url
+            if final and "producthunt.com" not in final:
+                return {"final_url": final}
+        except Exception:
+            pass
+        return None
+    except Exception as e:
+        logger.warning("Playwright resolve_redirect error: %s", e)
+        return None
+    finally:
+        if context is not None:
+            try:
+                await context.close()
+            except Exception:
+                pass
+
+
+async def _shutdown_playwright():
+    """Clean up the singleton browser/playwright at app shutdown."""
+    global _PLAYWRIGHT_BROWSER, _PLAYWRIGHT_INSTANCE
+    if _PLAYWRIGHT_BROWSER is not None:
+        try:
+            await _PLAYWRIGHT_BROWSER.close()
+        except Exception:
+            pass
+        _PLAYWRIGHT_BROWSER = None
+    if _PLAYWRIGHT_INSTANCE is not None:
+        try:
+            await _PLAYWRIGHT_INSTANCE.stop()
+        except Exception:
+            pass
+        _PLAYWRIGHT_INSTANCE = None
 
 
 # ============================================================================
@@ -702,28 +986,119 @@ async def _finish_job(db, job_id: str, result: Dict[str, Any], error: Optional[s
     )
 
 
+CHUNK_DAYS = 15  # PH complexity budget = ~6250 pts/15min; one 15-day chunk fits comfortably.
+MAX_RATE_LIMIT_WAIT_SECS = 900  # Cap any single pause at 15 minutes.
+
+
 async def _bg_ingest(db, days_back: int, topics_filter: List[str], job_id: str):
+    """Chunked ingest with built-in pauses when PH rate limit hits.
+
+    Splits the requested days_back into CHUNK_DAYS-sized chunks (newest first) and
+    runs them sequentially. If a chunk hits rate limit mid-stream, we sleep for the
+    reset window and resume the same chunk from its last cursor — no duplicate work,
+    no lost progress.
+    """
     try:
         end = datetime.now(timezone.utc)
         start = end - timedelta(days=days_back)
-        result = await ph_ingest_window(db, start, end, topics_filter, job_id)
-        result["days_back"] = days_back
-        # If we were rate-limited mid-job, surface that as a soft error so the UI shows it.
-        error = None
-        if result.get("rate_limited"):
-            error = (
-                f"PH rate limit hit after {result['seen']} posts. "
-                f"Re-run in ~{result.get('rate_limit_reset', 900)}s to continue (existing posts kept)."
+
+        # Build chunks newest-first so users see fresh launches in the table first.
+        chunks: List[Tuple[datetime, datetime]] = []
+        cursor_end = end
+        while cursor_end > start:
+            cursor_start = max(cursor_end - timedelta(days=CHUNK_DAYS), start)
+            chunks.append((cursor_start, cursor_end))
+            cursor_end = cursor_start
+
+        cumulative = {
+            "seen": 0, "new": 0,
+            "rate_limited": False, "rate_limit_reset": 0,
+            "chunks_total": len(chunks), "chunks_done": 0,
+            "pages": 0, "days_back": days_back,
+        }
+
+        for idx, (chunk_start, chunk_end) in enumerate(chunks):
+            await db.saas_radar_jobs.update_one(
+                {"id": job_id},
+                {"$set": {
+                    "progress": {
+                        "chunk": idx + 1,
+                        "total_chunks": len(chunks),
+                        "seen": cumulative["seen"],
+                        "new": cumulative["new"],
+                        "stage": f"chunk {idx+1}/{len(chunks)} ({chunk_start.date()} → {chunk_end.date()})",
+                    },
+                    "updated_at": datetime.now(timezone.utc),
+                }},
             )
-        await _finish_job(db, job_id, result, error=error)
+
+            resume_cursor: Optional[str] = None
+            chunk_retries = 0
+            while chunk_retries < 4:  # max 4 retries per chunk
+                try:
+                    res = await ph_ingest_window(
+                        db, chunk_start, chunk_end, topics_filter, job_id,
+                        resume_cursor=resume_cursor,
+                    )
+                except PHClientError as e:
+                    if "401" in str(e):
+                        await _finish_job(db, job_id, cumulative, error=f"PH auth failed: {e}")
+                        return
+                    raise
+
+                cumulative["seen"] += res["seen"]
+                cumulative["new"] += res["new"]
+                cumulative["pages"] += res["pages"]
+
+                if res["rate_limited"]:
+                    wait = min(max(res.get("rate_limit_reset", 660) + 5, 60), MAX_RATE_LIMIT_WAIT_SECS)
+                    logger.info(
+                        "Chunk %s/%s rate-limited after %s posts; sleeping %ss",
+                        idx + 1, len(chunks), res["seen"], wait,
+                    )
+                    await db.saas_radar_jobs.update_one(
+                        {"id": job_id},
+                        {"$set": {
+                            "progress": {
+                                "chunk": idx + 1,
+                                "total_chunks": len(chunks),
+                                "seen": cumulative["seen"],
+                                "new": cumulative["new"],
+                                "stage": f"chunk {idx+1}/{len(chunks)} · paused {wait}s (PH rate limit)",
+                            },
+                            "updated_at": datetime.now(timezone.utc),
+                        }},
+                    )
+                    await asyncio.sleep(wait)
+                    resume_cursor = res.get("last_cursor")
+                    chunk_retries += 1
+                else:
+                    break
+            else:
+                # Exhausted retries on this chunk; bail out with partial.
+                cumulative["rate_limited"] = True
+                cumulative["chunks_done"] = idx
+                await _finish_job(
+                    db, job_id, cumulative,
+                    error=(
+                        f"PH rate limit blocked chunk {idx+1}/{len(chunks)} after "
+                        f"{chunk_retries} retries. Partial ingest stored "
+                        f"({cumulative['new']} new). Click Run Ingest again to continue."
+                    ),
+                )
+                return
+
+            cumulative["chunks_done"] = idx + 1
+
+        await _finish_job(db, job_id, cumulative)
     except Exception as e:
         logger.exception("ingest job failed")
         await _finish_job(db, job_id, {}, error=str(e))
 
 
-async def _bg_enrich(db, limit: int, job_id: str):
+async def _bg_enrich(db, limit: int, use_llm: bool, use_playwright: bool, job_id: str):
     try:
-        counts = await enrich_pending_products(db, limit=limit)
+        counts = await enrich_pending_products(db, limit=limit, use_llm=use_llm, use_playwright=use_playwright)
         await _finish_job(db, job_id, counts)
     except Exception as e:
         logger.exception("enrich job failed")
@@ -741,6 +1116,15 @@ class IngestRequest(BaseModel):
 
 class EnrichRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=500)
+    use_llm: bool = Field(default=False)
+    use_playwright: bool = Field(default=False)
+
+
+class VerdictRequest(BaseModel):
+    verdict: Optional[str] = Field(default=None)  # "customer" | "pass" | "later" | "sent" | None
+
+
+VALID_VERDICTS = {"customer", "pass", "later", "sent", None, ""}
 
 
 def build_router(db, admin_dep) -> APIRouter:
@@ -902,10 +1286,20 @@ def build_router(db, admin_dep) -> APIRouter:
             projection={"_id": 0},
         )
         with_emails = await db.saas_radar_products.count_documents({"emails_found.0": {"$exists": True}})
+
+        # Verdict counts
+        verdict_counts = {"customer": 0, "later": 0, "sent": 0, "pass": 0}
+        async for row in db.saas_radar_products.aggregate([
+            {"$match": {"verdict": {"$in": list(verdict_counts.keys())}}},
+            {"$group": {"_id": "$verdict", "count": {"$sum": 1}}},
+        ]):
+            verdict_counts[row["_id"]] = row["count"]
+
         return {
             "buckets": buckets,
             "total": total,
             "with_emails": with_emails,
+            "verdicts": verdict_counts,
             "last_ingest": last_ingest,
             "last_enrich": last_enrich,
         }
@@ -938,8 +1332,8 @@ def build_router(db, admin_dep) -> APIRouter:
                 "updated_at": datetime.now(timezone.utc),
             }},
         )
-        job_id = await _create_job(db, "enrich", {"limit": req.limit})
-        background_tasks.add_task(_bg_enrich, db, req.limit, job_id)
+        job_id = await _create_job(db, "enrich", {"limit": req.limit, "use_llm": req.use_llm, "use_playwright": req.use_playwright})
+        background_tasks.add_task(_bg_enrich, db, req.limit, req.use_llm, req.use_playwright, job_id)
         return {"job_id": job_id, "status": "running"}
 
     @router.get("/jobs")
@@ -950,6 +1344,7 @@ def build_router(db, admin_dep) -> APIRouter:
     @router.get("/products")
     async def list_products(
         bucket: Optional[str] = Query(None),
+        verdict: Optional[str] = Query(None),
         search: Optional[str] = Query(None),
         has_email: Optional[bool] = Query(None),
         sort: str = Query("score_desc"),
@@ -962,13 +1357,34 @@ def build_router(db, admin_dep) -> APIRouter:
             buckets = [b.strip() for b in bucket.split(",") if b.strip()]
             if buckets:
                 query["bucket"] = {"$in": buckets}
+        if verdict:
+            verdicts = [v.strip() for v in verdict.split(",") if v.strip()]
+            if verdicts:
+                if "unset" in verdicts:
+                    # Allow filtering by "unset" → null/missing verdict
+                    set_v = [v for v in verdicts if v != "unset"]
+                    if set_v:
+                        query["$or"] = [
+                            {"verdict": {"$in": set_v}},
+                            {"verdict": None},
+                            {"verdict": {"$exists": False}},
+                        ]
+                    else:
+                        query["$or"] = [{"verdict": None}, {"verdict": {"$exists": False}}]
+                else:
+                    query["verdict"] = {"$in": verdicts}
         if search:
             rx = re.escape(search)
-            query["$or"] = [
+            search_or = [
                 {"name": {"$regex": rx, "$options": "i"}},
                 {"tagline": {"$regex": rx, "$options": "i"}},
                 {"website_url": {"$regex": rx, "$options": "i"}},
             ]
+            # Merge with existing $or (from verdict=unset) using $and so both apply.
+            if "$or" in query:
+                query["$and"] = [{"$or": query.pop("$or")}, {"$or": search_or}]
+            else:
+                query["$or"] = search_or
         if has_email:
             query["emails_found.0"] = {"$exists": True}
 
@@ -984,6 +1400,22 @@ def build_router(db, admin_dep) -> APIRouter:
         cursor = db.saas_radar_products.find(query, {"_id": 0}).sort(sort_spec).skip(offset).limit(limit)
         products = await cursor.to_list(limit)
         return {"products": products, "total": total, "limit": limit, "offset": offset}
+
+    @router.patch("/products/{ph_id}/verdict")
+    async def set_verdict(ph_id: str, req: VerdictRequest, admin=Depends(admin_dep)):
+        v = req.verdict if req.verdict else None
+        if v not in VALID_VERDICTS:
+            raise HTTPException(status_code=400, detail=f"Invalid verdict. Allowed: {sorted([x for x in VALID_VERDICTS if x])}")
+        res = await db.saas_radar_products.update_one(
+            {"ph_id": ph_id},
+            {"$set": {
+                "verdict": v or None,
+                "verdict_updated_at": datetime.now(timezone.utc) if v else None,
+            }},
+        )
+        if res.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Product not found")
+        return {"success": True, "verdict": v}
 
     @router.get("/products.csv")
     async def export_csv(
@@ -1005,6 +1437,7 @@ def build_router(db, admin_dep) -> APIRouter:
         writer = csv.writer(buf)
         writer.writerow([
             "name", "tagline", "website", "ph_url", "bucket", "score",
+            "verdict",
             "has_pricing", "multiple_paid_tiers", "has_affiliate_program",
             "affiliate_platform", "affiliate_program_url", "pricing_url",
             "emails", "makers", "twitter_handles", "topics", "votes", "posted_at",
@@ -1018,6 +1451,7 @@ def build_router(db, admin_dep) -> APIRouter:
                 r.get("ph_url") or "",
                 r.get("bucket") or "",
                 r.get("score") or 0,
+                r.get("verdict") or "",
                 "yes" if r.get("has_pricing") else "no",
                 "yes" if r.get("multiple_paid_tiers") else "no",
                 "yes" if r.get("has_affiliate_program") else "no",

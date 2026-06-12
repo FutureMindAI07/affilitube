@@ -86,10 +86,10 @@ def test_count_paid_tiers_zero():
 
 
 def test_extract_emails_prefers_own_domain():
-    html = 'Contact us at hello@mysite.com or noreply@gmail.com'
-    emails = _extract_emails(html, "mysite.com")
-    assert emails[0] == "hello@mysite.com"
-    assert "noreply@gmail.com" in emails
+    html = 'Contact us at hello@realstartup.com or noreply@gmail.com'
+    emails = _extract_emails(html, "realstartup.com")
+    assert emails[0] == "hello@realstartup.com"
+    assert "noreply@gmail.com" not in emails  # noreply is now blacklisted as placeholder
 
 
 def test_extract_emails_filters_assets():
@@ -104,3 +104,32 @@ def test_extract_emails_filters_sentry():
     emails = _extract_emails(html, "startup.io")
     assert all("sentry" not in e for e in emails)
     assert "founder@startup.io" in emails
+
+
+def test_extract_emails_filters_placeholder_local_parts():
+    html = "Email us at jane@startup.io, your@startup.io, name@startup.io, foo@startup.io, founder@startup.io"
+    emails = _extract_emails(html, "startup.io")
+    assert "founder@startup.io" in emails
+    assert "jane@startup.io" not in emails
+    assert "your@startup.io" not in emails
+    assert "name@startup.io" not in emails
+    assert "foo@startup.io" not in emails
+
+
+def test_extract_emails_filters_placeholder_domains():
+    html = "Email us at hello@yourdomain.com, contact@yourcompany.com, real@startup.io, sample@example.com, sales@company.com"
+    emails = _extract_emails(html, "startup.io")
+    assert "real@startup.io" in emails
+    assert all("yourdomain.com" not in e for e in emails)
+    assert all("yourcompany.com" not in e for e in emails)
+    assert all("example.com" not in e for e in emails)
+    assert all("company.com" not in e for e in emails)
+
+
+def test_extract_emails_filters_normalized_placeholder():
+    html = "Email us at jane.doe@startup.io, john_doe@startup.io, first.last@startup.io, founder@startup.io"
+    emails = _extract_emails(html, "startup.io")
+    assert "founder@startup.io" in emails
+    assert "jane.doe@startup.io" not in emails
+    assert "john_doe@startup.io" not in emails
+    assert "first.last@startup.io" not in emails
