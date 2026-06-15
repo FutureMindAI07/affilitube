@@ -90,6 +90,23 @@ export default function SaaSFoundersLanding() {
           </div>
         </section>
 
+        {/* Demo Video */}
+        <section className="py-12 bg-slate-950 border-t border-slate-800" data-testid="hero-video-section">
+          <div className="max-w-4xl mx-auto px-6">
+            <div className="relative w-full rounded-xl overflow-hidden shadow-2xl shadow-indigo-500/10 border border-slate-800" style={{ paddingBottom: "56.25%" }}>
+              <iframe
+                className="absolute top-0 left-0 w-full h-full"
+                src="https://www.youtube.com/embed/HQongLKrAzI?rel=0"
+                title="AffiliTube for SaaS Founders — Demo"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                data-testid="hero-demo-video"
+              />
+            </div>
+          </div>
+        </section>
+
         {/* Pain Section — Reddit-style cards */}
         <section className="py-20 bg-white">
           <div className="max-w-6xl mx-auto px-6">
