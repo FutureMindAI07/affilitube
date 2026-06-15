@@ -187,13 +187,20 @@ export default function SaaSFoundersLanding() {
             </p>
 
             {/* Feature showcase rows (priority features get a dedicated row) */}
-            <div className="mb-16 max-w-5xl mx-auto">
+            <div className="mb-16 max-w-5xl mx-auto space-y-20">
               <ShowcaseRow
                 imagePosition="left"
                 imageSrc="https://customer-assets.emergentagent.com/job_16e5cd9f-6337-4f9b-a1c4-4252c37bd4cb/artifacts/7snhh608_Screenshot%202026-06-15%20at%2013.47.57.png"
                 imageAlt="AffiliTube 'Start from a template' panel showing six pre-configured prospecting templates including Reverse Affiliate Search, selected and ready to take a SaaS product name input."
                 heading="Templates built for SaaS affiliate prospecting"
                 body="Don't start from a blank search. Choose from templates tuned for SaaS founders — including Reverse Affiliate Search, the exact technique used in the demo above, which finds creators already promoting products like yours."
+              />
+              <ShowcaseRow
+                imagePosition="right"
+                imageSrc="https://customer-assets.emergentagent.com/job_16e5cd9f-6337-4f9b-a1c4-4252c37bd4cb/artifacts/a060xqem_Screenshot%202026-06-15%20at%2014.00.30.png"
+                imageAlt="AffiliTube search results table sorted by AI Grade descending — each row shows an overall Score, dedicated Aff (affiliate) score, channel name, subscribers, average views, last upload, topic tags, signal badges, health indicators and a Pipeline action button. The highest-scoring channels sit at the top."
+                heading="Every result, pre-scored for affiliate fit"
+                body="No more guessing which channels are worth a closer look. Every result gets an overall AI Grade plus a dedicated Affiliate Score, sorted automatically — so the strongest prospects are already sitting at the top before you've opened a single profile."
               />
             </div>
 
