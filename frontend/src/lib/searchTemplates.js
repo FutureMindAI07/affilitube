@@ -114,7 +114,7 @@ export const SEARCH_TEMPLATES = [
   },
   {
     id: "partnerstack-reverse",
-    name: "PartnerStack Reverse Search",
+    name: "Reverse Affiliate Search",
     icon: "Target",
     description:
       "Paste any SaaS product name to find creators already making content about it. Highest-signal prospecting method.",
