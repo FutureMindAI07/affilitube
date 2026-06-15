@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import ShowcaseRow from "@/components/landing/ShowcaseRow";
 import {
   ArrowRight,
   ArrowUp,
@@ -184,6 +185,18 @@ export default function SaaSFoundersLanding() {
             <p className="text-sm text-slate-500 text-center mb-14 max-w-md mx-auto">
               Everything you need to find, qualify, and contact YouTube affiliate partners.
             </p>
+
+            {/* Feature showcase rows (priority features get a dedicated row) */}
+            <div className="mb-16 max-w-5xl mx-auto">
+              <ShowcaseRow
+                imagePosition="left"
+                imageSrc="https://customer-assets.emergentagent.com/job_16e5cd9f-6337-4f9b-a1c4-4252c37bd4cb/artifacts/7snhh608_Screenshot%202026-06-15%20at%2013.47.57.png"
+                imageAlt="AffiliTube 'Start from a template' panel showing six pre-configured prospecting templates including Reverse Affiliate Search, selected and ready to take a SaaS product name input."
+                heading="Templates built for SaaS affiliate prospecting"
+                body="Don't start from a blank search. Choose from templates tuned for SaaS founders — including Reverse Affiliate Search, the exact technique used in the demo above, which finds creators already promoting products like yours."
+              />
+            </div>
+
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
               {[
                 { icon: Search, title: "Keyword Search by Niche", desc: "Type your niche or product category. Instantly find creators already covering it." },
