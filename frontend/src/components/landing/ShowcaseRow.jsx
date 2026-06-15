@@ -31,12 +31,12 @@ export default function ShowcaseRow({
       data-testid="showcase-row"
     >
       <div className={`order-1 ${imageOrderClass}`}>
-        <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-xl shadow-slate-900/5 bg-white">
+        <div className="group rounded-2xl overflow-hidden border border-slate-200 shadow-xl shadow-slate-900/5 bg-white transition-shadow duration-300 md:hover:shadow-2xl md:hover:shadow-slate-900/10 md:cursor-zoom-in">
           <img
             src={imageSrc}
             alt={imageAlt}
             loading="lazy"
-            className="w-full h-auto block"
+            className="w-full h-auto block transition-transform duration-500 ease-out md:group-hover:scale-[1.04]"
             data-testid="showcase-row-image"
           />
         </div>
