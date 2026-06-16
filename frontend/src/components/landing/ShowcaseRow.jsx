@@ -10,10 +10,12 @@
  *
  * Desktop: ~50/50 split (md:grid-cols-2).
  * Mobile: stacked, image first.
- * Visual conventions match the SaaS Founders landing page (rounded-2xl, slate/indigo palette,
- * font-heading for headings).
+ * Click image (or tap on touch) → opens a full-screen lightbox at natural resolution
+ * via react-medium-image-zoom. Esc / click-outside to close.
  */
 import PropTypes from "prop-types";
+import Zoom from "react-medium-image-zoom";
+import "react-medium-image-zoom/dist/styles.css";
 
 export default function ShowcaseRow({
   imagePosition = "left",
@@ -31,14 +33,16 @@ export default function ShowcaseRow({
       data-testid="showcase-row"
     >
       <div className={`order-1 ${imageOrderClass}`}>
-        <div className="group rounded-2xl overflow-hidden border border-slate-200 shadow-xl shadow-slate-900/5 bg-white transition-shadow duration-300 md:hover:shadow-2xl md:hover:shadow-slate-900/10 md:cursor-zoom-in">
-          <img
-            src={imageSrc}
-            alt={imageAlt}
-            loading="lazy"
-            className="w-full h-auto block transition-transform duration-500 ease-out md:group-hover:scale-[1.04]"
-            data-testid="showcase-row-image"
-          />
+        <div className="group rounded-2xl overflow-hidden border border-slate-200 shadow-xl shadow-slate-900/5 bg-white transition-shadow duration-300 md:hover:shadow-2xl md:hover:shadow-slate-900/10">
+          <Zoom zoomMargin={48} classDialog="showcase-zoom-dialog">
+            <img
+              src={imageSrc}
+              alt={imageAlt}
+              loading="lazy"
+              className="w-full h-auto block transition-transform duration-500 ease-out md:group-hover:scale-[1.02] md:cursor-zoom-in"
+              data-testid="showcase-row-image"
+            />
+          </Zoom>
         </div>
       </div>
       <div className={`order-2 ${textOrderClass}`}>
