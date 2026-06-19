@@ -117,119 +117,15 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus, ArrowUp, ArrowDown, Minus, Activity, TrendingUp, CreditCard, User as UserIcon, ChevronDown as ChevronDownIcon, Gift, ExternalLink as ExternalLinkIcon } from "lucide-react";
 import { useSearchResults } from "@/contexts/SearchResultsContext";
 import { UpgradeDialog } from "@/components/UpgradeDialog";
-
-// Health indicator configs
-const ENGAGEMENT_HEALTH_CONFIG = {
-  Healthy: { color: "bg-emerald-100 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-  Average: { color: "bg-yellow-100 text-yellow-700 border-yellow-200", dot: "bg-yellow-500" },
-  Low: { color: "bg-orange-100 text-orange-700 border-orange-200", dot: "bg-orange-500" },
-  "Very Low": { color: "bg-red-100 text-red-700 border-red-200", dot: "bg-red-500" },
-};
-
-const UPLOAD_CONSISTENCY_ICONS = {
-  Daily: "text-emerald-500",
-  "Very Active": "text-emerald-500",
-  Active: "text-blue-500",
-  Occasional: "text-yellow-500",
-  Infrequent: "text-slate-400",
-};
-
-// Client-side health indicator calculation for channels loaded from cache/autosave
-function computeHealthIndicators(channel) {
-  if (channel.engagement_health && channel.upload_consistency && channel.growth_indicator) return channel;
-  const ch = { ...channel };
-  // Engagement health
-  if (!ch.engagement_health && ch.subscriber_count > 0) {
-    const rate = (ch.avg_views_recent / ch.subscriber_count) * 100;
-    ch.engagement_rate = Math.round(rate * 100) / 100;
-    if (rate >= 5) ch.engagement_health = "Healthy";
-    else if (rate >= 2) ch.engagement_health = "Average";
-    else if (rate >= 0.5) ch.engagement_health = "Low";
-    else ch.engagement_health = "Very Low";
-  }
-  // Growth indicator
-  if (!ch.growth_indicator && ch.video_count > 0 && ch.view_count > 0) {
-    const lifetimeAvg = ch.view_count / ch.video_count;
-    const ratio = lifetimeAvg > 0 ? ch.avg_views_recent / lifetimeAvg : 1;
-    if (ratio > 1.5) ch.growth_indicator = "Growing";
-    else if (ratio < 0.5) ch.growth_indicator = "Declining";
-    else ch.growth_indicator = "Stable";
-  }
-  // Upload consistency from recent_videos
-  if (!ch.upload_consistency && ch.recent_videos?.length >= 2) {
-    const dates = ch.recent_videos
-      .map(v => v.published_at ? new Date(v.published_at) : null)
-      .filter(Boolean)
-      .sort((a, b) => b - a);
-    if (dates.length >= 2) {
-      const gaps = [];
-      for (let i = 0; i < dates.length - 1; i++) gaps.push((dates[i] - dates[i+1]) / 86400000);
-      const avg = gaps.reduce((a,b) => a+b, 0) / gaps.length;
-      ch.upload_avg_days = Math.round(avg * 10) / 10;
-      if (avg <= 2) ch.upload_consistency = "Daily";
-      else if (avg <= 7) ch.upload_consistency = "Very Active";
-      else if (avg <= 14) ch.upload_consistency = "Active";
-      else if (avg <= 30) ch.upload_consistency = "Occasional";
-      else ch.upload_consistency = "Infrequent";
-    }
-  }
-  return ch;
-}
+import {
+  ENGAGEMENT_HEALTH_CONFIG,
+  UPLOAD_CONSISTENCY_ICONS,
+  computeHealthIndicators,
+} from "@/lib/healthIndicators";
+import { SEARCH_PRESETS, DEFAULT_KEYWORD_PLACEHOLDER } from "@/lib/searchPresets";
+import { OUTREACH_STATUS_CONFIG } from "@/lib/outreachConfig";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-
-// Search presets
-const SEARCH_PRESETS = {
-  quick: {
-    name: "Quick Scan",
-    icon: "🚀",
-    description: "Fast, low quota usage",
-    settings: {
-      videos_to_scan: 3,
-      scan_video_descriptions: false,
-      max_channels_to_enrich: 100,
-    }
-  },
-  balanced: {
-    name: "Balanced",
-    icon: "⚖️",
-    description: "Good coverage (default)",
-    settings: {
-      videos_to_scan: 5,
-      scan_video_descriptions: false,
-      max_channels_to_enrich: 200,
-    }
-  },
-  deep: {
-    name: "Deep Scan",
-    icon: "🔍",
-    description: "Comprehensive, higher quota",
-    settings: {
-      videos_to_scan: 10,
-      scan_video_descriptions: true,
-      max_channels_to_enrich: null,
-    }
-  },
-  custom: {
-    name: "Custom",
-    icon: "⚙️",
-    description: "Full control",
-    settings: null
-  }
-};
-
-const DEFAULT_KEYWORD_PLACEHOLDER = `Select a niche above to see example keywords`;
-
-// Outreach status configuration
-const OUTREACH_STATUS_CONFIG = {
-  not_contacted: { label: "Not Contacted", color: "bg-slate-100 text-slate-700 border-slate-200" },
-  contacted: { label: "Contacted", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  replied: { label: "Replied", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-  in_negotiation: { label: "In Negotiation", color: "bg-orange-100 text-orange-700 border-orange-200" },
-  agreed: { label: "Agreed", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-  declined: { label: "Declined", color: "bg-red-100 text-red-700 border-red-200" },
-  no_response: { label: "No Response", color: "bg-slate-200 text-slate-600 border-slate-300" },
-};
 
 export default function Dashboard() {
   const { user, token, logout } = useAuth();
