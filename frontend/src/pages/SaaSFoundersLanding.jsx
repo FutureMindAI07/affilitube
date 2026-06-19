@@ -174,7 +174,7 @@ export default function SaaSFoundersLanding() {
         {/* Features Section */}
         <section className="py-20 bg-white">
           <div className="max-w-6xl mx-auto px-6">
-            <h2 className="text-base sm:text-lg font-heading font-semibold text-slate-900 text-center mb-4">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold text-slate-900 text-center mb-4 leading-tight">
               What used to take weeks now takes minutes.
             </h2>
             <p className="text-sm text-slate-500 text-center mb-14 max-w-md mx-auto">

@@ -119,6 +119,14 @@ export default function ShowcaseRow({
               {ImageEl}
             </Zoom>
           )}
+          {!isTall && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute bottom-3 right-3 px-3 py-1 rounded-full bg-slate-900/80 text-white text-[11px] font-medium tracking-wide backdrop-blur-sm shadow-md"
+            >
+              Click to enlarge image
+            </div>
+          )}
           {isTall && (
             <>
               <div
