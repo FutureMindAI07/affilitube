@@ -233,6 +233,9 @@ export default function SaaSFoundersLanding() {
               <p>Building was never the hard part. Distribution was. And distribution, it turns out, is a full-time job nobody warns you about.</p>
               <p>AffiliTube exists because I wanted that job to be easier — for me, and for every other solo founder doing this the hard way.</p>
             </div>
+            <p className="mt-10 text-lg text-slate-700 italic">
+              — Adrian, founder of AffiliTube
+            </p>
           </div>
         </section>
 
