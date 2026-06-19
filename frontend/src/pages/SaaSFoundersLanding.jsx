@@ -6,16 +6,11 @@ import ShowcaseRow from "@/components/landing/ShowcaseRow";
 import {
   ArrowRight,
   ArrowUp,
-  Search,
-  BarChart3,
-  Gift,
   Sparkles,
   Users,
-  Mail,
   Target,
   CheckCircle2,
   Shield,
-  Zap,
   Clock,
   MessageSquare,
   Youtube,
@@ -205,33 +200,20 @@ export default function SaaSFoundersLanding() {
               <ShowcaseRow
                 imagePosition="left"
                 imageAspect="tall"
-                imageSrc="https://customer-assets.emergentagent.com/job_16e5cd9f-6337-4f9b-a1c4-4252c37bd4cb/artifacts/sci6xi1s_info_card_2x.webp"
-                imageAlt="AffiliTube channel info card for EmailTooltester — showing a full score breakdown (Topic Relevance, Activity, Engagement, Tutorial Intent, Subscriber Fit, Contactability), outreach tracking with status and follow-up date, affiliate potential signals, statistics, channel health indicators, recent videos, brand intelligence and notes — all in one expandable panel."
+                imageSrc="https://customer-assets.emergentagent.com/job_16e5cd9f-6337-4f9b-a1c4-4252c37bd4cb/artifacts/wi1surrw_info_card_1.5x_patched.png"
+                imageAlt="AffiliTube channel info card for EmailTooltester — showing a full score breakdown (Topic Relevance, Activity, Engagement, Tutorial Intent, Subscriber Fit, Contactability), outreach tracking with status, follow-up date and contact log, affiliate potential signals, channel statistics, channel health indicators (upload frequency, engagement, growth trend), tags, recent videos, description, brand intelligence with sponsorship confidence, and notes — all in one expandable panel."
                 heading="Every score, fully explained"
                 body="Click into any result to see exactly why it scored the way it did — a full breakdown across topic relevance, activity, engagement, and more — plus channel health, brand history, and outreach tracking, so you can judge fit and log your progress without leaving the page."
               />
+              <ShowcaseRow
+                imagePosition="right"
+                imageSrc="https://customer-assets.emergentagent.com/job_16e5cd9f-6337-4f9b-a1c4-4252c37bd4cb/artifacts/s2mzzsn4_Screenshot%202026-06-19%20at%2010.33.34.png"
+                imageAlt="AffiliTube AI Outreach Draft panel for the EmailTooltester channel — showing a generated subject line ('Exploring a Potential Collaboration') and a fully personalised email body that references one of the creator's actual videos ('How to Make a Good Welcome Email That Gets Opens & Clicks'), introduces AffiliTube naturally, and asks for a chat, with Regenerate and Copy All controls."
+                heading="Outreach emails that don't sound like outreach emails"
+                body="One click on AI Draft, and AffiliTube writes a fully personalised email — referencing the creator's actual videos, introducing your product naturally, and asking for a chat. No generic templates, no staring at a blank inbox. Just genuine outreach, ready to send."
+              />
             </div>
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
-              {[
-                { icon: Search, title: "Keyword Search by Niche", desc: "Type your niche or product category. Instantly find creators already covering it." },
-                { icon: Shield, title: "Competitor Intelligence", desc: "Search by competitor name to find the exact creators promoting them." },
-                { icon: CheckCircle2, title: "Affiliate-Verified Creators", desc: "Filter to show only creators who have active affiliate links in their content." },
-                { icon: BarChart3, title: "Subscriber & Engagement Data", desc: "See follower counts, view rates, and engagement scores at a glance." },
-                { icon: Gift, title: "Brand Intelligence", desc: "View every brand a creator has worked with and which videos contain affiliate promotions." },
-                { icon: Zap, title: "Affiliate Score & Overall Score", desc: "Proprietary scoring to help you prioritise your outreach list fast." },
-                { icon: Users, title: "Outreach Pipeline", desc: "Organise prospects into a structured pipeline so nothing falls through the cracks." },
-                { icon: Mail, title: "AI Email Drafter", desc: "AI reads each creator's bio and videos and writes a personalised outreach email tailored to them." },
-              ].map((f) => (
-                <div key={f.title} className="p-5 rounded-xl border border-slate-100 bg-slate-50/30">
-                  <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center mb-3">
-                    <f.icon className="h-4 w-4 text-indigo-600" />
-                  </div>
-                  <h3 className="font-heading font-semibold text-slate-900 text-sm mb-1">{f.title}</h3>
-                  <p className="text-xs text-slate-500 leading-relaxed">{f.desc}</p>
-                </div>
-              ))}
-            </div>
             <p className="text-center text-xs text-slate-400 mt-8">
               Note: Export is not included during the trial. Upgrade to a paid plan to export your data and keep everything you've built.
             </p>
