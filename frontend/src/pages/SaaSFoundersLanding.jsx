@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   Shield,
   Clock,
-  MessageSquare,
   Youtube,
 } from "lucide-react";
 
@@ -220,39 +219,19 @@ export default function SaaSFoundersLanding() {
           </div>
         </section>
 
-        {/* Trust / Social Proof */}
-        <section className="py-20 bg-slate-50">
-          <div className="max-w-6xl mx-auto px-6">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold text-slate-900 text-center mb-12 leading-tight">
-              Built for founders, not marketing teams.
-            </h2>
-            <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-14">
-              {[
-                { quote: "I found 12 qualified affiliates in my first week. No agency needed.", name: "Alex R.", role: "Founder", company: "SaaS Startup" },
-                { quote: "The affiliate score saved me hours of manual research. Every prospect was relevant.", name: "Jordan M.", role: "Solo Founder", company: "Productivity Tool" },
-                { quote: "Finally a tool that understands what bootstrapped founders actually need.", name: "Sam K.", role: "Co-founder", company: "AI Platform" },
-              ].map((t) => (
-                <div key={t.name} className="p-6 rounded-xl border border-slate-200 bg-white">
-                  <MessageSquare className="h-5 w-5 text-indigo-300 mb-3" />
-                  <p className="text-sm text-slate-700 leading-relaxed italic">"{t.quote}"</p>
-                  <div className="mt-4 pt-3 border-t border-slate-100">
-                    <p className="text-sm font-semibold text-slate-800">{t.name}</p>
-                    <p className="text-xs text-slate-500">{t.role}, {t.company}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-3 gap-6 max-w-2xl mx-auto">
-              {[
-                { value: "14", label: "Niches covered out of the box" },
-                { value: "Minutes", label: "Not weeks to find prospects" },
-                { value: "14 days", label: "Free to prove it works" },
-              ].map((s) => (
-                <div key={s.label} className="text-center">
-                  <p className="text-2xl font-heading font-bold text-slate-900">{s.value}</p>
-                  <p className="text-xs text-slate-500 mt-1">{s.label}</p>
-                </div>
-              ))}
+        {/* Founder's Note */}
+        <section className="py-28 bg-slate-50">
+          <div className="max-w-2xl mx-auto px-6">
+            <p className="text-xs font-semibold tracking-[0.22em] text-indigo-600 uppercase mb-8 text-center">
+              A note from the founder
+            </p>
+            <div className="space-y-5 text-lg text-slate-700 leading-[1.8]">
+              <p>I built my first SaaS product the way most of us do: heads-down, nights and weekends, convinced that if I just made it good enough, people would find it.</p>
+              <p>They didn't. Not because the product was bad — because nobody knew it existed.</p>
+              <p>I spent more time chasing affiliates and creators than I'd spent writing code. Cold DMs that went nowhere. Spreadsheets of YouTube channels I had no real way to evaluate. Hours lost figuring out who'd actually promoted something like mine before, versus who'd just say yes to anything with a commission attached.</p>
+              <p>What I eventually realised: YouTube is where "show, don't tell" actually works for software. A ten-minute screen recording does more to sell a SaaS product than any landing page copy ever could — and the creators already making that content are sitting on exactly the audience you're trying to reach.</p>
+              <p>Building was never the hard part. Distribution was. And distribution, it turns out, is a full-time job nobody warns you about.</p>
+              <p>AffiliTube exists because I wanted that job to be easier — for me, and for every other solo founder doing this the hard way.</p>
             </div>
           </div>
         </section>
