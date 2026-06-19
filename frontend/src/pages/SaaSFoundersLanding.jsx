@@ -106,7 +106,7 @@ export default function SaaSFoundersLanding() {
         {/* Pain Section — Reddit-style cards */}
         <section className="py-20 bg-white">
           <div className="max-w-6xl mx-auto px-6">
-            <h2 className="text-base sm:text-lg font-heading font-semibold text-slate-900 text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold text-slate-900 text-center mb-12 leading-tight">
               Sound familiar?
             </h2>
             <div className="grid sm:grid-cols-2 gap-4 max-w-4xl mx-auto">
@@ -144,7 +144,7 @@ export default function SaaSFoundersLanding() {
         {/* Solution Section */}
         <section className="py-20 bg-slate-50">
           <div className="max-w-6xl mx-auto px-6">
-            <h2 className="text-base sm:text-lg font-heading font-semibold text-slate-900 text-center mb-4">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold text-slate-900 text-center mb-4 leading-tight">
               Your competitors are already using YouTube creators.
             </h2>
             <p className="text-sm text-slate-500 text-center mb-14 max-w-lg mx-auto">
@@ -223,7 +223,7 @@ export default function SaaSFoundersLanding() {
         {/* Trust / Social Proof */}
         <section className="py-20 bg-slate-50">
           <div className="max-w-6xl mx-auto px-6">
-            <h2 className="text-base sm:text-lg font-heading font-semibold text-slate-900 text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold text-slate-900 text-center mb-12 leading-tight">
               Built for founders, not marketing teams.
             </h2>
             <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-14">
@@ -260,7 +260,7 @@ export default function SaaSFoundersLanding() {
         {/* Pricing Teaser */}
         <section className="py-20 bg-white">
           <div className="max-w-6xl mx-auto px-6">
-            <h2 className="text-base sm:text-lg font-heading font-semibold text-slate-900 text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold text-slate-900 text-center mb-12 leading-tight">
               Start free. Scale when it works.
             </h2>
             <div className="grid md:grid-cols-3 gap-6 max-w-3xl mx-auto">
@@ -337,7 +337,7 @@ export default function SaaSFoundersLanding() {
         {/* Final CTA */}
         <section className="py-20 bg-gradient-to-r from-indigo-600 to-purple-600">
           <div className="max-w-6xl mx-auto px-6 text-center">
-            <h2 className="text-2xl sm:text-3xl font-heading font-bold text-white mb-4">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold text-white mb-4 leading-tight">
               Your first affiliates are already out there. Let's find them.
             </h2>
             <p className="text-indigo-100 mb-8 max-w-xl mx-auto">
