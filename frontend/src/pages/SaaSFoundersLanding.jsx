@@ -202,6 +202,14 @@ export default function SaaSFoundersLanding() {
                 heading="Every result, pre-scored for affiliate fit"
                 body="No more guessing which channels are worth a closer look. Every result gets an overall AI Grade plus a dedicated Affiliate Score, sorted automatically — so the strongest prospects are already sitting at the top before you've opened a single profile."
               />
+              <ShowcaseRow
+                imagePosition="left"
+                imageAspect="tall"
+                imageSrc="https://customer-assets.emergentagent.com/job_16e5cd9f-6337-4f9b-a1c4-4252c37bd4cb/artifacts/sci6xi1s_info_card_2x.webp"
+                imageAlt="AffiliTube channel info card for EmailTooltester — showing a full score breakdown (Topic Relevance, Activity, Engagement, Tutorial Intent, Subscriber Fit, Contactability), outreach tracking with status and follow-up date, affiliate potential signals, statistics, channel health indicators, recent videos, brand intelligence and notes — all in one expandable panel."
+                heading="Every score, fully explained"
+                body="Click into any result to see exactly why it scored the way it did — a full breakdown across topic relevance, activity, engagement, and more — plus channel health, brand history, and outreach tracking, so you can judge fit and log your progress without leaving the page."
+              />
             </div>
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
