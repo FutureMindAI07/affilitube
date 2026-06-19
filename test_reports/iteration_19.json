@@ -1,0 +1,29 @@
+{
+  "summary": "Phase-4 regression for ChannelDetailSheet extraction: FULL PASS. Logged in as admin, topped up 50 in-app draft_credits via PUT /api/admin/users/{id}/credits, ran SaaS Tool Reviewers template -> search (~5s) -> Enrich All -> first row appeared, then exercised all 13 detail-sheet flows. Every section, every interaction, every toast/persistence assertion succeeded. Zero console.error and zero pageerror events across the entire flow.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/dashboard", "issues": ["Cookie consent banner (data-testid='cookie-consent-banner', z-[9999]) overlays bottom-of-screen interactive controls (e.g. enrich-all-btn) until accepted. Real users can dismiss it, but it intercepts pointer events. Consider auto-dismiss-on-scroll or moving it to a less obstructive position. Not a refactor regression."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional, spec-vs-impl) Review-request mentions verifying data-testid='app-header', 'dashboard-nav', 'admin-link', 'user-menu-btn' visible after login. None of these testids exist in the current code - the header IS rendered and functional (Affilitube logo, Prospect Finder/Pipeline/Outreach/Getting Started nav, Pro Plan/Admin/History/user-menu buttons all visible) but they lack those specific data-testid attributes. If the spec expects them, the main agent should add them; otherwise update the spec. Not a Phase-4 regression - these testids were missing before the refactor too.",
+    "(Minor) Cookie-consent banner intercepts clicks on enrich-all-btn until dismissed. Could lower z-index or auto-dismiss in test env."
+  ],
+  "critical_code_review_comments": [
+    "ChannelDetailSheet.jsx is 828 lines - already over the 700-line guideline immediately after extraction. Consider further splitting into <ScoreBreakdown />, <OutreachTrackingPanel />, <BrandIntelligence /> sub-components in a follow-up.",
+    "Dashboard.jsx is still ~2,890 lines after Phase 4. Phases 5-6 should continue extraction (template picker, results table, historical report view).",
+    "All 17 props passed to ChannelDetailSheet — prop drilling is acceptable for now but if it grows further consider a small context to avoid the function signature blowing up."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run)", "frontend": "100% (13/13 detail-sheet flows passing)"},
+  "test_credentials": "Admin adrian@affilitube.com / admin123! (from /app/memory/test_credentials.md). Topped up 50 draft_credits at test setup; ~12 consumed by Super Search.",
+  "seed_data_creation": "1 pipeline entry created: 'Refactor smoke project' for the first enriched channel (admin user). 1 channel ('Stacia Loo') was excluded from future searches via the exclude-channel-btn flow. These persist in the admin user's records. 1 outreach status flip (Not Contacted -> Contacted -> Not Contacted), 1 contact-log entry 'Refactor test note', and 1 channel-notes value 'Test notes content' also persisted on the first channel. Consider cleanup if rerunning.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "For dashboard UI tests: ALWAYS click the cookie-consent Accept button after login or it will intercept pointer events on bottom-anchored controls like enrich-all-btn. Admin draft_credits must be topped up via PUT /api/admin/users/{id}/credits before any Super Search run (12 credits/run). Test creds in /app/memory/test_credentials.md. All ChannelDetailSheet data-testids match spec exactly. Detail sheet flows verified end-to-end at iteration 19.",
+  "rca of the issue": "No regression found. All Phase-4 extraction flows behave identically to pre-refactor expectations. The detail sheet renders correctly, all 17 props flow through cleanly, all toasts fire, all persistence (notes, contact log, outreach status, pipeline membership, shortlist, exclude) works through the existing parent-held state in Dashboard.jsx."
+}
