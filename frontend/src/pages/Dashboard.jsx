@@ -114,7 +114,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, FolderOpen, Plus, ArrowUp, ArrowDown, Minus, Activity, TrendingUp, CreditCard, User as UserIcon, ChevronDown as ChevronDownIcon, Gift, ExternalLink as ExternalLinkIcon } from "lucide-react";
+import { LogOut, Bug, BookOpen, Calendar, MessageSquare, XCircle, Plus, ArrowUp, ArrowDown, Minus, Activity, TrendingUp, CreditCard, User as UserIcon, ChevronDown as ChevronDownIcon, Gift, ExternalLink as ExternalLinkIcon } from "lucide-react";
 import { useSearchResults } from "@/contexts/SearchResultsContext";
 import { UpgradeDialog } from "@/components/UpgradeDialog";
 import {
@@ -124,6 +124,10 @@ import {
 } from "@/lib/healthIndicators";
 import { SEARCH_PRESETS, DEFAULT_KEYWORD_PLACEHOLDER } from "@/lib/searchPresets";
 import { OUTREACH_STATUS_CONFIG } from "@/lib/outreachConfig";
+import BugReportDialog from "@/pages/dashboard/dialogs/BugReportDialog";
+import AddToPipelineDialog from "@/pages/dashboard/dialogs/AddToPipelineDialog";
+import SaveSearchDialog from "@/pages/dashboard/dialogs/SaveSearchDialog";
+import SaveReportDialog from "@/pages/dashboard/dialogs/SaveReportDialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -2041,45 +2045,19 @@ export default function Dashboard() {
                   {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <Save className="h-4 w-4 mr-2" />}
                   Save Search
                 </Button>
-                <Dialog open={saveSearchOpen} onOpenChange={setSaveSearchOpen}>
-                  <DialogContent data-testid="save-search-dialog">
-                    <DialogHeader>
-                      <DialogTitle>Save Search</DialogTitle>
-                      <DialogDescription>
-                        Save this search configuration to quickly run it again later.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="search-name">Search Name</Label>
-                        <Input
-                          id="search-name"
-                          placeholder="e.g., Automation YouTubers Q1 2026"
-                          value={searchName}
-                          onChange={(e) => setSearchName(e.target.value)}
-                          data-testid="search-name-input"
-                        />
-                      </div>
-                      <div className="text-sm text-muted-foreground space-y-1">
-                        <p><strong>Keywords:</strong> {keywords.split("\n").filter(k => k.trim()).length}</p>
-                        <p><strong>Filters:</strong> {minSubs.toLocaleString()}-{maxSubs.toLocaleString()} subs, {uploadedWithin} days</p>
-                        <p><strong>Mode:</strong> {searchMode.replace("_", " + ")}</p>
-                        {channels.length > 0 && (
-                          <p><strong>Last Results:</strong> {channels.length} channels</p>
-                        )}
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setSaveSearchOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button onClick={saveCurrentSearch} data-testid="confirm-save-search-btn" className="btn-gradient">
-                        <Save className="h-4 w-4 mr-2" />
-                        Save
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                <SaveSearchDialog
+                  open={saveSearchOpen}
+                  onOpenChange={setSaveSearchOpen}
+                  searchName={searchName}
+                  setSearchName={setSearchName}
+                  keywords={keywords}
+                  minSubs={minSubs}
+                  maxSubs={maxSubs}
+                  uploadedWithin={uploadedWithin}
+                  searchMode={searchMode}
+                  channelsCount={channels.length}
+                  onSave={saveCurrentSearch}
+                />
               </div>
               
               {isSearching && (
@@ -2238,43 +2216,18 @@ export default function Dashboard() {
                     {isFreeUser ? <Lock className="h-4 w-4 mr-2 text-muted-foreground" /> : <FileText className="h-4 w-4 mr-2" />}
                     Save Report
                   </Button>
-                  <Dialog open={saveReportOpen} onOpenChange={setSaveReportOpen}>
-                    <DialogContent data-testid="save-report-dialog">
-                      <DialogHeader>
-                        <DialogTitle>Save Report</DialogTitle>
-                        <DialogDescription>
-                          Save this search with all results for future reference.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="report-name">Report Name</Label>
-                          <Input
-                            id="report-name"
-                            placeholder="e.g., Automation Prospects Jan 2026"
-                            value={reportName}
-                            onChange={(e) => setReportName(e.target.value)}
-                            data-testid="report-name-input"
-                          />
-                        </div>
-                        <div className="text-sm text-muted-foreground space-y-1 p-3 bg-muted/50 rounded-md">
-                          <p><strong>Channels:</strong> {sortedChannels.length}</p>
-                          <p><strong>Shortlisted:</strong> {shortlist.size}</p>
-                          <p><strong>Keywords:</strong> {keywords.split("\n").filter(k => k.trim()).length}</p>
-                          <p><strong>Filters:</strong> {minSubs.toLocaleString()}-{maxSubs.toLocaleString()} subs</p>
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button variant="outline" onClick={() => setSaveReportOpen(false)}>
-                          Cancel
-                        </Button>
-                        <Button onClick={saveReport} data-testid="confirm-save-report-btn" className="btn-gradient">
-                          <FileText className="h-4 w-4 mr-2" />
-                          Save Report
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
+                  <SaveReportDialog
+                    open={saveReportOpen}
+                    onOpenChange={setSaveReportOpen}
+                    reportName={reportName}
+                    setReportName={setReportName}
+                    channelsCount={sortedChannels.length}
+                    shortlistCount={shortlist.size}
+                    keywords={keywords}
+                    minSubs={minSubs}
+                    maxSubs={maxSubs}
+                    onSave={saveReport}
+                  />
                   
                   <Button
                     variant="outline"
@@ -2797,76 +2750,20 @@ export default function Dashboard() {
       </main>
 
       {/* Bug Report Dialog */}
-      <Dialog open={bugReportOpen} onOpenChange={setBugReportOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Bug className="h-5 w-5 text-orange-500" />
-              Report a Bug
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="bug-subject">Subject</Label>
-              <Input
-                id="bug-subject"
-                placeholder="Brief summary of the issue"
-                value={bugSubject}
-                onChange={(e) => setBugSubject(e.target.value)}
-                data-testid="bug-subject-input"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="bug-severity">Severity</Label>
-              <Select value={bugSeverity} onValueChange={setBugSeverity}>
-                <SelectTrigger data-testid="bug-severity-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low — Minor issue, workaround exists</SelectItem>
-                  <SelectItem value="medium">Medium — Feature not working correctly</SelectItem>
-                  <SelectItem value="high">High — Major feature broken</SelectItem>
-                  <SelectItem value="critical">Critical — App unusable</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="bug-description">Description</Label>
-              <Textarea
-                id="bug-description"
-                placeholder="What happened? What did you expect to happen?"
-                value={bugDescription}
-                onChange={(e) => setBugDescription(e.target.value)}
-                rows={3}
-                data-testid="bug-description-input"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="bug-steps">Steps to Reproduce (optional)</Label>
-              <Textarea
-                id="bug-steps"
-                placeholder="1. Go to...\n2. Click on...\n3. See error..."
-                value={bugSteps}
-                onChange={(e) => setBugSteps(e.target.value)}
-                rows={3}
-                data-testid="bug-steps-input"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setBugReportOpen(false)}>Cancel</Button>
-            <Button
-              onClick={submitBugReport}
-              disabled={bugSubmitting}
-              className="btn-gradient"
-              data-testid="bug-submit-btn"
-            >
-              {bugSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Submit Report
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <BugReportDialog
+        open={bugReportOpen}
+        onOpenChange={setBugReportOpen}
+        bugSubject={bugSubject}
+        setBugSubject={setBugSubject}
+        bugSeverity={bugSeverity}
+        setBugSeverity={setBugSeverity}
+        bugDescription={bugDescription}
+        setBugDescription={setBugDescription}
+        bugSteps={bugSteps}
+        setBugSteps={setBugSteps}
+        bugSubmitting={bugSubmitting}
+        onSubmit={submitBugReport}
+      />
 
       {/* Channel Detail Sheet */}
       <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
@@ -4120,82 +4017,18 @@ export default function Dashboard() {
       )}
 
       {/* Add to Pipeline Dialog */}
-      <Dialog open={pipelineDialogOpen} onOpenChange={setPipelineDialogOpen}>
-        <DialogContent className="sm:max-w-md" data-testid="add-pipeline-dialog">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Handshake className="h-5 w-5 text-indigo-500" />
-              Add to Pipeline
-            </DialogTitle>
-            <DialogDescription>
-              Add {pipelineChannel?.channel_name} to your outreach pipeline
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Project / Campaign</Label>
-              <div className="relative">
-                <Input
-                  placeholder="e.g. Q1 Outreach, SaaS Partners..."
-                  value={pipelineProjectName}
-                  onChange={(e) => setPipelineProjectName(e.target.value)}
-                  className="pr-8"
-                  data-testid="pipeline-project-input"
-                  autoComplete="off"
-                />
-                <FolderOpen className="absolute right-2.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
-              </div>
-              {userProjects.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {userProjects.map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setPipelineProjectName(p)}
-                      className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                        pipelineProjectName === p
-                          ? "bg-indigo-50 border-indigo-300 text-indigo-700 font-medium"
-                          : "bg-white border-slate-200 text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/50"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Initial Status</Label>
-              <Select value={pipelineStatus} onValueChange={setPipelineStatus}>
-                <SelectTrigger data-testid="pipeline-status-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(OUTREACH_STATUS_CONFIG).map(([key, cfg]) => (
-                    <SelectItem key={key} value={key}>
-                      <span className="flex items-center gap-2">
-                        <span className={`inline-block w-2 h-2 rounded-full ${cfg.color.split(" ")[0]}`}></span>
-                        {cfg.label}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPipelineDialogOpen(false)}>Cancel</Button>
-            <Button
-              onClick={addToPipeline}
-              disabled={pipelineAdding}
-              className="bg-indigo-600 hover:bg-indigo-700 gap-2"
-              data-testid="pipeline-confirm-btn"
-            >
-              {pipelineAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              Add to Pipeline
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AddToPipelineDialog
+        open={pipelineDialogOpen}
+        onOpenChange={setPipelineDialogOpen}
+        channel={pipelineChannel}
+        projectName={pipelineProjectName}
+        setProjectName={setPipelineProjectName}
+        userProjects={userProjects}
+        status={pipelineStatus}
+        setStatus={setPipelineStatus}
+        submitting={pipelineAdding}
+        onSubmit={addToPipeline}
+      />
       <UpgradeDialog open={upgradeDialogOpen} onOpenChange={setUpgradeDialogOpen} />
     </div>
   );
