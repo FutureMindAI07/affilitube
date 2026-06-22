@@ -1155,6 +1155,29 @@ class VerdictRequest(BaseModel):
 
 VALID_VERDICTS = {"customer", "pass", "later", "sent", None, ""}
 
+# Outreach pipeline for founder prospects discovered via SaaS Radar.
+# Mirrors the channel outreach flow in server.py: every status change appends a
+# {timestamp, status, note} entry to contact_log so the same dropdown can auto-log
+# events AND accept ad-hoc note entries on top.
+VALID_OUTREACH_STATUSES = {
+    "not_contacted", "contacted", "replied", "in_negotiation",
+    "agreed", "declined", "no_response",
+}
+
+
+class UpdateFounderOutreachStatusInput(BaseModel):
+    status: str
+    note: Optional[str] = None
+
+
+class UpdateFounderFollowUpDateInput(BaseModel):
+    follow_up_date: Optional[datetime] = None
+
+
+class UpdateFounderNotesInput(BaseModel):
+    outreach_notes: str = ""
+
+
 
 def build_router(db, admin_dep) -> APIRouter:
     """Build the SaaS Radar router. admin_dep is the FastAPI dependency that
@@ -1389,6 +1412,7 @@ def build_router(db, admin_dep) -> APIRouter:
     async def list_products(
         bucket: Optional[str] = Query(None),
         verdict: Optional[str] = Query(None),
+        outreach_status: Optional[str] = Query(None),
         search: Optional[str] = Query(None),
         has_email: Optional[bool] = Query(None),
         sort: str = Query("score_desc"),
@@ -1401,6 +1425,25 @@ def build_router(db, admin_dep) -> APIRouter:
             buckets = [b.strip() for b in bucket.split(",") if b.strip()]
             if buckets:
                 query["bucket"] = {"$in": buckets}
+        if outreach_status:
+            statuses = [s.strip() for s in outreach_status.split(",") if s.strip()]
+            if statuses:
+                if "unset" in statuses:
+                    set_s = [s for s in statuses if s != "unset"]
+                    if set_s:
+                        query.setdefault("$and", []).append({
+                            "$or": [
+                                {"outreach_status": {"$in": set_s}},
+                                {"outreach_status": None},
+                                {"outreach_status": {"$exists": False}},
+                            ]
+                        })
+                    else:
+                        query.setdefault("$and", []).append({
+                            "$or": [{"outreach_status": None}, {"outreach_status": {"$exists": False}}]
+                        })
+                else:
+                    query["outreach_status"] = {"$in": statuses}
         if verdict:
             verdicts = [v.strip() for v in verdict.split(",") if v.strip()]
             if verdicts:
@@ -1460,6 +1503,50 @@ def build_router(db, admin_dep) -> APIRouter:
         if res.matched_count == 0:
             raise HTTPException(status_code=404, detail="Product not found")
         return {"success": True, "verdict": v}
+
+    @router.patch("/products/{ph_id}/outreach-status")
+    async def set_outreach_status(ph_id: str, req: UpdateFounderOutreachStatusInput, admin=Depends(admin_dep)):
+        """Update founder outreach status. Every call appends an entry to
+        contact_log with {timestamp, status, note}. Pass an empty/null note for
+        a pure status-change event; pass a non-empty note to log a contact note
+        against the current/new status."""
+        if req.status not in VALID_OUTREACH_STATUSES:
+            raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {sorted(VALID_OUTREACH_STATUSES)}")
+        log_entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "status": req.status,
+            "note": req.note or "",
+        }
+        res = await db.saas_radar_products.update_one(
+            {"ph_id": ph_id},
+            {
+                "$set": {"outreach_status": req.status},
+                "$push": {"contact_log": log_entry},
+            },
+        )
+        if res.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Product not found")
+        return {"success": True, "status": req.status, "log_entry": log_entry}
+
+    @router.patch("/products/{ph_id}/follow-up-date")
+    async def set_follow_up_date(ph_id: str, req: UpdateFounderFollowUpDateInput, admin=Depends(admin_dep)):
+        res = await db.saas_radar_products.update_one(
+            {"ph_id": ph_id},
+            {"$set": {"follow_up_date": req.follow_up_date.isoformat() if req.follow_up_date else None}},
+        )
+        if res.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Product not found")
+        return {"success": True, "follow_up_date": req.follow_up_date.isoformat() if req.follow_up_date else None}
+
+    @router.patch("/products/{ph_id}/notes")
+    async def set_notes(ph_id: str, req: UpdateFounderNotesInput, admin=Depends(admin_dep)):
+        res = await db.saas_radar_products.update_one(
+            {"ph_id": ph_id},
+            {"$set": {"outreach_notes": req.outreach_notes}},
+        )
+        if res.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Product not found")
+        return {"success": True}
 
     @router.get("/products.csv")
     async def export_csv(

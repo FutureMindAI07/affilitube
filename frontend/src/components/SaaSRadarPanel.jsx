@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import { useState, useEffect, useCallback } from "react";import axios from "axios";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +40,8 @@ import {
   Bookmark,
   Send,
 } from "lucide-react";
+import FounderDetailSheet from "@/components/FounderDetailSheet";
+import { OUTREACH_STATUS_CONFIG } from "@/lib/outreachConfig";
 
 const API = `${import.meta.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -91,6 +92,9 @@ export default function SaaSRadarPanel({ token }) {
   const [useLlm, setUseLlm] = useState(false);
   const [usePlaywright, setUsePlaywright] = useState(false);
   const [verdictFilter, setVerdictFilter] = useState("");
+  const [outreachFilter, setOutreachFilter] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagResult, setDiagResult] = useState(null);
   const [liveIngestProgress, setLiveIngestProgress] = useState(null);
@@ -117,6 +121,7 @@ export default function SaaSRadarPanel({ token }) {
         params: {
           bucket: bucketFilter || undefined,
           verdict: verdictFilter || undefined,
+          outreach_status: outreachFilter || undefined,
           has_email: hasEmail || undefined,
           search: search || undefined,
           sort: sortBy,
@@ -131,7 +136,7 @@ export default function SaaSRadarPanel({ token }) {
     } finally {
       setLoading(false);
     }
-  }, [bucketFilter, verdictFilter, hasEmail, search, sortBy, page, token]);
+  }, [bucketFilter, verdictFilter, outreachFilter, hasEmail, search, sortBy, page, token]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -594,6 +599,21 @@ export default function SaaSRadarPanel({ token }) {
               </Select>
             </div>
             <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Outreach</label>
+              <Select value={outreachFilter || "_all"} onValueChange={(v) => { setOutreachFilter(v === "_all" ? "" : v); setPage(0); }}>
+                <SelectTrigger className="h-9" data-testid="radar-outreach-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_all">All</SelectItem>
+                  <SelectItem value="unset">Not Tracked</SelectItem>
+                  {Object.entries(OUTREACH_STATUS_CONFIG).map(([key, cfg]) => (
+                    <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">Sort by</label>
               <Select value={sortBy} onValueChange={(v) => { setSortBy(v); setPage(0); }}>
                 <SelectTrigger className="h-9" data-testid="radar-sort">
@@ -675,7 +695,17 @@ export default function SaaSRadarPanel({ token }) {
                 </TableHeader>
                 <TableBody>
                   {products.map((p) => (
-                    <TableRow key={p.ph_id} data-testid={`radar-row-${p.ph_id}`}>
+                    <TableRow
+                      key={p.ph_id}
+                      data-testid={`radar-row-${p.ph_id}`}
+                      className="cursor-pointer hover:bg-slate-50"
+                      onClick={(e) => {
+                        // Don't open detail when clicking interactive children (links, verdict buttons, etc.)
+                        if (e.target.closest("a, button, [role='button']")) return;
+                        setSelectedProduct(p);
+                        setDetailOpen(true);
+                      }}
+                    >
                       <TableCell className="text-right font-semibold align-top pt-3">
                         <Badge
                           variant="outline"
@@ -872,6 +902,17 @@ export default function SaaSRadarPanel({ token }) {
           )}
         </CardContent>
       </Card>
+
+      <FounderDetailSheet
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        product={selectedProduct}
+        token={token}
+        onProductUpdate={(updated) => {
+          setSelectedProduct(updated);
+          setProducts((list) => list.map((p) => (p.ph_id === updated.ph_id ? updated : p)));
+        }}
+      />
     </div>
   );
 }

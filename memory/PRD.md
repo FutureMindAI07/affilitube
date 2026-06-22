@@ -79,6 +79,12 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 
 - **SaaS Founders Landing Page (/for-saas-founders) + 14-Day Starter Trial**: New conversion-focused landing for Reddit paid ad traffic. Sections: Hero ("Building was the easy part"), Pain (Reddit-styled cards), Solution, Features (8-card grid), Social Proof, Pricing Teaser (3-card), Final CTA. All 4 CTAs route to /signup?trial=starter_14. Backend `/api/auth/register` accepts `trial` param, creates user with tier=starter, is_trial=true, access_expires_at=+14 days. `get_current_user` auto-downgrades expired trials to tier=free and sets trial_expired=true. CSV export endpoint returns 403 `upgrade_required` for trial users. `/api/user/usage` returns trial_days_remaining + csv_export=false. Signup subtitle now reflects trial context. Tested via testing_agent (7/7 backend pytest + full UI flow).
 
+## Completed (Jun 22, 2026) — SaaS Founder Outreach Tracking (Option D)
+- Admin-only outreach tracker built into SaaS Radar (`FounderDetailSheet.jsx`)
+- Backend: 3 new PATCH endpoints on `saas_radar.py` + `outreach_status` query filter on /products. Schema additions to `saas_radar_products`: `outreach_status`, `follow_up_date`, `outreach_notes`, `contact_log` (array of `{timestamp, status, note}` entries appended on every status change). Pre-existing `notes` array (enrichment diagnostic) preserved unchanged.
+- Frontend: row-click opens side sheet. Status dropdown (shared `OUTREACH_STATUS_CONFIG`), follow-up date with clear-X, contact note input, auto-logged contact log timeline (status-change events + manual notes interleaved), auto-saving notes textarea, makers list with mailto + Twitter links. Outreach filter dropdown added to filter row.
+- Existing `verdict` system (Customer/Pass/Later/Sent) left intact — they layer cleanly.
+
 ## Completed (Jun 22, 2026) — Dashboard.jsx 6-Phase Refactor
 - **Dashboard.jsx reduced from 4,306 → 1,485 lines** (-65%)
 - 11 new files created in `/lib/` and `/pages/dashboard/` directories
