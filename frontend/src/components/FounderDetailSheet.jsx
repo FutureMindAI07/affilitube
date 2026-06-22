@@ -57,6 +57,43 @@ const BUCKET_LABELS = {
   unknown: "Unknown · Not yet checked",
 };
 
+/**
+ * Build a mailto: URL pre-populated with the SaaS Radar outreach template.
+ * Subject and body are URL-encoded; line breaks become %0A automatically via
+ * encodeURIComponent.
+ */
+function buildOutreachMailto(email, makerName, productName) {
+  const product = productName || "your product";
+  // Extract first name: take first whitespace-delimited token of the maker's display name.
+  // Strip out any leading non-letters (e.g. emoji, brackets) before grabbing it.
+  let firstName = "";
+  if (makerName) {
+    const cleaned = String(makerName).trim().replace(/^[^\p{L}]+/u, "");
+    firstName = cleaned.split(/\s+/)[0] || "";
+  }
+  const greeting = firstName ? `Hi ${firstName},` : "Hi there,";
+
+  const subject = `${product} + YouTube affiliates`;
+  const body = [
+    greeting,
+    "",
+    `Saw ${product} on ProductHunt — congrats on the launch. Getting something shipped and in front of people is genuinely hard, and you've done the hard part.`,
+    "",
+    `Here's the thing nobody warns you about after launch day: distribution doesn't get easier. Ads are expensive and unpredictable. SEO takes months. Cold outreach at scale feels like shouting into a void. And yet somewhere out there are YouTube creators — people with exactly the right audience for a product like ${product} — already reviewing tools in your category, already trusted by the people you're trying to reach.`,
+    "",
+    "Finding them is the problem. It takes hours of manual searching, spreadsheet-wrangling, and guesswork about who's actually worth contacting versus who'll say yes to anything with a commission attached.",
+    "",
+    "That's the problem AffiliTube solves. It finds YouTube creators already covering your niche, scores them on real affiliate potential (not just subscriber count), and surfaces their contact details — so you can go from \"I need affiliates\" to \"here are 20 pre-qualified creators worth reaching out to\" in an afternoon rather than a week.",
+    "",
+    `There's a free 14-day trial if you want to see what it surfaces for ${product}'s niche: affilitube.com`,
+    "",
+    "Adrian",
+    "Founder, AffiliTube",
+  ].join("\n");
+
+  return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 export default function FounderDetailSheet({ open, onOpenChange, product, onProductUpdate, token }) {
   const api = axios.create({
     baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`,
@@ -208,7 +245,7 @@ export default function FounderDetailSheet({ open, onOpenChange, product, onProd
                       <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-xs">
                         {m.email && (
                           <a
-                            href={`mailto:${m.email}`}
+                            href={buildOutreachMailto(m.email, m.name, product.name)}
                             className="flex items-center gap-1 text-blue-700 hover:underline"
                             data-testid={`founder-email-${i}`}
                           >
