@@ -40,7 +40,7 @@ import {
   Bookmark,
   Send,
 } from "lucide-react";
-import FounderDetailSheet from "@/components/FounderDetailSheet";
+import FounderDetailSheet, { buildOutreachMailto } from "@/components/FounderDetailSheet";
 import { OUTREACH_STATUS_CONFIG } from "@/lib/outreachConfig";
 
 const API = `${import.meta.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_BACKEND_URL}/api`;
@@ -779,7 +779,11 @@ export default function SaaSRadarPanel({ token }) {
                       <TableCell className="align-top pt-3">
                         {(p.emails_found || []).length > 0 ? (
                           <a
-                            href={`mailto:${p.emails_found[0]}`}
+                            href={buildOutreachMailto(
+                              p.emails_found[0],
+                              ((p.makers || []).find(m => m.email === p.emails_found[0])?.name) || (p.makers?.[0]?.name) || null,
+                              p.name
+                            )}
                             className="text-xs text-indigo-600 hover:underline break-all"
                           >
                             {p.emails_found[0]}

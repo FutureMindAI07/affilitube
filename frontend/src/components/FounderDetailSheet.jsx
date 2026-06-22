@@ -61,8 +61,10 @@ const BUCKET_LABELS = {
  * Build a mailto: URL pre-populated with the SaaS Radar outreach template.
  * Subject and body are URL-encoded; line breaks become %0A automatically via
  * encodeURIComponent.
+ *
+ * Exported so the SaaS Radar table row's email link can reuse the same template.
  */
-function buildOutreachMailto(email, makerName, productName) {
+export function buildOutreachMailto(email, makerName, productName) {
   const product = productName || "your product";
   // Extract first name: take first whitespace-delimited token of the maker's display name.
   // Strip out any leading non-letters (e.g. emoji, brackets) before grabbing it.
