@@ -690,6 +690,7 @@ export default function SaaSRadarPanel({ token }) {
                     <TableHead>Maker / Twitter</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead className="whitespace-nowrap">Posted</TableHead>
+                    <TableHead className="whitespace-nowrap">Status</TableHead>
                     <TableHead className="text-right">Links</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -792,6 +793,15 @@ export default function SaaSRadarPanel({ token }) {
                         <div className="text-[10px] text-slate-400 mt-0.5">
                           ▲ {p.votes_count || 0}
                         </div>
+                      </TableCell>
+                      <TableCell className="align-top pt-3 whitespace-nowrap" data-testid={`radar-status-${p.ph_id}`}>
+                        {p.outreach_status && OUTREACH_STATUS_CONFIG[p.outreach_status] ? (
+                          <Badge variant="outline" className={`${OUTREACH_STATUS_CONFIG[p.outreach_status].color} text-[10px] px-1.5 py-0.5`}>
+                            {OUTREACH_STATUS_CONFIG[p.outreach_status].label}
+                          </Badge>
+                        ) : (
+                          <span className="text-[11px] text-slate-300">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="align-top pt-2 text-right">
                         <div className="flex items-center justify-end gap-1">
