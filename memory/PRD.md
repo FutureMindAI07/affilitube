@@ -79,6 +79,21 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 
 - **SaaS Founders Landing Page (/for-saas-founders) + 14-Day Starter Trial**: New conversion-focused landing for Reddit paid ad traffic. Sections: Hero ("Building was the easy part"), Pain (Reddit-styled cards), Solution, Features (8-card grid), Social Proof, Pricing Teaser (3-card), Final CTA. All 4 CTAs route to /signup?trial=starter_14. Backend `/api/auth/register` accepts `trial` param, creates user with tier=starter, is_trial=true, access_expires_at=+14 days. `get_current_user` auto-downgrades expired trials to tier=free and sets trial_expired=true. CSV export endpoint returns 403 `upgrade_required` for trial users. `/api/user/usage` returns trial_days_remaining + csv_export=false. Signup subtitle now reflects trial context. Tested via testing_agent (7/7 backend pytest + full UI flow).
 
+## Completed (Jun 22, 2026) — Dashboard.jsx 6-Phase Refactor
+- **Dashboard.jsx reduced from 4,306 → 1,485 lines** (-65%)
+- 11 new files created in `/lib/` and `/pages/dashboard/` directories
+- Per-phase regression-tested with `testing_agent_v3_fork` after Phases 4 and 6; manual interactive verification after each smaller phase
+- Side-pass regression for AI Outreach Draft on OutreachPipeline.jsx (~90% pass, pre-existing UX issues only — not regressions)
+- No backend changes, no styling/copy changes, no Context/Redux introduced
+- New structure:
+  - `lib/formatters.js`, `lib/healthIndicators.js`, `lib/searchPresets.js`, `lib/outreachConfig.js`
+  - `pages/dashboard/DashboardHeader.jsx` (448 lines)
+  - `pages/dashboard/SearchPanel.jsx` (661 lines)
+  - `pages/dashboard/ResultsSection.jsx` (686 lines)
+  - `pages/dashboard/HistoricalReportView.jsx` (497 lines)
+  - `pages/dashboard/ChannelDetailSheet.jsx` (828 lines)
+  - `pages/dashboard/dialogs/{BugReport,AddToPipeline,SaveSearch,SaveReport}Dialog.jsx`
+
 ## Completed (Jun 19, 2026)
 - **`/for-saas-founders` Showcase Redesign Complete**: Replaced the legacy 8-card grid with 4 full-width alternating `ShowcaseRow` components (L/R/L/R): (1) Templates built for SaaS affiliate prospecting, (2) Every result, pre-scored for affiliate fit, (3) Every score, fully explained (tall info card with custom scrollable lightbox + "Click to see the full card" prompt — uses patched info_card_1.5x_patched.png with full Score Breakdown visible), (4) Outreach emails that don't sound like outreach emails (AI Draft screenshot). Removed unused icon imports (Search, BarChart3, Gift, Mail, Zap). Export disclaimer ("Note: Export is not included during the trial...") retained directly below the showcase rows. Wide rows use react-medium-image-zoom; tall row uses custom `TallLightbox` modal with `overflow-y-auto` so users can scroll the full portrait image at min(90vw, 1100px). Verified via screenshot tool.
 
