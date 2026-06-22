@@ -1,0 +1,30 @@
+{
+  "summary": "PHASE 6 FINAL REGRESSION — FULL PASS. Tested the structural extraction of ResultsSection.jsx (live results card) and HistoricalReportView.jsx (fullscreen overlay) on /dashboard as admin (adrian@affilitube.com). Logged in, topped up draft_credits from 38 to 88. Initial state had 9 pre-existing channel rows (no new search needed). LIVE RESULTS: all 7 filter controls (score-input, affiliate-checkbox, platform-links-checkbox, outreach-select, engagement-select, sort-by-select, sort-order-select) correctly re-rendered the table (score=50 → 4 rows; affiliate-on → 0; engagement=Healthy → 1; etc.). Row click opened ChannelDetailSheet. Shortlist toggle increments/decrements the 'Shortlist: N' header counter correctly (1→2→1, pre-existing Stacia Loo shortlist preserved). export-shortlist-btn clicked without error. re-enrich-btn visible & enabled, tooltip text reads 'Re-enrich with different Advanced Settings (no new search needed)' as expected. SAVE REPORT: dialog opened, filled name 'Phase 6 Regression Report', confirm-save-report-btn clicked, success toast 'Report saved successfully' appeared, dialog closed, History badge incremented to 1, and GET /api/search-reports confirmed the new report. HISTORICAL REPORT VIEW (the critical never-before-tested path): opened History dialog → Reports tab → clicked eye icon on the saved card → fullscreen [data-testid='report-view'] overlay opened with correct header 'Phase 6 Regression Report' and 15 channels. Info card rendered: Total Channels=15, Keywords Used=0 (see minor note), Subscriber Range '2,000 - 100,000', Shortlisted=1. Report filter bar (uses report-* prefixed test-ids, state separate from live) functioned: score=50 → 5 rows, affiliate-on → 0, engagement=Healthy → 4, sort by Affiliate Score + sort order toggled. Row click on first report-row opened ChannelDetailSheet (SAAS Gardens) with all sub-sections (Score Breakdown, Outreach Tracking, Affiliate Potential, Statistics) rendered; after Escape-close the [data-testid='report-view'] WAS STILL VISIBLE behind it (critical state-preservation check PASSED). export-report-btn clicked without error. close-report-btn (Back) cleanly closed the overlay; LIVE dashboard fully interactive with score-input still '0' and 9 rows (STATE ISOLATION VERIFIED — live filters not touched by report filters). Re-opening the report a second time presented Min Score reset to '0' (filter state resets on each open, NOT persisted). Cleanup delete via Trash2 in history dialog succeeded — GET /api/search-reports returned {reports: []}. ZERO console.error events and ZERO pageerror events across the entire ~3-minute multi-screen flow. No regressions detected; refactor is clean.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/search-reports (saved-report info card)", "issue": "Report-view info card shows 'Keywords Used: 0' and an empty Keywords chip list even though the source search was the SaaS Tool Reviewers template with non-empty keywords. Likely the saved-report payload is missing the keywords array, or HistoricalReportView reads it from a field the backend isn't populating on save. Not a Phase 6 refactor regression (refactor was pure extraction) — pre-existing data shape issue."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional, not a regression) Investigate why 'Keywords Used: 0' and empty keyword badges show in the saved-report info card despite the source search having keywords. Check the POST /api/search-reports payload shape and the HistoricalReportView keywords field mapping."
+  ],
+  "critical_code_review_comments": [
+    "Naming consistency: HistoricalReportView uses report-filter-* / report-row-* / report-sort-*-select test-ids while ResultsSection uses filter-* / channel-row-* / sort-*-select. The review request expected the same selectors for both — actual implementation correctly disambiguates them, but the divergence should be documented so future tests don't confuse them.",
+    "Backend route is /api/search-reports — the review request referenced /api/saved-reports (likely a typo in the spec, not the code). Verified the real route works end-to-end."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only scope)", "frontend": "100% (all 14 review sub-checks passed, 0 console errors, 0 page errors)"},
+  "test_credentials": "adrian@affilitube.com / admin123! (admin, pro tier). draft_credits topped up from 38 → 88 via PUT /api/admin/users/{uid}/credits during setup.",
+  "seed_data_creation": "Created and then cleaned up a saved report titled 'Phase 6 Regression Report' (15 channels). Final state: 0 saved reports for admin. No other seed data added.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 6 refactor is fully validated end-to-end. ResultsSection.jsx and HistoricalReportView.jsx both wire up correctly and the filter state of the historical view is properly isolated from the live filter state. The only minor observation is the 'Keywords Used: 0' / empty keyword chips in the saved-report info card — this is a pre-existing backend/data-shape concern, not a Phase 6 regression. ChannelDetailSheet (Phase 4) is implicitly re-tested in both paths and works. Admin draft_credits at end of run: 88 (no credits consumed; no Super Search ran since results already existed). Stacia Loo channel is still pre-shortlisted on the admin's live results — leave as-is.",
+  "rca of the issue": "No bug to RCA — refactor passed cleanly. The single minor observation (Keywords Used: 0) is documented as data-shape issue rather than a refactor regression and should be RCA'd separately if the user wants it fixed."
+}
