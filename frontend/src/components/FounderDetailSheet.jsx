@@ -75,19 +75,22 @@ export function buildOutreachMailto(email, makerName, productName) {
   }
   const greeting = firstName ? `Hi ${firstName},` : "Hi there,";
 
-  const subject = `${product} + YouTube affiliates`;
+  const subject = `Congrats on your ProductHunt launch!`;
   const body = [
     greeting,
     "",
     `Saw ${product} on ProductHunt — congrats on the launch. Getting something shipped and in front of people is genuinely hard, and you've done the hard part.`,
     "",
-    `Here's the thing nobody warns you about after launch day: distribution doesn't get easier. Ads are expensive and unpredictable. SEO takes months. Cold outreach at scale feels like shouting into a void. And yet somewhere out there are YouTube creators — people with exactly the right audience for a product like ${product} — already reviewing tools in your category, already trusted by the people you're trying to reach.`,
+    "Here's the thing nobody warns you about after launch day: distribution doesn't get easier. Ads are expensive and unpredictable. SEO takes months. Cold outreach at scale feels like shouting into a void.",
     "",
-    "Finding them is the problem. It takes hours of manual searching, spreadsheet-wrangling, and guesswork about who's actually worth contacting versus who'll say yes to anything with a commission attached.",
+    `And yet somewhere out there are YouTube creators — people with exactly the right audience for a product like ${product} — already reviewing tools in your category, already trusted by the people you're trying to reach.`,
     "",
-    "That's the problem AffiliTube solves. It finds YouTube creators already covering your niche, scores them on real affiliate potential (not just subscriber count), and surfaces their contact details — so you can go from \"I need affiliates\" to \"here are 20 pre-qualified creators worth reaching out to\" in an afternoon rather than a week.",
+    "Finding them is the problem. It takes hours of manual searching, spreadsheet-wrangling, and guesswork about who's actually worth contacting versus who'll ghost you or say yes to anything with a commission attached.",
+    "That's the problem AffiliTube solves.",
     "",
-    `There's a free 14-day trial if you want to see what it surfaces for ${product}'s niche: affilitube.com`,
+    "AffiliTube finds YouTube creators already covering your niche, scores them on real affiliate potential (not just subscriber count), and surfaces their contact details — so you can go from \"I need affiliates\" to \"here are 20 pre-qualified creators worth reaching out to\" in an afternoon rather than a week.",
+    "",
+    `There's a free 14-day trial if you want to see what it surfaces for ${product}'s niche: affilitube.com/for-saas-founders`,
     "",
     "Adrian",
     "Founder, AffiliTube",
