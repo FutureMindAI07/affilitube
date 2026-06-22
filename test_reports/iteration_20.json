@@ -1,0 +1,33 @@
+{
+  "summary": "Side-pass regression of AI Outreach Draft on /dashboard/pipeline as admin (adrian@affilitube.com). Outreach config was EMPTY at start so was set per brief defaults. Pipeline already had 1 channel (Stacia Loo, project 'Refactor smoke project') so no new pipeline entry was created. AI Draft button → panel → loading spinner → subject + body all worked. Body references the channel's video and contains 'AffiliTube'. Copy All toast fires. Copy Email button was NOT visible because Stacia Loo has no business_email — code correctly gates that affordance. Regenerate triggered (no error, no 4xx) but the UI polling loop did not detect a textual change within 60s of the click; an independent direct API call to POST /api/channels/{id}/ai-draft did return different content (different subject 'quick thought for you' vs 'quick idea for you') so the backend IS non-deterministic — the UI either didn't update on time or the second LLM response happened to match byte-for-byte. Close→reopen cache test passed (reopen <0.2s, no new network call, identical content shown). Admin credits unchanged: 38 → 38 across 3 LLM calls (2 UI + 1 backend smoke), confirming admin exemption.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "AI Draft Regenerate", "issue": "After clicking ai-draft-regenerate-{id}, the subject/body text in the panel did not visibly change within 60s polling, even though the underlying POST /api/channels/{id}/ai-draft endpoint demonstrably returns different content per call. Possible causes: (1) regenerate path doesn't clear/dim the prior cached draft so user sees stale content until the new one lands and may not notice; (2) draftLoading state is only reflected on the small Regenerate button spinner — the panel itself shows no top-level loading indicator during regen since `draftLoading && !draftCache[channel.channel_id]` short-circuits when cache exists; (3) possibly the click didn't register (force=True click on an enabled button is normally reliable). Recommend: while regenerating, either clear/grey out the existing subject+body or show a subtle 'Regenerating...' overlay so the state change is unambiguous.", "affected_selectors": ["[data-testid='ai-draft-regenerate-{id}']", "[data-testid='ai-draft-subject-{id}']", "[data-testid='ai-draft-body-{id}']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Consider visual feedback during Regenerate: blank or fade subject/body and show a loader inside the panel while draftLoading && draftCache exists, so users know the new content is on its way.",
+    "copyToClipboard / copyAllDraft call navigator.clipboard.writeText synchronously without awaiting or catching rejection — the success toast fires unconditionally. In headless/sandboxed contexts the write rejects (1 PAGEERROR observed in this run). Wrap in try/catch or await + fallback to a hidden textarea + execCommand for resilience, and only toast success on the resolved promise."
+  ],
+  "critical_code_review_comments": [
+    "OutreachPipeline.jsx is 1198 lines — exceeds the 700-line guideline. The AI Draft panel JSX (lines 858-948), the Outreach Settings modal (lines 1097-1195), and the Move-to-Project dialog (lines 1017-1095) are good extraction candidates.",
+    "copyToClipboard and copyAllDraft do not handle navigator.clipboard.writeText promise rejection. Observed PAGEERROR: \"Failed to execute 'writeText' on 'Clipboard': Write permission denied.\" — the toast still says success even when the write fails.",
+    "regenerateDraft() (lines 235-250) keeps the old draft visible in the panel during the new API call because draftCache[channelId] is never temporarily cleared or shadowed. The only loading affordance is the tiny Regenerate-button spinner.",
+    "ChannelDetailSheet receives `api` as a prop (line 1010) — the axios instance is created on every render at line 78-81 without useMemo, so the sheet gets a fresh axios instance every render. Minor perf only; not a bug."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only scope)", "frontend": "~90%"},
+  "test_credentials": "adrian@affilitube.com / admin123! (admin, pro tier, draft_credits=38 unchanged after test)",
+  "seed_data_creation": "Set outreach_config via PUT /api/user/outreach-config with product_name=AffiliTube, target_audience='SaaS founders looking for YouTube affiliate partners', value_prop='Find creators already promoting tools like yours, with full affiliate scoring and outreach tracking — built for solo founders, not marketing teams.', tone=raw_founder, sender_name=Adrian. It was empty before. NO new pipeline entry created — the existing 'Stacia Loo' channel under project 'Refactor smoke project' was reused. To clean up: PUT /api/user/outreach-config with {} (or leave it; it's per-user prefs not test pollution), and the existing pipeline entry was pre-existing so leave or delete as desired.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "AI Draft feature on /dashboard/pipeline is functional end-to-end for admin. Three real OpenAI calls were made this run (~$0.03 spent: initial generate, regenerate click, plus one backend smoke). Admin is correctly exempt from in-app draft_credits (38 → 38). Outreach config is now persistently set for adrian@affilitube.com — future tests on this admin can skip the config setup. Pipeline contains 1 entry: channel_id UC05-IEI0OPcNr-rlpYFdJJg (Stacia Loo, project 'Refactor smoke project'). Cookie-consent click was needed once post-login. Clipboard writes throw in headless Playwright (sandbox), but the app's toast still says success — see action item #2.",
+  "rca of the issue": "Regenerate-no-visible-change RCA hypothesis: The regenerateDraft() function in OutreachPipeline.jsx line 235 does not clear draftCache[channelId] before the new API call, so the panel keeps rendering the previous draft via draftCache[channel.channel_id] until setDraftCache replaces it. The only loading affordance during regen is the Regenerate button's own spinner (line 882). If the two LLM completions are very similar, or if the test polls before the swap completes, no change is detected. Mitigation: temporarily set draftCache[channelId] = null (or a separate isRegenerating flag) during the regen call and show a 'Regenerating...' state in the panel body."
+}
