@@ -782,7 +782,8 @@ export default function SaaSRadarPanel({ token }) {
                             href={buildOutreachMailto(
                               p.emails_found[0],
                               ((p.makers || []).find(m => m.email === p.emails_found[0])?.name) || (p.makers?.[0]?.name) || null,
-                              p.name
+                              p.name,
+                              p.bucket
                             )}
                             className="text-xs text-indigo-600 hover:underline break-all"
                           >

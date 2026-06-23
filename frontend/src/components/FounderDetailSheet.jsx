@@ -64,7 +64,7 @@ const BUCKET_LABELS = {
  *
  * Exported so the SaaS Radar table row's email link can reuse the same template.
  */
-export function buildOutreachMailto(email, makerName, productName) {
+export function buildOutreachMailto(email, makerName, productName, bucket) {
   const product = productName || "your product";
   // Extract first name: take first whitespace-delimited token of the maker's display name.
   // Strip out any leading non-letters (e.g. emoji, brackets) before grabbing it.
@@ -75,26 +75,52 @@ export function buildOutreachMailto(email, makerName, productName) {
   }
   const greeting = firstName ? `Hi ${firstName},` : "Hi there,";
 
-  const subject = `Congrats on your ProductHunt launch!`;
-  const body = [
-    greeting,
-    "",
-    `Saw ${product} on ProductHunt — congrats on the launch. Getting something shipped and in front of people is genuinely hard, and you've done the hard part.`,
-    "",
-    "Here's the thing nobody warns you about after launch day: distribution doesn't get easier. Ads are expensive and unpredictable. SEO takes months. Cold outreach at scale feels like shouting into a void.",
-    "",
-    `And yet somewhere out there are YouTube creators — people with exactly the right audience for a product like ${product} — already reviewing tools in your category, already trusted by the people you're trying to reach.`,
-    "",
-    "Finding them is the problem. It takes hours of manual searching, spreadsheet-wrangling, and guesswork about who's actually worth contacting versus who'll ghost you or say yes to anything with a commission attached.",
-    "That's the problem AffiliTube solves.",
-    "",
-    "AffiliTube finds YouTube creators already covering your niche, scores them on real affiliate potential (not just subscriber count), and surfaces their contact details — so you can go from \"I need affiliates\" to \"here are 20 pre-qualified creators worth reaching out to\" in an afternoon rather than a week.",
-    "",
-    `There's a free 14-day trial if you want to see what it surfaces for ${product}'s niche: affilitube.com/for-saas-founders`,
-    "",
-    "Adrian",
-    "Founder, AffiliTube",
-  ].join("\n");
+  let subject;
+  let body;
+
+  if (bucket === "green") {
+    // Green bucket = product already has an affiliate program.
+    // Pitch AffiliTube as the way to *find* the YouTube affiliates.
+    subject = `${product} + YouTube affiliates`;
+    body = [
+      greeting,
+      "",
+      `Saw ${product} on ProductHunt — congrats on the launch. Getting something out into the world is genuinely hard, and you've done the hard part.`,
+      "",
+      "Here's where most SaaS founders get stuck next: YouTube. Everyone knows it's one of the best channels for SaaS distribution — a ten-minute screen recording does more to sell software than any landing page copy ever could. The problem is finding the right creators. Not just anyone with a decent subscriber count, but the ones actually covering tools in your niche, with an audience that buys software, and a track record of promoting products rather than just reviewing them for views.",
+      "",
+      "Most founders end up doing this manually. Hours of searching, tab after tab of YouTube channels, spreadsheets that never quite tell you whether a creator is actually worth reaching out to. And after all that, you're still guessing.",
+      "",
+      "AffiliTube cuts through that. It searches YouTube for creators already covering your category, scores each one on real affiliate potential — topic relevance, engagement quality, affiliate history — and surfaces their contact details. You go from \"I need to find YouTube affiliates\" to a ranked shortlist of pre-qualified prospects in an afternoon.",
+      "",
+      `There's a free 14-day trial if you want to see what it surfaces for ${product}'s niche: affilitube.com`,
+      "",
+      "Adrian",
+      "Founder, AffiliTube",
+    ].join("\n");
+  } else {
+    // Yellow / red / unknown / anything else → original template.
+    subject = `Congrats on your ProductHunt launch!`;
+    body = [
+      greeting,
+      "",
+      `Saw ${product} on ProductHunt — congrats on the launch. Getting something shipped and in front of people is genuinely hard, and you've done the hard part.`,
+      "",
+      "Here's the thing nobody warns you about after launch day: distribution doesn't get easier. Ads are expensive and unpredictable. SEO takes months. Cold outreach at scale feels like shouting into a void.",
+      "",
+      `And yet somewhere out there are YouTube creators — people with exactly the right audience for a product like ${product} — already reviewing tools in your category, already trusted by the people you're trying to reach.`,
+      "",
+      "Finding them is the problem. It takes hours of manual searching, spreadsheet-wrangling, and guesswork about who's actually worth contacting versus who'll ghost you or say yes to anything with a commission attached.",
+      "That's the problem AffiliTube solves.",
+      "",
+      "AffiliTube finds YouTube creators already covering your niche, scores them on real affiliate potential (not just subscriber count), and surfaces their contact details — so you can go from \"I need affiliates\" to \"here are 20 pre-qualified creators worth reaching out to\" in an afternoon rather than a week.",
+      "",
+      `There's a free 14-day trial if you want to see what it surfaces for ${product}'s niche: affilitube.com/for-saas-founders`,
+      "",
+      "Adrian",
+      "Founder, AffiliTube",
+    ].join("\n");
+  }
 
   return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
@@ -250,7 +276,7 @@ export default function FounderDetailSheet({ open, onOpenChange, product, onProd
                       <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-xs">
                         {m.email && (
                           <a
-                            href={buildOutreachMailto(m.email, m.name, product.name)}
+                            href={buildOutreachMailto(m.email, m.name, product.name, product.bucket)}
                             className="flex items-center gap-1 text-blue-700 hover:underline"
                             data-testid={`founder-email-${i}`}
                           >
