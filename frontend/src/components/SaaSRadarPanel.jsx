@@ -26,6 +26,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
   Download,
   RefreshCw,
   ExternalLink,
@@ -39,6 +46,9 @@ import {
   ThumbsDown,
   Bookmark,
   Send,
+  Tag,
+  X,
+  Ban,
 } from "lucide-react";
 import FounderDetailSheet, { buildOutreachMailto } from "@/components/FounderDetailSheet";
 import { OUTREACH_STATUS_CONFIG } from "@/lib/outreachConfig";
@@ -84,6 +94,36 @@ export default function SaaSRadarPanel({ token }) {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
+  // --- Option A noise-reduction filters ---
+  // topicsFilter: array of selected topic slugs (OR'd in the query).
+  // excludeKeywords: comma-separated keyword string (regex word-boundary excluded).
+  // hidePlatformApps: preset toggle that adds shopify / ios / android / extensions / etc.
+  // topicCounts: [{slug, count}] sourced from /topic-counts, respects all *other* filters.
+  // topicPopoverSearch: live filter inside the topic dropdown.
+  const [topicsFilter, setTopicsFilter] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("radar_topics_filter") || "[]"); } catch { return []; }
+  });
+  const [excludeKeywordsInput, setExcludeKeywordsInput] = useState(
+    () => localStorage.getItem("radar_exclude_keywords") || ""
+  );
+  const [excludeKeywords, setExcludeKeywords] = useState(excludeKeywordsInput);
+  const [hidePlatformApps, setHidePlatformApps] = useState(
+    () => localStorage.getItem("radar_hide_platform_apps") === "1"
+  );
+  const [topicCounts, setTopicCounts] = useState([]);
+  const [topicPopoverSearch, setTopicPopoverSearch] = useState("");
+
+  // Debounce the exclude-keywords input so we don't refetch on every keystroke.
+  useEffect(() => {
+    const id = setTimeout(() => setExcludeKeywords(excludeKeywordsInput), 350);
+    return () => clearTimeout(id);
+  }, [excludeKeywordsInput]);
+
+  // Persist filter prefs.
+  useEffect(() => { localStorage.setItem("radar_topics_filter", JSON.stringify(topicsFilter)); }, [topicsFilter]);
+  useEffect(() => { localStorage.setItem("radar_exclude_keywords", excludeKeywordsInput); }, [excludeKeywordsInput]);
+  useEffect(() => { localStorage.setItem("radar_hide_platform_apps", hidePlatformApps ? "1" : "0"); }, [hidePlatformApps]);
+
   // Ingest form
   const [daysBack, setDaysBack] = useState(90);
   const [ingestRunning, setIngestRunning] = useState(false);
@@ -124,6 +164,9 @@ export default function SaaSRadarPanel({ token }) {
           outreach_status: outreachFilter || undefined,
           has_email: hasEmail || undefined,
           search: search || undefined,
+          topics: topicsFilter.length ? topicsFilter.join(",") : undefined,
+          exclude: excludeKeywords.trim() || undefined,
+          hide_platform_apps: hidePlatformApps || undefined,
           sort: sortBy,
           limit: PAGE_SIZE,
           offset: page * PAGE_SIZE,
@@ -136,13 +179,43 @@ export default function SaaSRadarPanel({ token }) {
     } finally {
       setLoading(false);
     }
-  }, [bucketFilter, verdictFilter, outreachFilter, hasEmail, search, sortBy, page, token]);
+  }, [
+    bucketFilter, verdictFilter, outreachFilter, hasEmail, search,
+    topicsFilter, excludeKeywords, hidePlatformApps,
+    sortBy, page, token,
+  ]);
+
+  // Topic counts respect all *other* filters so the dropdown reflects what's
+  // actually available in the user's current view.
+  const loadTopicCounts = useCallback(async () => {
+    try {
+      const res = await api.get("/admin/saas-radar/topic-counts", {
+        params: {
+          bucket: bucketFilter || undefined,
+          verdict: verdictFilter || undefined,
+          outreach_status: outreachFilter || undefined,
+          has_email: hasEmail || undefined,
+          search: search || undefined,
+          exclude: excludeKeywords.trim() || undefined,
+          hide_platform_apps: hidePlatformApps || undefined,
+          limit: 150,
+        },
+      });
+      setTopicCounts(res.data.topics || []);
+    } catch (e) {
+      // Silent — topic dropdown is non-critical.
+    }
+  }, [
+    bucketFilter, verdictFilter, outreachFilter, hasEmail, search,
+    excludeKeywords, hidePlatformApps, token,
+  ]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadStats();
     loadProducts();
-  }, [loadStats, loadProducts]);
+    loadTopicCounts();
+  }, [loadStats, loadProducts, loadTopicCounts]);
 
   // Poll job status while a job is running
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,7 +314,13 @@ export default function SaaSRadarPanel({ token }) {
       const res = await api.get("/admin/saas-radar/products.csv", {
         params: {
           bucket: bucketFilter || undefined,
+          verdict: verdictFilter || undefined,
+          outreach_status: outreachFilter || undefined,
           has_email: hasEmail || undefined,
+          search: search || undefined,
+          topics: topicsFilter.length ? topicsFilter.join(",") : undefined,
+          exclude: excludeKeywords.trim() || undefined,
+          hide_platform_apps: hidePlatformApps || undefined,
         },
         responseType: "blob",
       });
@@ -651,6 +730,173 @@ export default function SaaSRadarPanel({ token }) {
               </Button>
             </div>
           </div>
+
+          {/* Noise-reduction row: Topics multi-select, Exclude keywords, Hide platform apps */}
+          <div className="grid md:grid-cols-12 gap-3 mt-3">
+            {/* Topics multi-select popover */}
+            <div className="md:col-span-4">
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Topics</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 w-full justify-start font-normal"
+                    data-testid="radar-topics-trigger"
+                  >
+                    <Tag className="h-4 w-4 mr-2 text-slate-500" />
+                    {topicsFilter.length === 0
+                      ? <span className="text-slate-500">All topics</span>
+                      : <span className="truncate">{topicsFilter.length} selected · {topicsFilter.slice(0, 2).join(", ")}{topicsFilter.length > 2 ? "…" : ""}</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0" align="start" data-testid="radar-topics-popover">
+                  <div className="p-2 border-b">
+                    <Input
+                      value={topicPopoverSearch}
+                      onChange={(e) => setTopicPopoverSearch(e.target.value)}
+                      placeholder="Filter topics…"
+                      className="h-8 text-xs"
+                      data-testid="radar-topics-search"
+                    />
+                  </div>
+                  <ScrollArea className="max-h-72">
+                    <div className="p-2 space-y-0.5">
+                      {(() => {
+                        const q = topicPopoverSearch.trim().toLowerCase();
+                        const filtered = topicCounts.filter(t => !q || t.slug.toLowerCase().includes(q));
+                        if (filtered.length === 0) {
+                          return <div className="text-xs text-slate-500 py-3 text-center">No topics match.</div>;
+                        }
+                        return filtered.map((t) => {
+                          const checked = topicsFilter.includes(t.slug);
+                          return (
+                            <label
+                              key={t.slug}
+                              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-xs"
+                              data-testid={`radar-topic-row-${t.slug}`}
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(v) => {
+                                  setPage(0);
+                                  setTopicsFilter(prev => v ? [...prev, t.slug] : prev.filter(s => s !== t.slug));
+                                }}
+                              />
+                              <span className="flex-1 truncate">{t.slug}</span>
+                              <span className="text-slate-400 tabular-nums">{t.count}</span>
+                            </label>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </ScrollArea>
+                  {topicsFilter.length > 0 && (
+                    <div className="border-t p-2 flex items-center justify-between">
+                      <span className="text-xs text-slate-500">{topicsFilter.length} selected</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => { setTopicsFilter([]); setPage(0); }}
+                        data-testid="radar-topics-clear"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Exclude keywords */}
+            <div className="md:col-span-5">
+              <label className="text-xs font-medium text-slate-600 mb-1 block">
+                Exclude keywords{" "}
+                <span className="text-slate-400 font-normal">(comma-separated, e.g. shopify, chrome extension)</span>
+              </label>
+              <Input
+                value={excludeKeywordsInput}
+                onChange={(e) => { setExcludeKeywordsInput(e.target.value); setPage(0); }}
+                placeholder="shopify, ios, android…"
+                className="h-9"
+                data-testid="radar-exclude-input"
+              />
+            </div>
+
+            {/* Hide platform apps preset */}
+            <div className="md:col-span-3 flex items-end">
+              <Button
+                variant={hidePlatformApps ? "default" : "outline"}
+                size="sm"
+                onClick={() => { setHidePlatformApps(!hidePlatformApps); setPage(0); }}
+                className="h-9 w-full"
+                data-testid="radar-hide-platform-toggle"
+                title="Excludes Shopify apps, Chrome/Firefox/Safari extensions, iOS, Android, WordPress, Figma plugins, mobile apps."
+              >
+                <Ban className="h-4 w-4 mr-2" />
+                {hidePlatformApps ? "Hiding platform apps ✓" : "Hide platform apps"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Active filter chips */}
+          {(topicsFilter.length > 0 || excludeKeywords.trim() || hidePlatformApps) && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t">
+              <span className="text-[11px] uppercase tracking-wide text-slate-500 mr-1">Active:</span>
+              {topicsFilter.map((t) => (
+                <Badge
+                  key={`tf-${t}`}
+                  variant="secondary"
+                  className="text-[11px] font-normal cursor-pointer hover:bg-slate-200"
+                  onClick={() => { setTopicsFilter(prev => prev.filter(s => s !== t)); setPage(0); }}
+                  data-testid={`radar-active-topic-${t}`}
+                >
+                  <Tag className="h-3 w-3 mr-1" />
+                  {t}
+                  <X className="h-3 w-3 ml-1" />
+                </Badge>
+              ))}
+              {excludeKeywords.trim() && (
+                <Badge
+                  variant="secondary"
+                  className="text-[11px] font-normal cursor-pointer hover:bg-slate-200 bg-rose-50 text-rose-700"
+                  onClick={() => { setExcludeKeywordsInput(""); setPage(0); }}
+                  data-testid="radar-active-exclude"
+                >
+                  <Ban className="h-3 w-3 mr-1" />
+                  Excl: {excludeKeywords.trim()}
+                  <X className="h-3 w-3 ml-1" />
+                </Badge>
+              )}
+              {hidePlatformApps && (
+                <Badge
+                  variant="secondary"
+                  className="text-[11px] font-normal cursor-pointer hover:bg-slate-200 bg-rose-50 text-rose-700"
+                  onClick={() => { setHidePlatformApps(false); setPage(0); }}
+                  data-testid="radar-active-platform"
+                >
+                  <Ban className="h-3 w-3 mr-1" />
+                  Platform apps hidden
+                  <X className="h-3 w-3 ml-1" />
+                </Badge>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[11px] ml-auto"
+                onClick={() => {
+                  setTopicsFilter([]);
+                  setExcludeKeywordsInput("");
+                  setHidePlatformApps(false);
+                  setPage(0);
+                }}
+                data-testid="radar-clear-noise-filters"
+              >
+                Clear all
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -721,15 +967,32 @@ export default function SaaSRadarPanel({ token }) {
                           {p.tagline}
                         </div>
                         <div className="flex flex-wrap gap-1 mt-1.5">
-                          {(p.topics || []).slice(0, 3).map((t) => (
-                            <Badge
-                              key={t}
-                              variant="secondary"
-                              className="text-[10px] px-1.5 py-0 font-normal"
-                            >
-                              {t}
-                            </Badge>
-                          ))}
+                          {(p.topics || []).slice(0, 3).map((t) => {
+                            const active = topicsFilter.includes(t);
+                            return (
+                              <Badge
+                                key={t}
+                                variant="secondary"
+                                className={`text-[10px] px-1.5 py-0 font-normal cursor-pointer transition-colors ${
+                                  active
+                                    ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                                    : "hover:bg-slate-200"
+                                }`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPage(0);
+                                  setTopicsFilter(prev =>
+                                    prev.includes(t)
+                                      ? prev.filter(s => s !== t)
+                                      : [...prev, t]
+                                  );
+                                }}
+                                data-testid={`radar-row-topic-${t}`}
+                              >
+                                {t}
+                              </Badge>
+                            );
+                          })}
                         </div>
                       </TableCell>
                       <TableCell className="align-top pt-3">

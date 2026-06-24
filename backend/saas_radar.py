@@ -1408,19 +1408,49 @@ def build_router(db, admin_dep) -> APIRouter:
         jobs = await db.saas_radar_jobs.find({}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
         return {"jobs": jobs}
 
-    @router.get("/products")
-    async def list_products(
-        bucket: Optional[str] = Query(None),
-        verdict: Optional[str] = Query(None),
-        outreach_status: Optional[str] = Query(None),
-        search: Optional[str] = Query(None),
-        has_email: Optional[bool] = Query(None),
-        sort: str = Query("score_desc"),
-        limit: int = Query(50, ge=1, le=200),
-        offset: int = Query(0, ge=0),
-        admin=Depends(admin_dep),
-    ):
+    # Platform-app preset for "Hide platform apps" toggle.
+    # Matched case-insensitively with word boundaries against name/tagline/website/topics.
+    PLATFORM_APP_KEYWORDS = [
+        "shopify", "chrome extension", "wordpress", "ios", "android",
+        "figma plugin", "firefox extension", "browser extension",
+        "safari extension", "edge extension", "mobile app",
+    ]
+
+    def _kw_regex_clauses(keywords: List[str]) -> List[Dict[str, Any]]:
+        """Build a list of $or clauses (to be inverted into $nor) so a product is
+        EXCLUDED if any keyword appears in name/tagline/website_url/topics."""
+        clauses: List[Dict[str, Any]] = []
+        for kw in keywords:
+            kw = (kw or "").strip()
+            if not kw:
+                continue
+            # Word-boundary match so "ios" doesn't match "scenario".
+            # Allow multi-word phrases ("chrome extension") by escaping then
+            # collapsing whitespace to \s+.
+            esc = re.escape(kw)
+            esc = re.sub(r"\\\s+", r"\\s+", esc)
+            rx = rf"(?i)\b{esc}\b"
+            clauses.append({"name": {"$regex": rx}})
+            clauses.append({"tagline": {"$regex": rx}})
+            clauses.append({"website_url": {"$regex": rx}})
+            # topics is an array of slugs — use $elemMatch with regex.
+            clauses.append({"topics": {"$elemMatch": {"$regex": rx}}})
+        return clauses
+
+    def _build_products_query(
+        bucket: Optional[str],
+        verdict: Optional[str],
+        outreach_status: Optional[str],
+        search: Optional[str],
+        has_email: Optional[bool],
+        topics_csv: Optional[str],
+        exclude_csv: Optional[str],
+        hide_platform_apps: Optional[bool],
+    ) -> Dict[str, Any]:
+        """Single source of truth for the list_products + topic_counts queries."""
         query: Dict[str, Any] = {}
+        ors: List[List[Dict[str, Any]]] = []  # collected $or groups to AND together
+
         if bucket:
             buckets = [b.strip() for b in bucket.split(",") if b.strip()]
             if buckets:
@@ -1431,49 +1461,90 @@ def build_router(db, admin_dep) -> APIRouter:
                 if "unset" in statuses:
                     set_s = [s for s in statuses if s != "unset"]
                     if set_s:
-                        query.setdefault("$and", []).append({
-                            "$or": [
-                                {"outreach_status": {"$in": set_s}},
-                                {"outreach_status": None},
-                                {"outreach_status": {"$exists": False}},
-                            ]
-                        })
+                        ors.append([
+                            {"outreach_status": {"$in": set_s}},
+                            {"outreach_status": None},
+                            {"outreach_status": {"$exists": False}},
+                        ])
                     else:
-                        query.setdefault("$and", []).append({
-                            "$or": [{"outreach_status": None}, {"outreach_status": {"$exists": False}}]
-                        })
+                        ors.append([
+                            {"outreach_status": None},
+                            {"outreach_status": {"$exists": False}},
+                        ])
                 else:
                     query["outreach_status"] = {"$in": statuses}
         if verdict:
             verdicts = [v.strip() for v in verdict.split(",") if v.strip()]
             if verdicts:
                 if "unset" in verdicts:
-                    # Allow filtering by "unset" → null/missing verdict
                     set_v = [v for v in verdicts if v != "unset"]
                     if set_v:
-                        query["$or"] = [
+                        ors.append([
                             {"verdict": {"$in": set_v}},
                             {"verdict": None},
                             {"verdict": {"$exists": False}},
-                        ]
+                        ])
                     else:
-                        query["$or"] = [{"verdict": None}, {"verdict": {"$exists": False}}]
+                        ors.append([
+                            {"verdict": None},
+                            {"verdict": {"$exists": False}},
+                        ])
                 else:
                     query["verdict"] = {"$in": verdicts}
         if search:
             rx = re.escape(search)
-            search_or = [
+            ors.append([
                 {"name": {"$regex": rx, "$options": "i"}},
                 {"tagline": {"$regex": rx, "$options": "i"}},
                 {"website_url": {"$regex": rx, "$options": "i"}},
-            ]
-            # Merge with existing $or (from verdict=unset) using $and so both apply.
-            if "$or" in query:
-                query["$and"] = [{"$or": query.pop("$or")}, {"$or": search_or}]
-            else:
-                query["$or"] = search_or
+            ])
         if has_email:
             query["emails_found.0"] = {"$exists": True}
+
+        # Topic filter: ANY of selected topics matches (intuitive multi-select OR).
+        if topics_csv:
+            topic_slugs = [t.strip().lower() for t in topics_csv.split(",") if t.strip()]
+            if topic_slugs:
+                query["topics"] = {"$in": topic_slugs}
+
+        # Exclude keywords (user-typed + preset toggle).
+        all_excludes: List[str] = []
+        if exclude_csv:
+            all_excludes.extend([k.strip() for k in exclude_csv.split(",") if k.strip()])
+        if hide_platform_apps:
+            all_excludes.extend(PLATFORM_APP_KEYWORDS)
+        if all_excludes:
+            nor_clauses = _kw_regex_clauses(all_excludes)
+            if nor_clauses:
+                query["$nor"] = nor_clauses
+
+        # Merge collected $or groups using $and so they all apply.
+        if ors:
+            if len(ors) == 1:
+                query["$or"] = ors[0]
+            else:
+                query["$and"] = [{"$or": group} for group in ors]
+        return query
+
+    @router.get("/products")
+    async def list_products(
+        bucket: Optional[str] = Query(None),
+        verdict: Optional[str] = Query(None),
+        outreach_status: Optional[str] = Query(None),
+        search: Optional[str] = Query(None),
+        has_email: Optional[bool] = Query(None),
+        topics: Optional[str] = Query(None),
+        exclude: Optional[str] = Query(None),
+        hide_platform_apps: Optional[bool] = Query(None),
+        sort: str = Query("score_desc"),
+        limit: int = Query(50, ge=1, le=200),
+        offset: int = Query(0, ge=0),
+        admin=Depends(admin_dep),
+    ):
+        query = _build_products_query(
+            bucket, verdict, outreach_status, search, has_email,
+            topics, exclude, hide_platform_apps,
+        )
 
         sort_map = {
             "score_desc": [("score", -1), ("posted_at", -1)],
@@ -1548,19 +1619,57 @@ def build_router(db, admin_dep) -> APIRouter:
             raise HTTPException(status_code=404, detail="Product not found")
         return {"success": True}
 
+    @router.get("/topic-counts")
+    async def topic_counts(
+        bucket: Optional[str] = Query(None),
+        verdict: Optional[str] = Query(None),
+        outreach_status: Optional[str] = Query(None),
+        search: Optional[str] = Query(None),
+        has_email: Optional[bool] = Query(None),
+        exclude: Optional[str] = Query(None),
+        hide_platform_apps: Optional[bool] = Query(None),
+        limit: int = Query(150, ge=1, le=500),
+        admin=Depends(admin_dep),
+    ):
+        """Return topic slugs + counts for products matching current filters
+        (excluding the topics filter itself, so users can see what's available).
+        Sorted by count desc."""
+        match_query = _build_products_query(
+            bucket, verdict, outreach_status, search, has_email,
+            None,  # don't apply topic filter
+            exclude, hide_platform_apps,
+        )
+        pipeline = [
+            {"$match": match_query},
+            {"$unwind": "$topics"},
+            {"$group": {"_id": "$topics", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1, "_id": 1}},
+            {"$limit": limit},
+        ]
+        cursor = db.saas_radar_products.aggregate(pipeline)
+        rows = await cursor.to_list(length=limit)
+        return {
+            "topics": [
+                {"slug": r["_id"], "count": r["count"]} for r in rows if r.get("_id")
+            ]
+        }
+
     @router.get("/products.csv")
     async def export_csv(
         bucket: Optional[str] = Query(None),
+        verdict: Optional[str] = Query(None),
+        outreach_status: Optional[str] = Query(None),
+        search: Optional[str] = Query(None),
         has_email: Optional[bool] = Query(None),
+        topics: Optional[str] = Query(None),
+        exclude: Optional[str] = Query(None),
+        hide_platform_apps: Optional[bool] = Query(None),
         admin=Depends(admin_dep),
     ):
-        query: Dict[str, Any] = {}
-        if bucket:
-            buckets = [b.strip() for b in bucket.split(",") if b.strip()]
-            if buckets:
-                query["bucket"] = {"$in": buckets}
-        if has_email:
-            query["emails_found.0"] = {"$exists": True}
+        query = _build_products_query(
+            bucket, verdict, outreach_status, search, has_email,
+            topics, exclude, hide_platform_apps,
+        )
         cursor = db.saas_radar_products.find(query, {"_id": 0}).sort([("score", -1), ("posted_at", -1)])
         rows = await cursor.to_list(length=5000)
 
