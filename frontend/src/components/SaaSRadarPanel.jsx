@@ -760,7 +760,7 @@ export default function SaaSRadarPanel({ token }) {
                       data-testid="radar-topics-search"
                     />
                   </div>
-                  <ScrollArea className="max-h-72">
+                  <ScrollArea className="h-72">
                     <div className="p-2 space-y-0.5">
                       {(() => {
                         const q = topicPopoverSearch.trim().toLowerCase();
