@@ -184,7 +184,7 @@ class _Pacer:
         if self.min_interval <= 0:
             return
         async with self._lock:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             now = loop.time()
             if now < self._next_at:
                 delay = self._next_at - now
@@ -692,7 +692,7 @@ async def enrich_one_product(
 
     # CPU-heavy parsing: offload to a thread so the event loop stays responsive
     # to user-facing requests during enrichment runs (Tier A perf fix).
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     signals = await loop.run_in_executor(
         None,
         _parse_enrichment_signals,
@@ -922,7 +922,7 @@ Respond with ONLY a JSON object (no prose, no markdown) with keys:
         )
 
     # The SDK is sync; run in threadpool to keep async loop free.
-    resp = await asyncio.get_event_loop().run_in_executor(None, _call)
+    resp = await asyncio.get_running_loop().run_in_executor(None, _call)
     content = resp.choices[0].message.content
     try:
         data = json.loads(content)
@@ -1305,7 +1305,7 @@ def build_router(db, admin_dep) -> APIRouter:
 
         # 1) DNS lookup
         try:
-            ip = await asyncio.get_event_loop().run_in_executor(
+            ip = await asyncio.get_running_loop().run_in_executor(
                 None, socket.gethostbyname, "api.producthunt.com"
             )
             add("dns_resolve", True, {"resolved_ip": ip})
@@ -1464,6 +1464,7 @@ def build_router(db, admin_dep) -> APIRouter:
             raise HTTPException(
                 status_code=503,
                 detail={
+                    "kind": "ingest",
                     "message": "An ingest job is already running. Wait for it to finish or use /cancel-stuck if you believe it's hung.",
                     "running_job_id": running.get("id"),
                 },
@@ -1488,6 +1489,7 @@ def build_router(db, admin_dep) -> APIRouter:
             raise HTTPException(
                 status_code=503,
                 detail={
+                    "kind": "enrich",
                     "message": "An enrich job is already running. Wait for it to finish or use /cancel-stuck if you believe it's hung.",
                     "running_job_id": running.get("id"),
                 },

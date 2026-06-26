@@ -63,17 +63,17 @@ security = HTTPBearer()
 
 async def _yt_execute(request):
     """Run a googleapiclient request.execute() off the event loop thread."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, request.execute)
 
 
 async def _verify_password(plain: str, hashed: str) -> bool:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, pwd_context.verify, plain, hashed)
 
 
 async def _hash_password(plain: str) -> str:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, pwd_context.hash, plain)
 
 # Encryption for API keys at rest (kept for any future encrypted data)
