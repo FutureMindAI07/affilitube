@@ -18,11 +18,12 @@ import io
 import json
 import logging
 import os
+import queue
 import re
 import threading
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -196,7 +197,7 @@ class _Pacer:
 
 
 # ============================================================================
-# Dedicated background-worker thread (Tier C event-loop isolation)
+# Dedicated background-worker thread (Tier C+ event-loop isolation)
 # ----------------------------------------------------------------------------
 # FastAPI BackgroundTasks runs coroutines on the *same* asyncio event loop as
 # the API request handlers. A long enrich/ingest job (5-15 minutes of httpx
@@ -204,49 +205,136 @@ class _Pacer:
 # requests — login spinners, SaaS Radar /products polls, Brand Intelligence
 # fetches all queue up behind the bg task.
 #
-# Tier C decouples the work entirely: spawn a dedicated daemon thread, give
-# it a fresh asyncio event loop, and create a brand-new AsyncIOMotorClient
-# bound to *that* loop. The API event loop never schedules a single byte of
-# SaaS Radar enrich/ingest work. The two loops are completely independent.
+# This module isolates the work entirely: a SINGLE long-lived daemon thread
+# owns a SINGLE asyncio event loop and a SINGLE AsyncIOMotorClient. Jobs are
+# pushed onto a thread-safe queue and dispatched sequentially.
+#
+# Why long-lived (not spawn-per-job)?
+#   Spawning a fresh AsyncIOMotorClient per job leaks MongoDB connections into
+#   Atlas's pool (default maxPoolSize=100 per client). After a few enrich
+#   runs the cluster's connection cap is exhausted and EVERY Mongo-backed
+#   endpoint — SaaS Radar list, channel sponsorship-data, etc. — starts
+#   timing out. A single long-lived client with a small pool eliminates that.
 #
 # Trade-offs:
-#   • Extra Motor connection pool per active job (capped at 1 by the 503 guard).
-#   • Worker thread crashes are silently lost; we rely on _reap_stale_jobs
-#     (>180s without progress → marked orphaned) for cleanup.
-#   • Job progress writes still land in the same Mongo collections, so the UI
-#     polling can read state normally from the API event loop.
+#   • One global worker → jobs are serialized (matches the 503 "one at a time"
+#     guard we already enforce on the API side).
+#   • Worker survives the lifetime of the process; if it crashes once we
+#     auto-restart it on the next submit().
 # ============================================================================
 
-def start_radar_worker(coro_factory) -> threading.Thread:
-    """Start a daemon thread running `coro_factory(db_for_thread)` on a fresh
-    asyncio event loop with its own Motor client.
+# Capped Motor pool used by the worker. Far below the default 100 so we cannot
+# starve MongoDB Atlas's free-tier connection cap (~500) even across many runs.
+_WORKER_MOTOR_POOL_SIZE = 10
 
-    `coro_factory` is a callable that takes a Motor db handle and returns a
-    coroutine — e.g. `lambda db: _bg_enrich(db, limit, use_llm, use_pw, job_id)`.
+
+class _RadarWorker:
+    """Long-lived worker thread with its own asyncio loop + Motor client.
+
+    Submit coroutine-factories via `submit(coro_factory)` where `coro_factory`
+    is `Callable[[motor_db], Coroutine]`. The factory is invoked on the
+    worker's event loop and awaited to completion. Exceptions are logged
+    (and surface to the caller via the SaaS Radar `saas_radar_jobs` collection
+    which `_bg_enrich` / `_bg_ingest` write to in their finally blocks).
     """
-    def _runner():
-        loop = asyncio.new_event_loop()
+
+    def __init__(self) -> None:
+        self._queue: "queue.Queue[Optional[Callable]]" = queue.Queue()
+        self._thread: Optional[threading.Thread] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._client: Optional[AsyncIOMotorClient] = None
+        self._db = None
+        self._ready = threading.Event()
+        self._lock = threading.Lock()
+
+    def _is_alive(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def _start(self) -> None:
+        with self._lock:
+            if self._is_alive():
+                return
+            self._ready.clear()
+            self._thread = threading.Thread(
+                target=self._run, daemon=True, name="saas-radar-worker"
+            )
+            self._thread.start()
+            # Wait up to 5s for the thread to set up its loop + Motor client.
+            if not self._ready.wait(timeout=5.0):
+                logger.warning("SaaS Radar worker did not become ready within 5s")
+
+    def _run(self) -> None:
         try:
+            loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            self._loop = loop
             mongo_url = os.environ.get("MONGO_URL")
             db_name = os.environ.get("DB_NAME")
-            client = AsyncIOMotorClient(mongo_url)
-            worker_db = client[db_name]
+            client = AsyncIOMotorClient(mongo_url, maxPoolSize=_WORKER_MOTOR_POOL_SIZE)
+            self._client = client
+            self._db = client[db_name]
+            self._ready.set()
+            logger.info(
+                "SaaS Radar worker thread READY (maxPoolSize=%s)",
+                _WORKER_MOTOR_POOL_SIZE,
+            )
             try:
-                loop.run_until_complete(coro_factory(worker_db))
+                loop.run_until_complete(self._dispatch())
             finally:
-                client.close()
+                try:
+                    client.close()
+                except Exception:
+                    logger.exception("Motor client close failed in worker")
+                try:
+                    loop.close()
+                except Exception:
+                    pass
         except Exception:
-            logger.exception("SaaS Radar worker thread crashed")
-        finally:
-            try:
-                loop.close()
-            except Exception:
-                pass
+            logger.exception("SaaS Radar worker thread died")
+            # Clear state so the next submit() can spin a fresh worker up.
+            self._thread = None
+            self._loop = None
+            self._client = None
+            self._db = None
+            self._ready.clear()
 
-    t = threading.Thread(target=_runner, daemon=True, name="saas-radar-worker")
-    t.start()
-    return t
+    async def _dispatch(self) -> None:
+        loop = asyncio.get_running_loop()
+        while True:
+            # Blocking queue.get must run off the event loop or the loop stalls.
+            coro_factory = await loop.run_in_executor(None, self._queue.get)
+            if coro_factory is None:
+                logger.info("SaaS Radar worker received stop sentinel; exiting")
+                break
+            try:
+                await coro_factory(self._db)
+            except Exception:
+                logger.exception("SaaS Radar worker job raised; continuing")
+
+    def submit(self, coro_factory: Callable) -> None:
+        """Queue a coroutine factory for execution on the worker thread.
+
+        coro_factory: takes the worker's Motor db handle and returns a coroutine.
+        Lazily starts (or restarts) the worker thread if needed.
+        """
+        if not self._is_alive():
+            self._start()
+        if not self._ready.wait(timeout=5.0):
+            raise RuntimeError("SaaS Radar worker failed to initialize")
+        self._queue.put(coro_factory)
+
+
+# Module-level singleton. Lazy-started on first submit().
+_radar_worker = _RadarWorker()
+
+
+def start_radar_worker(coro_factory: Callable) -> None:
+    """Public API: queue a job onto the long-lived worker thread.
+
+    Kept as a free function so callers (API endpoints + the daily cron) don't
+    need to know about the singleton.
+    """
+    _radar_worker.submit(coro_factory)
 
 
 # ============================================================================

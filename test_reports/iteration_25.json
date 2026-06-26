@@ -1,0 +1,77 @@
+{
+  "summary": "Tier C+ (single long-lived SaaS Radar worker thread with one reusable AsyncIOMotorClient, maxPoolSize=10) verified end-to-end. 7/7 pytest cases passed. CORE ACCEPTANCE CRITERION MET: after 10 enrich submissions in a row, only ONE 'SaaS Radar worker thread READY' log line was emitted on the running backend instance (proves worker did NOT respawn). Across all 10 cycles /auth/me median=0.10s max=0.24s and /products median=0.10s max=0.13s — NO climbing latency pattern, NO connection-pool leak. First-3 vs last-3 averages are statistically identical (/auth/me 0.10s vs 0.10s, /products 0.12s vs 0.10s). Tier C core (16 parallel hits during enrich limit=50) still passes (median=1.83s max=1.89s).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "uvicorn --reload behavior (dev-only, NOT Tier C+)",
+        "issue": "Creating/modifying a Python file under /app/backend/ while a SaaS Radar enrich job is actively running on the worker thread triggers uvicorn --reload, but the worker subprocess fails to exit cleanly because in-flight httpx calls on the worker's own event loop are not cancelled before SIGTERM. Result: backend appears 'RUNNING' in supervisor but the uvicorn worker process is stuck mid-shutdown and serves no requests until manually restarted. Workaround applied in this iteration: kept the new pytest file at /app/tests/ (outside /app/backend) so reloader does not fire. NOT a production issue — production should not run with --reload."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_scenarios": [
+    {
+      "scenario": "Long-lived worker: 10 consecutive /enrich submissions (limit=5, use_llm=false)",
+      "result": "PASS",
+      "details": "Only ONE 'SaaS Radar worker thread READY (maxPoolSize=10)' log line on the current backend instance across all 10 submissions (READY-line delta = 1, expected ≤1). Worker singleton confirmed."
+    },
+    {
+      "scenario": "Connection-pool stability across 10 cycles (the regression we are testing against)",
+      "result": "PASS",
+      "details": "/auth/me cycle latencies: [0.10, 0.10, 0.11, 0.24, 0.09, 0.09, 0.12, 0.10, 0.09, 0.12]s — NO upward trend. /products: [0.13, 0.11, 0.11, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10]s — flat. First-3 avg /auth/me=0.10s vs last-3 avg=0.10s. First-3 avg /products=0.12s vs last-3 avg=0.10s. No connection leak."
+    },
+    {
+      "scenario": "Worker-thread isolation under heavy enrich (limit=50, 16 parallel mixed GETs)",
+      "result": "PASS",
+      "details": "median=1.83s max=1.89s — all 200, all <2s. Tier C core promise still holds."
+    },
+    {
+      "scenario": "503 guard with worker dispatch",
+      "result": "PASS",
+      "details": "First POST /enrich → 200 {status:running, job_id:X}. Second → 503 with detail.kind=='enrich' and detail.running_job_id==X. cancel-stuck cleaned up with cancelled>=1."
+    },
+    {
+      "scenario": "Outreach PATCH regression (outreach-status / follow-up-date / notes)",
+      "result": "PASS",
+      "details": "All three endpoints returned 200 success:true. notes PATCH key 'outreach_notes' persisted via GET re-fetch (confirmed match)."
+    },
+    {
+      "scenario": "/products filter combo (bucket=yellow&hide_platform_apps=true&exclude=shopify&topics=productivity&limit=2)",
+      "result": "PASS",
+      "details": "Returns 200 with products[] list."
+    },
+    {
+      "scenario": "/topic-counts?limit=5",
+      "result": "PASS",
+      "details": "Returns 200 with topics[] list."
+    },
+    {
+      "scenario": "Login latency idle",
+      "result": "PASS",
+      "details": "0.32s (<<2.0s threshold). Same as Tier C baseline."
+    }
+  ],
+  "test_report_links": [
+    "/app/tests/test_tier_c_plus_pool_stability.py",
+    "/app/test_reports/pytest/tier_c_plus_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "saas_radar.py _RadarWorker (lines 231-324) is solid: singleton worker, threading.Event for ready-sync, asyncio.new_event_loop() + AsyncIOMotorClient(maxPoolSize=10) initialized ONCE in the thread, queue.Queue dispatched via loop.run_in_executor (correct — blocking get must NOT run on the event loop), exception isolation in _dispatch so one bad job does not kill the worker, and self-restart on thread crash (state cleared on exception, next submit() spins a new thread). This addresses the Atlas connection-leak hypothesis cleanly.",
+    "_WORKER_MOTOR_POOL_SIZE=10 is correctly set far below the Atlas free-tier ~500 cap. With the 503 guard ensuring at-most-one concurrent job, 10 connections is more than sufficient.",
+    "Stop sentinel (None pushed into queue) is implemented but not currently called from any shutdown handler. On uvicorn graceful shutdown the daemon thread will be killed by process exit, which is acceptable, but the in-flight httpx coroutines on the worker loop are not cancelled — this is what caused the dev-time reload hang observed during testing. RECOMMENDATION (low-priority): register an atexit / FastAPI shutdown handler that calls _radar_worker._queue.put(None) and joins the thread with a small timeout. Won't affect production (no --reload there), but would make dev iteration smoother.",
+    "Lazy-start on first submit() is correct, but means the very first enrich request after process boot pays ~5s of thread+loop+Motor setup serialized into the API request path (submit() waits on self._ready.wait(timeout=5.0)). In practice we measured 0.10s submit latency, so this is fine — but worth noting for cold-start observability if a dashboard ever alerts on enrich submit times.",
+    "Carry-overs from iteration_24: server.py is still 4844 lines (split recommendation still standing); _yt_execute / _verify_password / _hash_password still use asyncio.get_event_loop() (deprecated in 3.12+); _reap_stale_jobs still relies on 180s timeout (no per-thread heartbeat). None of these block this iteration."
+  ],
+  "updated_files": [
+    "/app/tests/test_tier_c_plus_pool_stability.py (new — Tier C+ acceptance tests, placed outside /app/backend to avoid uvicorn --reload during enrich runs)"
+  ],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "n/a (backend-only request)"},
+  "test_credentials": "adrian@affilitube.com / admin123! from /app/memory/test_credentials.md",
+  "seed_data_creation": "13 short-lived SaaS Radar enrich jobs (limit=5 ×10 from cycle test + limit=50 ×1 isolation test + limit=5 ×2 from 503 guard test) created and immediately cancelled via /cancel-stuck after each. One outreach_notes field on the first product was overwritten with TIER_C_PLUS_<uuid8> string (not reverted — same approach as previous iterations). Final cancel-stuck reports cancelled=0 (no orphaned running jobs).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Tier C+ (long-lived single worker thread + single Motor client maxPoolSize=10) is functionally verified. Pytest entrypoint: REACT_APP_BACKEND_URL=https://trial-saas-hub.preview.emergentagent.com python -m pytest /app/tests/test_tier_c_plus_pool_stability.py -v -s. The 10-cycle long-lived test runs ~25s and is the killer regression test for the Atlas pool-exhaustion hypothesis — if it fails (latency climbs across cycles OR READY-line delta > 1), the long-lived worker invariant is broken. IMPORTANT TESTING TIP: do NOT place new test files under /app/backend/ if the test triggers /enrich, because uvicorn --reload + active worker job = hung reload on this env. Use /app/tests/ instead. Both /app/backend/tests/test_tier_c_worker_isolation.py (iteration_24) and /app/tests/test_tier_c_plus_pool_stability.py (this iteration) are independent and can both be run.",
+  "rca of the issue": "Original production bug RCA (from review request): 'spawn-a-worker-thread-per-job' opened a fresh AsyncIOMotorClient with default maxPoolSize=100 per job. Repeated invocations leaked MongoDB Atlas connections, exhausting the ~500-conn free-tier cap, stalling ALL Mongo-backed endpoints. FIX (Tier C+, saas_radar.py lines 200-337): one module-level _RadarWorker singleton, one daemon thread named 'saas-radar-worker', one event loop, one AsyncIOMotorClient(maxPoolSize=10) lazily initialized on first submit() and reused across all jobs. VERIFICATION evidence: across 10 consecutive enrich submissions, /auth/me and /products latency stayed flat (median 0.10s, max 0.24s; first-3 vs last-3 averages identical) — exactly the inverse of the 'cycle 1: 50ms → cycle 10: 5000ms+' climbing pattern that would have indicated pool leakage. Combined with the backend log showing only ONE 'worker thread READY' line on the current process, the long-lived singleton invariant is confirmed and the connection-pool exhaustion path is closed."
+}
