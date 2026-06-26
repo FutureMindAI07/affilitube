@@ -308,7 +308,12 @@ class _RadarWorker:
             self._loop = loop
             mongo_url = os.environ.get("MONGO_URL")
             db_name = os.environ.get("DB_NAME")
-            client = AsyncIOMotorClient(mongo_url, maxPoolSize=_WORKER_MOTOR_POOL_SIZE)
+            client = AsyncIOMotorClient(
+                mongo_url,
+                maxPoolSize=_WORKER_MOTOR_POOL_SIZE,
+                tz_aware=True,  # Return TZ-aware datetimes so subtraction against
+                                # datetime.now(timezone.utc) never raises TypeError.
+            )
             self._client = client
             self._db = client[db_name]
             self._started_at = datetime.now(timezone.utc).timestamp()
