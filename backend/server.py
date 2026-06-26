@@ -10,6 +10,7 @@ import re
 import csv
 import json
 import io
+import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any
@@ -42,6 +43,38 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 72
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
+
+
+# ============================================================================
+# Event-loop-friendly helpers
+# ----------------------------------------------------------------------------
+# The googleapiclient SDK is *synchronous* — every .execute() call is a
+# blocking HTTP roundtrip running on the asyncio thread. Likewise passlib
+# bcrypt verify/hash burns 50-200ms of pure CPU on the loop thread. Either
+# can stall the single uvicorn worker long enough that user-facing requests
+# (login, /me, etc.) sit in the queue and hit the 120s gateway timeout.
+#
+# These helpers dispatch the blocking work to the default ThreadPoolExecutor
+# (sized min(32, os.cpu_count()+4)) so the event loop stays responsive.
+# Drop-in replacements: each callsite that previously did `.execute()` or
+# `pwd_context.verify(...)` becomes `await _yt_execute(...)` /
+# `await _verify_password(...)`.
+# ============================================================================
+
+async def _yt_execute(request):
+    """Run a googleapiclient request.execute() off the event loop thread."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, request.execute)
+
+
+async def _verify_password(plain: str, hashed: str) -> bool:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, pwd_context.verify, plain, hashed)
+
+
+async def _hash_password(plain: str) -> str:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, pwd_context.hash, plain)
 
 # Encryption for API keys at rest (kept for any future encrypted data)
 ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY", JWT_SECRET)
@@ -1477,10 +1510,11 @@ async def register(data: AuthRegister):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     user_id = str(uuid.uuid4())
+    hashed_password = await _hash_password(data.password)
     user = {
         "id": user_id,
         "email": data.email.lower(),
-        "password_hash": pwd_context.hash(data.password),
+        "password_hash": hashed_password,
         "role": "user",
         "tier": "free",
         "monthly_search_count": 0,
@@ -1512,7 +1546,7 @@ async def register(data: AuthRegister):
 @api_router.post("/auth/login")
 async def login(data: AuthLogin):
     user = await db.users.find_one({"email": data.email.lower()})
-    if not user or not pwd_context.verify(data.password, user["password_hash"]):
+    if not user or not await _verify_password(data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_token(user["id"], user["email"])
     tier = user.get("tier", "free")
@@ -1604,7 +1638,7 @@ async def reset_password(data: PasswordResetConfirm):
         raise HTTPException(status_code=400, detail="Reset code has expired. Please request a new one.")
 
     # Update password
-    new_hash = pwd_context.hash(data.new_password)
+    new_hash = await _hash_password(data.new_password)
     await db.users.update_one({"email": record["email"]}, {"$set": {"password_hash": new_hash}})
 
     # Mark code as used
@@ -1967,13 +2001,13 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
             # Channel search
             if filters.search_mode in ["channels_only", "channels_videos"]:
                 try:
-                    response = youtube.search().list(
+                    response = await _yt_execute(youtube.search().list(
                         part="snippet",
                         q=keyword,
                         type="channel",
                         maxResults=min(filters.max_results_per_keyword, 50),
                         relevanceLanguage="en"
-                    ).execute()
+                    ))
                     
                     # Track API call
                     await track_api_call("search", 1, user["id"])
@@ -1997,14 +2031,14 @@ async def search_channels(filters: SearchFilters, user=Depends(get_current_user)
             # Video search
             if filters.search_mode in ["videos_only", "channels_videos"]:
                 try:
-                    response = youtube.search().list(
+                    response = await _yt_execute(youtube.search().list(
                         part="snippet",
                         q=keyword,
                         type="video",
                         maxResults=min(filters.max_results_per_keyword, 50),
                         publishedAfter=(datetime.now(timezone.utc) - timedelta(days=filters.uploaded_within_days)).isoformat(),
                         relevanceLanguage="en"
-                    ).execute()
+                    ))
                     
                     # Track API call
                     await track_api_call("search", 1, user["id"])
@@ -2240,10 +2274,10 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
             batch = channel_ids[i:i+50]
             
             try:
-                response = youtube.channels().list(
+                response = await _yt_execute(youtube.channels().list(
                     part="snippet,statistics,brandingSettings,contentDetails",
                     id=",".join(batch)
-                ).execute()
+                ))
                 
                 # Track API call
                 await track_api_call("channels", 1, user["id"])
@@ -2284,11 +2318,11 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     
                     if uploads_playlist:
                         try:
-                            playlist_response = youtube.playlistItems().list(
+                            playlist_response = await _yt_execute(youtube.playlistItems().list(
                                 part="snippet,contentDetails",
                                 playlistId=uploads_playlist,
                                 maxResults=videos_to_fetch
-                            ).execute()
+                            ))
                             
                             # Track API call
                             await track_api_call("playlists", 1, user["id"])
@@ -2315,10 +2349,10 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                                 if needs_descriptions:
                                     parts.append("snippet")
                                 
-                                vid_response = youtube.videos().list(
+                                vid_response = await _yt_execute(youtube.videos().list(
                                     part=",".join(parts),
                                     id=",".join(video_ids)
-                                ).execute()
+                                ))
                                 
                                 # Track API call
                                 await track_api_call("videos", 1, user["id"])
@@ -2561,13 +2595,13 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                 if not ch.get("sponsorship_data"):
                     try:
                         yt = get_youtube_service(user)
-                        ch_resp = yt.channels().list(part="contentDetails", id=ch_id).execute()
+                        ch_resp = await _yt_execute(yt.channels().list(part="contentDetails", id=ch_id))
                         if ch_resp.get("items"):
                             uploads_pl = ch_resp["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
-                            pl_resp = yt.playlistItems().list(part="contentDetails", playlistId=uploads_pl, maxResults=10).execute()
+                            pl_resp = await _yt_execute(yt.playlistItems().list(part="contentDetails", playlistId=uploads_pl, maxResults=10))
                             vid_ids = [item["contentDetails"]["videoId"] for item in pl_resp.get("items", [])]
                             if vid_ids:
-                                vids_resp = yt.videos().list(part="snippet", id=",".join(vid_ids)).execute()
+                                vids_resp = await _yt_execute(yt.videos().list(part="snippet", id=",".join(vid_ids)))
                                 videos = [{"video_id": v["id"], "title": v["snippet"]["title"],
                                            "description": v["snippet"]["description"],
                                            "published_at": v["snippet"].get("publishedAt", "")} for v in vids_resp.get("items", [])]
@@ -3074,10 +3108,10 @@ async def get_sponsorship_data(channel_id: str, user=Depends(get_current_user)):
         youtube = get_youtube_service(user)
         
         # Get uploads playlist ID
-        ch_response = youtube.channels().list(
+        ch_response = await _yt_execute(youtube.channels().list(
             part="contentDetails",
             id=channel_id
-        ).execute()
+        ))
         
         if not ch_response.get("items"):
             return {"is_sponsored_active": False, "detected_brands": [], "affiliate_link_count": 0,
@@ -3086,11 +3120,11 @@ async def get_sponsorship_data(channel_id: str, user=Depends(get_current_user)):
         uploads_playlist = ch_response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
         
         # Get last 10 video IDs
-        playlist_response = youtube.playlistItems().list(
+        playlist_response = await _yt_execute(youtube.playlistItems().list(
             part="contentDetails",
             playlistId=uploads_playlist,
             maxResults=10
-        ).execute()
+        ))
         
         video_ids = [item["contentDetails"]["videoId"] for item in playlist_response.get("items", [])]
         
@@ -3104,10 +3138,10 @@ async def get_sponsorship_data(channel_id: str, user=Depends(get_current_user)):
             return empty_result
         
         # Fetch video details (title + description)
-        videos_response = youtube.videos().list(
+        videos_response = await _yt_execute(youtube.videos().list(
             part="snippet",
             id=",".join(video_ids)
-        ).execute()
+        ))
         
         videos = []
         for item in videos_response.get("items", []):
@@ -3158,13 +3192,13 @@ async def _cache_sponsorship_data(channel_id: str):
     """Background task to pre-cache sponsorship data for a channel."""
     try:
         youtube = get_youtube_service()
-        ch_response = youtube.channels().list(part="contentDetails", id=channel_id).execute()
+        ch_response = await _yt_execute(youtube.channels().list(part="contentDetails", id=channel_id))
         if not ch_response.get("items"):
             return
         uploads_playlist = ch_response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
-        playlist_response = youtube.playlistItems().list(
+        playlist_response = await _yt_execute(youtube.playlistItems().list(
             part="contentDetails", playlistId=uploads_playlist, maxResults=10
-        ).execute()
+        ))
         video_ids = [item["contentDetails"]["videoId"] for item in playlist_response.get("items", [])]
         if not video_ids:
             empty_result = {"is_sponsored_active": False, "detected_brands": [], "affiliate_link_count": 0,
@@ -3174,7 +3208,7 @@ async def _cache_sponsorship_data(channel_id: str):
                 {"$set": {"sponsorship_data": empty_result, "last_sponsorship_check": datetime.now(timezone.utc)}}
             )
             return
-        videos_response = youtube.videos().list(part="snippet", id=",".join(video_ids)).execute()
+        videos_response = await _yt_execute(youtube.videos().list(part="snippet", id=",".join(video_ids)))
         videos = [{"video_id": item["id"], "title": item["snippet"]["title"],
                     "description": item["snippet"]["description"]} for item in videos_response.get("items", [])]
         result = detect_sponsorships(videos)
@@ -4102,10 +4136,11 @@ async def admin_create_user(data: AdminCreateUserInput, admin=Depends(get_admin_
         raise HTTPException(status_code=400, detail="Email already registered")
     
     user_id = str(uuid.uuid4())
+    hashed_password = await _hash_password(data.password)
     user_doc = {
         "id": user_id,
         "email": email,
-        "password_hash": pwd_context.hash(data.password),
+        "password_hash": hashed_password,
         "role": "user",
         "tier": data.tier,
         "monthly_search_count": 0,

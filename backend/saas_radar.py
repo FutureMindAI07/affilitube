@@ -1451,15 +1451,23 @@ def build_router(db, admin_dep) -> APIRouter:
     async def ingest(req: IngestRequest, background_tasks: BackgroundTasks, admin=Depends(admin_dep)):
         if not PH_TOKEN:
             raise HTTPException(status_code=400, detail="PRODUCTHUNT_TOKEN not configured")
-        # Mark any stale running ingest jobs as cancelled so the UI updates.
-        await db.saas_radar_jobs.update_many(
+        # Reap any orphaned (stale) running jobs first so we don't false-positive
+        # block when a previous worker died mid-flight.
+        await _reap_stale_jobs(db)
+        # If a *live* ingest is still running, refuse — stacking jobs doubles
+        # event-loop pressure and only makes things worse.
+        running = await db.saas_radar_jobs.find_one(
             {"kind": "ingest", "status": "running"},
-            {"$set": {
-                "status": "cancelled",
-                "error": "Superseded by a new ingest run",
-                "updated_at": datetime.now(timezone.utc),
-            }},
+            projection={"_id": 0, "id": 1, "created_at": 1},
         )
+        if running:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "message": "An ingest job is already running. Wait for it to finish or use /cancel-stuck if you believe it's hung.",
+                    "running_job_id": running.get("id"),
+                },
+            )
         topics = req.topics or DEFAULT_SAAS_TOPICS
         job_id = await _create_job(db, "ingest", {"days_back": req.days_back, "topics": topics})
         background_tasks.add_task(_bg_ingest, db, req.days_back, topics, job_id)
@@ -1467,14 +1475,23 @@ def build_router(db, admin_dep) -> APIRouter:
 
     @router.post("/enrich")
     async def enrich(req: EnrichRequest, background_tasks: BackgroundTasks, admin=Depends(admin_dep)):
-        await db.saas_radar_jobs.update_many(
+        # Reap any orphaned (stale) running jobs first so we don't false-positive
+        # block when a previous worker died mid-flight.
+        await _reap_stale_jobs(db)
+        # If a *live* enrich is still running, refuse — stacking jobs doubles
+        # event-loop pressure and only makes the worker more unresponsive.
+        running = await db.saas_radar_jobs.find_one(
             {"kind": "enrich", "status": "running"},
-            {"$set": {
-                "status": "cancelled",
-                "error": "Superseded by a new enrich run",
-                "updated_at": datetime.now(timezone.utc),
-            }},
+            projection={"_id": 0, "id": 1, "created_at": 1},
         )
+        if running:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "message": "An enrich job is already running. Wait for it to finish or use /cancel-stuck if you believe it's hung.",
+                    "running_job_id": running.get("id"),
+                },
+            )
         job_id = await _create_job(db, "enrich", {"limit": req.limit, "use_llm": req.use_llm, "use_playwright": req.use_playwright})
         background_tasks.add_task(_bg_enrich, db, req.limit, req.use_llm, req.use_playwright, job_id)
         return {"job_id": job_id, "status": "running"}

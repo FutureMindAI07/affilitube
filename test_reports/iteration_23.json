@@ -1,0 +1,48 @@
+{
+  "summary": "Tier B (event-loop unblock) backend verification: 14/14 pytest cases passed in ~5.4s against preview. Verified: (1) bcrypt off-loop on register/login/me/wrong-password/reset; (2) googleapiclient run_in_executor wrapping on /api/search and /api/channels/{id}/sponsorship-data; (3) NEW 503 guard on /api/admin/saas-radar/enrich AND /ingest with matching running_job_id; (4) outreach status/follow-up-date/notes PATCH regression untouched and persisted; (5) /topic-counts + /products filter combo still sane. No regressions; login latency <1s, wrong-password <1s. No stuck SaaS Radar jobs left behind (cancel-stuck returned 0).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/channels/search", "issue": "Review request referenced /api/channels/search but the actual endpoint is /api/search. Documentation/handoff drift only — code is correct. Test was adjusted to hit /api/search."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_scenarios": [
+    {"scenario": "Register new user (bcrypt hash via run_in_executor)", "result": "PASS", "details": "POST /api/auth/register with unique email returned 200 + token; hashed via _hash_password helper. Elapsed ~0.7s."},
+    {"scenario": "Login new user", "result": "PASS", "details": "POST /api/auth/login returned 200 + JWT in <1s. /api/auth/me with that token returned the lowercased email."},
+    {"scenario": "Admin login + /me", "result": "PASS", "details": "adrian@affilitube.com / admin123! returned 200 token; /me returned admin user."},
+    {"scenario": "Wrong password returns 401 fast", "result": "PASS", "details": "Returned 401 in <1s (well under 5s). bcrypt verify off-loop confirmed."},
+    {"scenario": "Password reset request", "result": "PASS", "details": "POST /api/auth/request-password-reset returned 200/202; does not crash on the hash off-loop refactor."},
+    {"scenario": "/api/search (YT search wrapped in _yt_execute)", "result": "PASS", "details": "POST /api/search with keywords=['productivity'], search_mode='channels_only', max_results_per_keyword=2 returned 200 in <60s. No 500/timeout."},
+    {"scenario": "Sponsorship-data auth requirement", "result": "PASS", "details": "GET /api/channels/{id}/sponsorship-data without token returned 401/403."},
+    {"scenario": "Sponsorship-data on unknown channel", "result": "PASS", "details": "With admin token and bogus channel id, endpoint returned 4xx (not 500)."},
+    {"scenario": "SaaS Radar /enrich 503 guard", "result": "PASS", "details": "First POST /api/admin/saas-radar/enrich {limit:1,use_llm:false,use_playwright:false} → 200 {status:'running', job_id:X}. Immediate repeat → 503 with detail.running_job_id == X. cancel-stuck cleared it."},
+    {"scenario": "SaaS Radar /ingest 503 guard", "result": "PASS", "details": "First POST /api/admin/saas-radar/ingest {days_back:1, topics:[]} → 200 running. Immediate repeat → 503 with matching running_job_id. cancel-stuck cleared it."},
+    {"scenario": "Outreach status PATCH", "result": "PASS", "details": "PATCH /api/admin/saas-radar/products/{ph_id}/outreach-status {status:'not_contacted'} → 200 {success:true}."},
+    {"scenario": "Follow-up date PATCH", "result": "PASS", "details": "PATCH /api/admin/saas-radar/products/{ph_id}/follow-up-date with ISO timestamp → 200 success:true."},
+    {"scenario": "Notes PATCH and persistence", "result": "PASS", "details": "PATCH /notes → 200 success. Re-fetched product list and confirmed outreach_notes field stored the new test note string."},
+    {"scenario": "/topic-counts?limit=5", "result": "PASS", "details": "Returned 200 with topics array (list type)."},
+    {"scenario": "/products filter combo", "result": "PASS", "details": "GET /api/admin/saas-radar/products?bucket=yellow&hide_platform_apps=true&exclude=shopify&topics=productivity&limit=2 → 200 with sane shape."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_tier_b_perf_fixes.py",
+    "/app/test_reports/pytest/tier_b_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 4844 lines — exceeds the recommended 700-line guideline. The Tier B refactor adds 3 helpers near line 64 but the file size remains a maintainability risk; consider splitting auth, YouTube, admin, and search into separate modules.",
+    "_yt_execute / _verify_password / _hash_password use asyncio.get_event_loop() which is deprecated for the running loop in Python 3.12+. Prefer asyncio.get_running_loop() (or asyncio.to_thread(...)) for forward compatibility. Current Python 3.11 in this env tolerates it, but production should switch to get_running_loop().",
+    "saas_radar.py /ingest and /enrich 503 guard implementation is correct and idempotent thanks to _reap_stale_jobs first. Suggestion: also include the kind ('ingest'/'enrich') in the 503 detail body so the UI can disambiguate which job is blocking.",
+    "Admin seed at server.py line 4774 intentionally uses sync pwd_context.hash — acknowledged in the review request as a one-time startup cost. Confirmed not on a request path."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tier_b_perf_fixes.py (new)"
+  ],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "n/a (backend-only request)"},
+  "test_credentials": "adrian@affilitube.com / admin123! from /app/memory/test_credentials.md",
+  "seed_data_creation": "Created one throwaway user per test run with email test-tierB-<ts>-<uuid>@example.com. Two short-lived SaaS Radar jobs (enrich+ingest) were created and immediately cancelled via /cancel-stuck. cancel-stuck final call returned {cancelled:0} → clean DB state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Tier B event-loop fix is functionally verified. Login + wrong-password + register all respond in under 1s (was previously suspected to hit the 120s gateway timeout under load). The new 503 guard is enforced by saas_radar.py lines 1450-1497 and cleanly cleared by /cancel-stuck. Note that /api/channels/search does NOT exist — the correct path is /api/search (POST with SearchFilters: keywords[], search_mode, max_results_per_keyword). Pytest entrypoint: REACT_APP_BACKEND_URL=https://trial-saas-hub.preview.emergentagent.com python -m pytest /app/backend/tests/test_tier_b_perf_fixes.py -v",
+  "rca of the issue": "N/A — Tier B fix verified working as designed. No regressions introduced by wrapping .execute() / bcrypt in run_in_executor."
+}
