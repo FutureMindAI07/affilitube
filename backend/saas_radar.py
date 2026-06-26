@@ -154,9 +154,43 @@ EMAIL_BLACKLIST_SUBSTRINGS = (
 )
 
 # Concurrency limits.
-WEBSITE_CHECK_CONCURRENCY = 6
+# Lowered from 6 → 3 (Tier A perf fix): keeps event loop slack for user-facing
+# requests while SaaS Radar enrichment is running. Combined with _Pacer below.
+WEBSITE_CHECK_CONCURRENCY = 3
 WEBSITE_FETCH_TIMEOUT = 12.0
+# Minimum gap between outbound site fetches (token-bucket style). Applied
+# globally per enrichment run so 200+ products don't burst-hammer external
+# sites and we don't saturate the loop with too many concurrent fetches.
+OUTBOUND_FETCH_MIN_INTERVAL_SECS = 0.2
 USER_AGENT = "Mozilla/5.0 (compatible; AffiliTube-SaaSRadar/1.0; +https://affilitube.com)"
+
+
+class _Pacer:
+    """Async token-bucket-ish pacer.
+
+    Ensures at least `min_interval` seconds between releases across all
+    coroutines sharing the same instance. Used to throttle outbound HTTP
+    fetches in SaaS Radar enrichment so we don't burst the event loop or
+    external hosts. Lightweight: a single asyncio.Lock + a monotonic
+    "next allowed" timestamp.
+    """
+
+    def __init__(self, min_interval_secs: float):
+        self.min_interval = max(0.0, float(min_interval_secs))
+        self._next_at = 0.0
+        self._lock = asyncio.Lock()
+
+    async def wait(self):
+        if self.min_interval <= 0:
+            return
+        async with self._lock:
+            loop = asyncio.get_event_loop()
+            now = loop.time()
+            if now < self._next_at:
+                delay = self._next_at - now
+                await asyncio.sleep(delay)
+                now = loop.time()
+            self._next_at = now + self.min_interval
 
 
 # ============================================================================
@@ -387,6 +421,11 @@ async def ph_ingest_window(
             if result.upserted_id is not None:
                 new += 1
 
+            # Yield control to the event loop between edges so user-facing
+            # requests don't starve while we burn through a large chunk
+            # (Tier A perf fix). Zero-cost when nothing else is ready.
+            await asyncio.sleep(0)
+
         page_info = conn.get("pageInfo") or {}
         if not page_info.get("hasNextPage"):
             break
@@ -431,8 +470,18 @@ def _parse_iso(s: Optional[str]) -> Optional[datetime]:
 # ============================================================================
 
 
-async def _fetch_html(client: httpx.AsyncClient, url: str) -> Tuple[Optional[int], str, Optional[str]]:
-    """GET a URL, return (status, text, final_url). text='' on failure."""
+async def _fetch_html(
+    client: httpx.AsyncClient,
+    url: str,
+    pacer: Optional["_Pacer"] = None,
+) -> Tuple[Optional[int], str, Optional[str]]:
+    """GET a URL, return (status, text, final_url). text='' on failure.
+
+    If `pacer` is provided, awaits it before issuing the request so that the
+    global rate-limit is respected across concurrent enrichment workers.
+    """
+    if pacer is not None:
+        await pacer.wait()
     try:
         r = await client.get(url, follow_redirects=True, timeout=WEBSITE_FETCH_TIMEOUT)
         ct = r.headers.get("content-type", "")
@@ -527,10 +576,41 @@ def _count_paid_tiers(html: str) -> int:
     return len({m.replace(" ", "").lower() for m in matches})
 
 
-async def enrich_one_product(client: httpx.AsyncClient, product: Dict[str, Any]) -> Dict[str, Any]:
+def _parse_enrichment_signals(
+    combined_html: str,
+    base_url: str,
+) -> Dict[str, Any]:
+    """CPU-bound HTML signal extraction.
+
+    Pulled into a synchronous function so it can be dispatched to a thread via
+    `run_in_executor`, freeing the asyncio event loop to service user requests
+    while large HTML blobs are being regex'd / parsed.
+    """
+    aff_platform = _detect_affiliate_platform(combined_html)
+    aff_link = _find_affiliate_link_in_html(combined_html, base_url)
+    aff_kw_hit = bool(AFFILIATE_KEYWORDS_RX.search(combined_html))
+    pricing_kw_hit = bool(PRICING_KEYWORDS_RX.search(combined_html))
+    tier_count = _count_paid_tiers(combined_html)
+    return {
+        "aff_platform": aff_platform,
+        "aff_link": aff_link,
+        "aff_kw_hit": aff_kw_hit,
+        "pricing_kw_hit": pricing_kw_hit,
+        "tier_count": tier_count,
+    }
+
+
+async def enrich_one_product(
+    client: httpx.AsyncClient,
+    product: Dict[str, Any],
+    pacer: Optional["_Pacer"] = None,
+) -> Dict[str, Any]:
     """Visit the product website, gather signals, compute bucket + score.
 
     Returns the update document (without _id / ph_id), suitable for $set.
+
+    `pacer`, if provided, throttles outbound site fetches across all coroutines
+    sharing the same instance (Tier A perf fix).
     """
     website = (product.get("website_url") or "").strip()
     update: Dict[str, Any] = {
@@ -557,7 +637,7 @@ async def enrich_one_product(client: httpx.AsyncClient, product: Dict[str, Any])
         parsed = urlparse(website)
 
     # 1) Homepage (follow_redirects=True will resolve PH /r/ redirect to real domain)
-    status, home_html, final_url = await _fetch_html(client, website)
+    status, home_html, final_url = await _fetch_html(client, website, pacer=pacer)
     update["site_status"] = status
     if status is None:
         update["bucket"] = "unknown"
@@ -587,7 +667,7 @@ async def enrich_one_product(client: httpx.AsyncClient, product: Dict[str, Any])
     pricing_url = None
     for p in PRICING_PATHS:
         candidate = urljoin(final_url or website, p)
-        s, h, fu = await _fetch_html(client, candidate)
+        s, h, fu = await _fetch_html(client, candidate, pacer=pacer)
         if s and s < 400 and h:
             pages_html.append(h)
             if PRICING_KEYWORDS_RX.search(h):
@@ -599,7 +679,7 @@ async def enrich_one_product(client: httpx.AsyncClient, product: Dict[str, Any])
     aff_platform = None
     for p in AFFILIATE_PATHS:
         candidate = urljoin(final_url or website, p)
-        s, h, fu = await _fetch_html(client, candidate)
+        s, h, fu = await _fetch_html(client, candidate, pacer=pacer)
         if s and s < 400 and h:
             pages_html.append(h)
             platform = _detect_affiliate_platform(h)
@@ -610,22 +690,30 @@ async def enrich_one_product(client: httpx.AsyncClient, product: Dict[str, Any])
 
     combined_html = "\n".join(pages_html)
 
-    # Affiliate detection from combined html
-    if not aff_platform:
-        aff_platform = _detect_affiliate_platform(combined_html)
-    if not aff_url:
-        aff_url = _find_affiliate_link_in_html(combined_html, final_url or website)
-
-    has_affiliate = bool(aff_platform) or bool(aff_url) or bool(
-        AFFILIATE_KEYWORDS_RX.search(combined_html)
+    # CPU-heavy parsing: offload to a thread so the event loop stays responsive
+    # to user-facing requests during enrichment runs (Tier A perf fix).
+    loop = asyncio.get_event_loop()
+    signals = await loop.run_in_executor(
+        None,
+        _parse_enrichment_signals,
+        combined_html,
+        final_url or website,
     )
 
-    # Pricing detection
-    has_pricing = bool(pricing_url) or bool(PRICING_KEYWORDS_RX.search(combined_html))
-    tier_count = _count_paid_tiers(combined_html)
+    # Affiliate detection from combined html
+    if not aff_platform:
+        aff_platform = signals["aff_platform"]
+    if not aff_url:
+        aff_url = signals["aff_link"]
 
-    # Emails
-    emails = _extract_emails(combined_html, domain)
+    has_affiliate = bool(aff_platform) or bool(aff_url) or signals["aff_kw_hit"]
+
+    # Pricing detection
+    has_pricing = bool(pricing_url) or signals["pricing_kw_hit"]
+    tier_count = signals["tier_count"]
+
+    # Emails — also CPU-bound regex over potentially-large HTML, offload too.
+    emails = await loop.run_in_executor(None, _extract_emails, combined_html, domain)
 
     # Bucketing
     if has_affiliate:
@@ -682,6 +770,9 @@ async def enrich_pending_products(db, limit: int = 200, use_llm: bool = False, u
     products = await cursor.to_list(length=limit)
 
     sem = asyncio.Semaphore(WEBSITE_CHECK_CONCURRENCY)
+    # Single pacer shared across all enrichment workers for this run. Min interval
+    # OUTBOUND_FETCH_MIN_INTERVAL_SECS between any two outbound site fetches.
+    pacer = _Pacer(OUTBOUND_FETCH_MIN_INTERVAL_SECS)
     async with httpx.AsyncClient(
         timeout=WEBSITE_FETCH_TIMEOUT,
         headers={"User-Agent": USER_AGENT},
@@ -690,7 +781,7 @@ async def enrich_pending_products(db, limit: int = 200, use_llm: bool = False, u
         async def _process(p):
             async with sem:
                 try:
-                    update = await enrich_one_product(client, p)
+                    update = await enrich_one_product(client, p, pacer=pacer)
                 except Exception as e:
                     logger.warning("enrich error for %s: %s", p.get("website_url"), e)
                     update = {
@@ -709,7 +800,7 @@ async def enrich_pending_products(db, limit: int = 200, use_llm: bool = False, u
                         p_resolved = dict(p)
                         p_resolved["website_url"] = resolved["final_url"]
                         try:
-                            update = await enrich_one_product(client, p_resolved)
+                            update = await enrich_one_product(client, p_resolved, pacer=pacer)
                             update.setdefault("notes", []).append("resolved_via_playwright")
                             update["resolved_via"] = "playwright"
                         except Exception as e:
