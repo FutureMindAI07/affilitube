@@ -4811,21 +4811,26 @@ async def _start_saas_radar_scheduler():
     try:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
         from apscheduler.triggers.cron import CronTrigger
-        from saas_radar import _bg_ingest, _bg_enrich, _create_job, DEFAULT_SAAS_TOPICS, PH_TOKEN
+        from saas_radar import _bg_ingest, _bg_enrich, _create_job, DEFAULT_SAAS_TOPICS, PH_TOKEN, start_radar_worker
 
         async def _daily_run():
             if not PH_TOKEN:
                 logger.warning("SaaS Radar daily cron skipped: PRODUCTHUNT_TOKEN not configured.")
                 return
             try:
-                logger.info("SaaS Radar daily cron: starting ingest (2-day window)")
-                job_id = await _create_job(db, "ingest", {"days_back": 2, "topics": DEFAULT_SAAS_TOPICS, "source": "cron"})
-                await _bg_ingest(db, 2, DEFAULT_SAAS_TOPICS, job_id)
-
-                logger.info("SaaS Radar daily cron: starting enrich (200 products)")
+                logger.info("SaaS Radar daily cron: scheduling ingest+enrich on dedicated worker thread")
+                ingest_job_id = await _create_job(db, "ingest", {"days_back": 2, "topics": DEFAULT_SAAS_TOPICS, "source": "cron"})
                 enrich_job_id = await _create_job(db, "enrich", {"limit": 200, "use_llm": False, "use_playwright": False, "source": "cron"})
-                await _bg_enrich(db, 200, False, False, enrich_job_id)
-                logger.info("SaaS Radar daily cron: complete")
+
+                # Run ingest + enrich sequentially on ONE worker thread so the API
+                # event loop stays untouched. Without this, the daily cron would
+                # block the loop for 5-15 minutes and freeze user-facing requests.
+                async def _seq(worker_db):
+                    await _bg_ingest(worker_db, 2, DEFAULT_SAAS_TOPICS, ingest_job_id)
+                    await _bg_enrich(worker_db, 200, False, False, enrich_job_id)
+                    logger.info("SaaS Radar daily cron: complete")
+
+                start_radar_worker(_seq)
             except Exception as e:
                 logger.exception("SaaS Radar daily cron failed: %s", e)
 

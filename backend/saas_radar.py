@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import threading
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -28,6 +29,7 @@ import httpx
 from bs4 import BeautifulSoup
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -191,6 +193,60 @@ class _Pacer:
                 await asyncio.sleep(delay)
                 now = loop.time()
             self._next_at = now + self.min_interval
+
+
+# ============================================================================
+# Dedicated background-worker thread (Tier C event-loop isolation)
+# ----------------------------------------------------------------------------
+# FastAPI BackgroundTasks runs coroutines on the *same* asyncio event loop as
+# the API request handlers. A long enrich/ingest job (5-15 minutes of httpx
+# fetches + regex parsing) keeps that loop saturated and starves user-facing
+# requests — login spinners, SaaS Radar /products polls, Brand Intelligence
+# fetches all queue up behind the bg task.
+#
+# Tier C decouples the work entirely: spawn a dedicated daemon thread, give
+# it a fresh asyncio event loop, and create a brand-new AsyncIOMotorClient
+# bound to *that* loop. The API event loop never schedules a single byte of
+# SaaS Radar enrich/ingest work. The two loops are completely independent.
+#
+# Trade-offs:
+#   • Extra Motor connection pool per active job (capped at 1 by the 503 guard).
+#   • Worker thread crashes are silently lost; we rely on _reap_stale_jobs
+#     (>180s without progress → marked orphaned) for cleanup.
+#   • Job progress writes still land in the same Mongo collections, so the UI
+#     polling can read state normally from the API event loop.
+# ============================================================================
+
+def start_radar_worker(coro_factory) -> threading.Thread:
+    """Start a daemon thread running `coro_factory(db_for_thread)` on a fresh
+    asyncio event loop with its own Motor client.
+
+    `coro_factory` is a callable that takes a Motor db handle and returns a
+    coroutine — e.g. `lambda db: _bg_enrich(db, limit, use_llm, use_pw, job_id)`.
+    """
+    def _runner():
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            mongo_url = os.environ.get("MONGO_URL")
+            db_name = os.environ.get("DB_NAME")
+            client = AsyncIOMotorClient(mongo_url)
+            worker_db = client[db_name]
+            try:
+                loop.run_until_complete(coro_factory(worker_db))
+            finally:
+                client.close()
+        except Exception:
+            logger.exception("SaaS Radar worker thread crashed")
+        finally:
+            try:
+                loop.close()
+            except Exception:
+                pass
+
+    t = threading.Thread(target=_runner, daemon=True, name="saas-radar-worker")
+    t.start()
+    return t
 
 
 # ============================================================================
@@ -1471,7 +1527,8 @@ def build_router(db, admin_dep) -> APIRouter:
             )
         topics = req.topics or DEFAULT_SAAS_TOPICS
         job_id = await _create_job(db, "ingest", {"days_back": req.days_back, "topics": topics})
-        background_tasks.add_task(_bg_ingest, db, req.days_back, topics, job_id)
+        # Tier C: run on a dedicated thread+loop so the API loop stays responsive.
+        start_radar_worker(lambda worker_db: _bg_ingest(worker_db, req.days_back, topics, job_id))
         return {"job_id": job_id, "status": "running"}
 
     @router.post("/enrich")
@@ -1495,7 +1552,8 @@ def build_router(db, admin_dep) -> APIRouter:
                 },
             )
         job_id = await _create_job(db, "enrich", {"limit": req.limit, "use_llm": req.use_llm, "use_playwright": req.use_playwright})
-        background_tasks.add_task(_bg_enrich, db, req.limit, req.use_llm, req.use_playwright, job_id)
+        # Tier C: run on a dedicated thread+loop so the API loop stays responsive.
+        start_radar_worker(lambda worker_db: _bg_enrich(worker_db, req.limit, req.use_llm, req.use_playwright, job_id))
         return {"job_id": job_id, "status": "running"}
 
     @router.post("/cancel-stuck")

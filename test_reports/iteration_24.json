@@ -1,0 +1,44 @@
+{
+  "summary": "Tier C (worker-thread isolation for SaaS Radar enrich/ingest) verified end-to-end. 9/9 pytest cases passed against preview. Core acceptance criterion confirmed: while POST /api/admin/saas-radar/enrich with limit=50 is actively running on the dedicated 'saas-radar-worker' daemon thread, 16 parallel requests to /api/auth/me, /admin/saas-radar/stats, /products, /topic-counts had median latency=1.81s, p95=1.91s, max=1.94s — no event-loop monopolization. Login during active enrich = 0.35s (idle baseline 0.34s, zero degradation). 503 guard preserved with worker-thread dispatch, cancel-stuck cleanup works, outreach status/follow-up/notes PATCH regressions intact, filter combo + topic-counts unchanged.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "preview ingress (not Tier C)", "issue": "Intermittent single-request tail latency >5s observed on preview ingress even with NO background job running (baseline run hit max=15.13s with median=1.46s and zero load). Not a Tier C regression — confirmed via baseline runs. Tests retry once on outliers."},
+      {"endpoint": "/api/admin/saas-radar/products/{ph_id}/notes", "issue": "Endpoint accepts {outreach_notes: ...} in body — Tier B test report's notes-PATCH example used {notes: ...} which silently no-ops (still returns success:true but does not persist). Field name in UpdateFounderNotesInput is outreach_notes. Documented for future test consumers."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_scenarios": [
+    {"scenario": "Worker isolation under enrich load (limit=50, 16 parallel API hits)", "result": "PASS", "details": "median=1.81s p95=1.91s max=1.94s — all 200, all <5s ceiling. Tier C correctly isolates work on saas-radar-worker thread."},
+    {"scenario": "Worker isolation under ingest load (days_back=1, 12 parallel API hits)", "result": "PASS", "details": "median=1.29s max=1.40s. No event-loop blocking."},
+    {"scenario": "Job lifecycle on worker thread + cancel-stuck cleanup", "result": "PASS", "details": "limit=5 enrich finished naturally within 90s polling; final cancel-stuck returned cancelled=0, double-checked second call also returned cancelled=0 (no orphans)."},
+    {"scenario": "503 guard with worker-thread dispatch", "result": "PASS", "details": "First POST /enrich → 200 {status:running, job_id:X}. Immediate repeat → 503 with detail.kind=='enrich' and detail.running_job_id == X. cancel-stuck cleared with cancelled>=1."},
+    {"scenario": "Login latency at idle", "result": "PASS", "details": "0.34s (<<1.5s threshold)"},
+    {"scenario": "Login latency 3s into active enrich (limit=50)", "result": "PASS", "details": "0.35s — zero degradation vs idle. Event loop confirmed free while worker thread chugs."},
+    {"scenario": "Outreach PATCH regressions: outreach-status, follow-up-date, notes", "result": "PASS", "details": "All three endpoints returned 200 success:true. notes PATCH with key 'outreach_notes' (not 'notes') persisted via GET re-fetch."},
+    {"scenario": "/products filter combo (bucket=yellow&hide_platform_apps=true&exclude=shopify&topics=productivity&limit=2)", "result": "PASS", "details": "Returns 200 with products[], total, limit, offset keys."},
+    {"scenario": "/topic-counts?limit=5", "result": "PASS", "details": "Returns 200 with topics[] (list)."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_tier_c_worker_isolation.py",
+    "/app/test_reports/pytest/tier_c_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "saas_radar.py start_radar_worker() at line 220-249 is implemented cleanly: dedicated daemon thread, fresh asyncio.new_event_loop(), fresh AsyncIOMotorClient bound to that loop, client.close() in finally. Thread is named 'saas-radar-worker' so ps -T can audit it. Solid.",
+    "Worker-thread crash recovery relies entirely on _reap_stale_jobs (>180s without progress). If the thread crashes between _create_job and the first progress write, that's still up to 180s of 'stuck' UI state. Consider also writing a 'thread_id' or heartbeat record so a future health endpoint can detect dead workers faster.",
+    "AsyncIOMotorClient is opened per-job and closed when the job finishes. For high-frequency enrich runs this creates connection-pool churn. Acceptable given the 503 guard caps concurrency at 1, but a module-level worker-loop-bound client would be slightly more efficient.",
+    "server.py _daily_run() at ~line 4815 also uses start_radar_worker — so when DISABLE_SAAS_RADAR_CRON is removed in production, the cron will inherit the same isolation. DISABLE_SAAS_RADAR_CRON=true is still set in preview .env (verified) so the cron does not auto-fire during testing.",
+    "Carry-overs from iteration_23: server.py is 4844 lines (split recommendation still standing); _yt_execute / _verify_password / _hash_password still use asyncio.get_event_loop() (deprecated in 3.12+); admin seed at line 4774 still uses sync pwd_context.hash (one-time startup, acceptable)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tier_c_worker_isolation.py (new)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "n/a (backend-only request)"},
+  "test_credentials": "adrian@affilitube.com / admin123! from /app/memory/test_credentials.md",
+  "seed_data_creation": "Several short-lived SaaS Radar jobs (enrich limit=50 and limit=5, plus ingest days_back=1 topics=['productivity']) created and immediately cancelled via /cancel-stuck after each test. One outreach_notes field on the first product was overwritten with TIER_C_TEST_<uuid> string (not reverted — same approach as Tier B iteration_23). Final state: cancel-stuck reports cancelled=0, no orphaned running jobs in DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Tier C worker-thread isolation is functionally verified. The dedicated 'saas-radar-worker' daemon thread + fresh AsyncIOMotorClient pattern (saas_radar.py:220-249) correctly removes long-running enrich/ingest work from the API event loop. Median API latency during active enrich is 1.81s (essentially same as the no-load baseline of 1.46s). Pytest entrypoint: REACT_APP_BACKEND_URL=https://trial-saas-hub.preview.emergentagent.com python -m pytest /app/backend/tests/test_tier_c_worker_isolation.py -v -s. NOTE: preview ingress occasionally yields a single >5s tail latency outlier even with zero load — the test handles this with a one-shot retry; if you see 'TIER C REGRESSION' fail, verify median (not max) latency is still <5s before assuming a real regression. Notes PATCH body key is outreach_notes (NOT notes — iteration_23 had this slightly wrong).",
+  "rca of the issue": "N/A — Tier C fix verified working as designed. The async event-loop isolation is solid: 16 parallel API requests during an active 50-product enrich all complete in <2s with median 1.81s, and login latency during enrich (0.35s) is statistically identical to idle (0.34s)."
+}
