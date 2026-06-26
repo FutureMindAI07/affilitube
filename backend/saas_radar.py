@@ -246,6 +246,44 @@ class _RadarWorker:
         self._db = None
         self._ready = threading.Event()
         self._lock = threading.Lock()
+        # --- Telemetry (read by the /worker-status diagnostic endpoint) ---
+        self._jobs_submitted = 0
+        self._jobs_started = 0
+        self._jobs_completed = 0
+        self._jobs_failed = 0
+        self._current_job_started_at: Optional[float] = None
+        self._current_job_label: Optional[str] = None
+        self._last_job_label: Optional[str] = None
+        self._last_job_finished_at: Optional[float] = None
+        self._last_job_status: Optional[str] = None  # 'done' | 'error'
+        self._last_job_error: Optional[str] = None
+        self._last_job_duration_secs: Optional[float] = None
+        self._started_at: Optional[float] = None  # wall-clock seconds since startup of THIS thread instance
+
+    def status(self) -> Dict[str, Any]:
+        """Snapshot of the worker for diagnostic endpoints. Thread-safe enough
+        for read-only reporting (we may occasionally see torn writes on duration
+        counters but that's acceptable for telemetry)."""
+        now = datetime.now(timezone.utc).timestamp()
+        return {
+            "alive": self._is_alive(),
+            "ready": self._ready.is_set(),
+            "started_at": self._started_at,
+            "uptime_secs": (now - self._started_at) if self._started_at else None,
+            "queue_size": self._queue.qsize(),
+            "motor_pool_size": _WORKER_MOTOR_POOL_SIZE,
+            "jobs_submitted": self._jobs_submitted,
+            "jobs_started": self._jobs_started,
+            "jobs_completed": self._jobs_completed,
+            "jobs_failed": self._jobs_failed,
+            "current_job_label": self._current_job_label,
+            "current_job_age_secs": (now - self._current_job_started_at) if self._current_job_started_at else None,
+            "last_job_label": self._last_job_label,
+            "last_job_status": self._last_job_status,
+            "last_job_error": self._last_job_error,
+            "last_job_duration_secs": self._last_job_duration_secs,
+            "last_job_finished_at": self._last_job_finished_at,
+        }
 
     def _is_alive(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -273,10 +311,13 @@ class _RadarWorker:
             client = AsyncIOMotorClient(mongo_url, maxPoolSize=_WORKER_MOTOR_POOL_SIZE)
             self._client = client
             self._db = client[db_name]
+            self._started_at = datetime.now(timezone.utc).timestamp()
             self._ready.set()
             logger.info(
-                "SaaS Radar worker thread READY (maxPoolSize=%s)",
+                "[radar-worker] thread READY (maxPoolSize=%s, pid=%s, tid=%s)",
                 _WORKER_MOTOR_POOL_SIZE,
+                os.getpid(),
+                threading.get_ident(),
             )
             try:
                 loop.run_until_complete(self._dispatch())
@@ -284,13 +325,13 @@ class _RadarWorker:
                 try:
                     client.close()
                 except Exception:
-                    logger.exception("Motor client close failed in worker")
+                    logger.exception("[radar-worker] Motor client close failed")
                 try:
                     loop.close()
                 except Exception:
                     pass
         except Exception:
-            logger.exception("SaaS Radar worker thread died")
+            logger.exception("[radar-worker] thread DIED unexpectedly")
             # Clear state so the next submit() can spin a fresh worker up.
             self._thread = None
             self._loop = None
@@ -304,23 +345,53 @@ class _RadarWorker:
             # Blocking queue.get must run off the event loop or the loop stalls.
             coro_factory = await loop.run_in_executor(None, self._queue.get)
             if coro_factory is None:
-                logger.info("SaaS Radar worker received stop sentinel; exiting")
+                logger.info("[radar-worker] received stop sentinel; exiting")
                 break
+            label = getattr(coro_factory, "_radar_label", None) or "anonymous"
+            self._jobs_started += 1
+            self._current_job_label = label
+            started_at = datetime.now(timezone.utc).timestamp()
+            self._current_job_started_at = started_at
+            logger.info("[radar-worker] job START: %s (queue depth after pop=%s)", label, self._queue.qsize())
             try:
                 await coro_factory(self._db)
-            except Exception:
-                logger.exception("SaaS Radar worker job raised; continuing")
+                duration = datetime.now(timezone.utc).timestamp() - started_at
+                self._jobs_completed += 1
+                self._last_job_status = "done"
+                self._last_job_error = None
+                self._last_job_duration_secs = duration
+                logger.info("[radar-worker] job DONE: %s in %.1fs", label, duration)
+            except Exception as e:
+                duration = datetime.now(timezone.utc).timestamp() - started_at
+                self._jobs_failed += 1
+                self._last_job_status = "error"
+                self._last_job_error = f"{type(e).__name__}: {e}"
+                self._last_job_duration_secs = duration
+                logger.exception("[radar-worker] job FAILED: %s after %.1fs", label, duration)
+            finally:
+                self._last_job_label = label
+                self._last_job_finished_at = datetime.now(timezone.utc).timestamp()
+                self._current_job_label = None
+                self._current_job_started_at = None
 
-    def submit(self, coro_factory: Callable) -> None:
+    def submit(self, coro_factory: Callable, label: Optional[str] = None) -> None:
         """Queue a coroutine factory for execution on the worker thread.
 
         coro_factory: takes the worker's Motor db handle and returns a coroutine.
+        label: short human-readable string for telemetry (e.g. 'enrich limit=50').
         Lazily starts (or restarts) the worker thread if needed.
         """
+        if label:
+            try:
+                coro_factory._radar_label = label  # type: ignore[attr-defined]
+            except (AttributeError, TypeError):
+                pass
         if not self._is_alive():
             self._start()
         if not self._ready.wait(timeout=5.0):
             raise RuntimeError("SaaS Radar worker failed to initialize")
+        self._jobs_submitted += 1
+        logger.info("[radar-worker] queued: %s (queue depth=%s)", label or "anonymous", self._queue.qsize())
         self._queue.put(coro_factory)
 
 
@@ -328,13 +399,18 @@ class _RadarWorker:
 _radar_worker = _RadarWorker()
 
 
-def start_radar_worker(coro_factory: Callable) -> None:
+def start_radar_worker(coro_factory: Callable, label: Optional[str] = None) -> None:
     """Public API: queue a job onto the long-lived worker thread.
 
     Kept as a free function so callers (API endpoints + the daily cron) don't
     need to know about the singleton.
     """
-    _radar_worker.submit(coro_factory)
+    _radar_worker.submit(coro_factory, label=label)
+
+
+def radar_worker_status() -> Dict[str, Any]:
+    """Return a JSON-safe snapshot of the worker for diagnostic endpoints."""
+    return _radar_worker.status()
 
 
 # ============================================================================
@@ -1591,6 +1667,61 @@ def build_router(db, admin_dep) -> APIRouter:
             "last_enrich": last_enrich,
         }
 
+    @router.get("/worker-status")
+    async def worker_status(admin=Depends(admin_dep)):
+        """Diagnostic: state of the SaaS Radar worker thread + recent jobs.
+
+        Hit this endpoint when SaaS Radar seems hung. It returns:
+          • worker thread alive/ready, uptime, queue depth, Motor pool size
+          • job counters (submitted/started/completed/failed)
+          • current job label + age
+          • last job label, status, error message, duration
+          • last 5 jobs from MongoDB (running / done / error / cancelled)
+          • currently-running jobs in Mongo (lets you spot zombie 'running' rows)
+        """
+        worker = radar_worker_status()
+        # Recent jobs from Mongo (independent view of worker telemetry).
+        recent_jobs_cursor = db.saas_radar_jobs.find(
+            {},
+            projection={"_id": 0, "id": 1, "kind": 1, "status": 1, "created_at": 1,
+                        "updated_at": 1, "error": 1, "progress": 1, "params": 1},
+        ).sort("updated_at", -1).limit(5)
+        recent_jobs = []
+        async for j in recent_jobs_cursor:
+            # ISO-format datetimes for JSON serializability.
+            for k in ("created_at", "updated_at"):
+                if isinstance(j.get(k), datetime):
+                    j[k] = j[k].isoformat()
+            recent_jobs.append(j)
+        # Currently-running jobs (should usually be 0 or 1 due to 503 guard).
+        running_cursor = db.saas_radar_jobs.find(
+            {"status": "running"},
+            projection={"_id": 0, "id": 1, "kind": 1, "created_at": 1, "updated_at": 1,
+                        "progress": 1},
+        )
+        running_jobs = []
+        now = datetime.now(timezone.utc)
+        async for j in running_cursor:
+            updated_at = j.get("updated_at")
+            # MongoDB driver may return naive UTC datetimes; coerce to aware
+            # so we can subtract from `now` (which is timezone-aware UTC).
+            if isinstance(updated_at, datetime):
+                if updated_at.tzinfo is None:
+                    updated_at = updated_at.replace(tzinfo=timezone.utc)
+                j["stale_secs"] = (now - updated_at).total_seconds()
+            else:
+                j["stale_secs"] = None
+            for k in ("created_at", "updated_at"):
+                if isinstance(j.get(k), datetime):
+                    j[k] = j[k].isoformat()
+            running_jobs.append(j)
+        return {
+            "worker": worker,
+            "mongo_running_jobs": running_jobs,
+            "mongo_recent_jobs": recent_jobs,
+            "server_time": now.isoformat(),
+        }
+
     @router.post("/ingest")
     async def ingest(req: IngestRequest, background_tasks: BackgroundTasks, admin=Depends(admin_dep)):
         if not PH_TOKEN:
@@ -1616,7 +1747,10 @@ def build_router(db, admin_dep) -> APIRouter:
         topics = req.topics or DEFAULT_SAAS_TOPICS
         job_id = await _create_job(db, "ingest", {"days_back": req.days_back, "topics": topics})
         # Tier C: run on a dedicated thread+loop so the API loop stays responsive.
-        start_radar_worker(lambda worker_db: _bg_ingest(worker_db, req.days_back, topics, job_id))
+        start_radar_worker(
+            lambda worker_db: _bg_ingest(worker_db, req.days_back, topics, job_id),
+            label=f"ingest days={req.days_back} topics={len(topics)} job={job_id[:8]}",
+        )
         return {"job_id": job_id, "status": "running"}
 
     @router.post("/enrich")
@@ -1641,7 +1775,10 @@ def build_router(db, admin_dep) -> APIRouter:
             )
         job_id = await _create_job(db, "enrich", {"limit": req.limit, "use_llm": req.use_llm, "use_playwright": req.use_playwright})
         # Tier C: run on a dedicated thread+loop so the API loop stays responsive.
-        start_radar_worker(lambda worker_db: _bg_enrich(worker_db, req.limit, req.use_llm, req.use_playwright, job_id))
+        start_radar_worker(
+            lambda worker_db: _bg_enrich(worker_db, req.limit, req.use_llm, req.use_playwright, job_id),
+            label=f"enrich limit={req.limit} llm={req.use_llm} pw={req.use_playwright} job={job_id[:8]}",
+        )
         return {"job_id": job_id, "status": "running"}
 
     @router.post("/cancel-stuck")

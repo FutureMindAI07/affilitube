@@ -4830,7 +4830,7 @@ async def _start_saas_radar_scheduler():
                     await _bg_enrich(worker_db, 200, False, False, enrich_job_id)
                     logger.info("SaaS Radar daily cron: complete")
 
-                start_radar_worker(_seq)
+                start_radar_worker(_seq, label="daily-cron ingest+enrich")
             except Exception as e:
                 logger.exception("SaaS Radar daily cron failed: %s", e)
 
