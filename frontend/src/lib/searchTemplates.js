@@ -113,12 +113,31 @@ export const SEARCH_TEMPLATES = [
     strict_mode: false,
   },
   {
+    id: "product-gadget-reviewers",
+    name: "Product & Gadget Reviewers",
+    icon: "Smartphone",
+    description:
+      "Creators who review and recommend physical products. Best starting point for Amazon affiliate and DTC brand prospecting.",
+    niche: "tech_gadgets",
+    keywords: [
+      "best [product]",
+      "[product] review",
+      "[product] unboxing",
+    ],
+    exclude_keywords: COMMON_EXCLUDE,
+    min_subscribers: 2000,
+    max_subscribers: 200000,
+    super_search: true,
+    strict_mode: false,
+  },
+  {
     id: "partnerstack-reverse",
     name: "Reverse Affiliate Search",
     icon: "Target",
     description:
-      "Paste any SaaS product name to find creators already making content about it. Highest-signal prospecting method.",
-    niche: "saas_software",
+      "Paste any product or brand name to find creators already making content about it. Highest-signal prospecting method.",
+    // Universal templates are shown for every niche selection (and pre-niche).
+    universal: true,
     mode: "reverse_search",
     product_placeholder: "e.g. Descript, Brevo, Apollo.io",
     keywords: [], // generated dynamically from product input

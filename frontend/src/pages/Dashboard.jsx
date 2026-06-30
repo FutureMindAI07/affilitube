@@ -1132,33 +1132,79 @@ export default function Dashboard() {
           <SearchTemplatePicker
             onSelectTemplate={applyTemplate}
             onSkip={skipTemplatePicker}
+            niche={selectedNiche?.key}
           />
         )}
 
-        {/* "Selected template" banner with Change template action */}
-        {!showTemplatePicker && selectedTemplate && !viewingReport && (
-          <div
-            className="rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50/60 to-purple-50/60 px-5 py-3 flex items-center justify-between gap-3"
-            data-testid="active-template-banner"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Sparkles className="h-4 w-4 text-indigo-500 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-xs text-slate-500">Template applied</p>
-                <p className="text-sm font-semibold text-slate-900 truncate">{selectedTemplate.name}</p>
+        {/* "Selected template" banner with Change template action.
+            Variant flips to a warning style when the selected template is
+            niche-specific but the user has switched to a different niche. */}
+        {!showTemplatePicker && selectedTemplate && !viewingReport && (() => {
+          const tplNiche = selectedTemplate.niche;
+          const tplUniversal = selectedTemplate.universal === true;
+          const currentNicheKey = selectedNiche?.key;
+          const niceCurrentName = selectedNiche?.name;
+          const niceTplName = niches.find((n) => n.key === tplNiche)?.name || tplNiche;
+          const mismatch =
+            !tplUniversal && tplNiche && currentNicheKey && tplNiche !== currentNicheKey;
+
+          if (mismatch) {
+            return (
+              <div
+                className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 flex items-center justify-between gap-3"
+                data-testid="active-template-banner-mismatch"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs text-amber-800">
+                      Template no longer fits this niche — clear?
+                    </p>
+                    <p className="text-sm font-semibold text-amber-900 truncate">
+                      {selectedTemplate.name}
+                      <span className="ml-2 font-normal text-xs text-amber-700">
+                        (tagged: {niceTplName} · current: {niceCurrentName})
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { setShowTemplatePicker(true); setSelectedTemplate(null); }}
+                  className="rounded-full h-8 text-xs shrink-0 border-amber-300 hover:bg-amber-100 text-amber-900"
+                  data-testid="clear-mismatched-template-btn"
+                >
+                  Clear template
+                </Button>
               </div>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => { setShowTemplatePicker(true); setSelectedTemplate(null); }}
-              className="rounded-full h-8 text-xs shrink-0"
-              data-testid="change-template-btn"
+            );
+          }
+
+          return (
+            <div
+              className="rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50/60 to-purple-50/60 px-5 py-3 flex items-center justify-between gap-3"
+              data-testid="active-template-banner"
             >
-              Change template
-            </Button>
-          </div>
-        )}
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Sparkles className="h-4 w-4 text-indigo-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-500">Template applied</p>
+                  <p className="text-sm font-semibold text-slate-900 truncate">{selectedTemplate.name}</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { setShowTemplatePicker(true); setSelectedTemplate(null); }}
+                className="rounded-full h-8 text-xs shrink-0"
+                data-testid="change-template-btn"
+              >
+                Change template
+              </Button>
+            </div>
+          );
+        })()}
 
         {/* "Pick a template" hint when picker is dismissed and no template selected */}
         {!showTemplatePicker && !selectedTemplate && !viewingReport && channels.length === 0 && (

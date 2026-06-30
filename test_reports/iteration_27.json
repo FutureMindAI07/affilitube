@@ -1,0 +1,23 @@
+{
+  "summary": "Frontend-only testing of niche-scoped Saved Search Templates on Dashboard. Exercised all 8 review scenarios end-to-end via Playwright against the preview URL with admin credentials. All scenarios PASSED. Pre-niche shows 7 template cards + Custom; SaaS niche filters to 5 SaaS cards + universal Reverse Affiliate Search; Tech & Gadgets shows 2 cards (product-gadget-reviewers + partnerstack-reverse); Fitness & Health shows ONLY Reverse Affiliate Search and renders the amber empty-state hint with the required copy. Reverse Affiliate Search description correctly reads 'product or brand' (no 'SaaS product'). Niche-mismatch warning banner appears with required text when switching niches after picking a niche-specific template, and the Clear button reopens the picker and clears the active template. Reverse search inline input works across niches. Custom search card bypasses picker without setting any active template banner.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_27.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SearchTemplatePicker.jsx subtitle copy still says 'Pre-configured starting points tuned for SaaS affiliate prospecting' — this is now misleading after the template grid was made niche-scoped (e.g. Tech & Gadgets uses the same picker). Consider rewording to 'Pre-configured starting points tuned for affiliate prospecting' to stay niche-neutral.",
+    "Dashboard.jsx is 1537 lines — exceeds the 700-line guideline. Consider extracting the template-banner block (lines ~1130-1225) and the niche-grid into separate components for maintainability."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not tested per request)", "frontend": "100% (8/8 scenarios)"},
+  "test_credentials": "adrian@affilitube.com / admin123! (from /app/memory/test_credentials.md) — used successfully",
+  "seed_data_creation": "None — relied on existing seeded data and the in-code SEARCH_TEMPLATES array.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Niche-scoped template picker is functional and matches the spec. data-testids confirmed working: search-template-picker, template-card-{id} for all 7 templates (saas-tool-reviewers, email-marketing-tools, no-code-automation, ai-tools-reviewers, saas-founders-operators, product-gadget-reviewers, partnerstack-reverse), template-skip-custom, template-empty-niche-hint, template-reopen-btn, active-template-banner, active-template-banner-mismatch, clear-mismatched-template-btn, reverse-search-input-block, reverse-search-product-input, reverse-search-confirm, change-template-btn, niche-{key} for saas_software/tech_gadgets/fitness_health, clear-results-btn. Dashboard /dashboard initial load may have restored prior search state — clicking clear-results-btn resets cleanly. After applying a niche-specific template, selecting a different niche correctly morphs the indigo 'Template applied' banner into the amber mismatch warning (text: 'Template no longer fits this niche — clear?'). No regressions observed in adjacent UI.",
+  "rca of the issue": "N/A — no defects found."
+}

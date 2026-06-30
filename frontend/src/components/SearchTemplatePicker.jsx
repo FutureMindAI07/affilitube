@@ -6,16 +6,18 @@ import {
   Sparkles,
   Rocket,
   Target,
+  Smartphone,
   ArrowRight,
   PenLine,
   CheckCircle2,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SEARCH_TEMPLATES, reverseSearchKeywordsFor } from "@/lib/searchTemplates";
 
 // Icon name → lucide component. Lets us define templates in plain JS without JSX imports.
-const ICONS = { Star, Mail, Workflow, Sparkles, Rocket, Target };
+const ICONS = { Star, Mail, Workflow, Sparkles, Rocket, Target, Smartphone };
 
 function TemplateCard({ template, selected, onSelect }) {
   const Icon = ICONS[template.icon] || Star;
@@ -50,9 +52,28 @@ function TemplateCard({ template, selected, onSelect }) {
   );
 }
 
-export default function SearchTemplatePicker({ onSelectTemplate, onSkip }) {
+export default function SearchTemplatePicker({ onSelectTemplate, onSkip, niche }) {
   const [reverseProduct, setReverseProduct] = useState("");
   const [activeReverseId, setActiveReverseId] = useState(null);
+
+  // Niche-scoping rules:
+  //   • Pre-niche (niche is falsy) → show all templates so the user sees what's
+  //     possible. They pick a niche later and the list filters.
+  //   • universal:true → always shown (e.g. Reverse Affiliate Search).
+  //   • Template has no niche field → shown to all (forward-compat for generic).
+  //   • Otherwise → only when t.niche === selectedNiche.
+  const visibleTemplates = SEARCH_TEMPLATES.filter((t) => {
+    if (t.universal === true) return true;
+    if (!niche) return true;
+    if (!t.niche) return true;
+    return t.niche === niche;
+  });
+
+  // Empty-state hint: a niche is selected, but only universal templates match
+  // (or none at all). Tells the user this isn't broken — it's just unseeded.
+  const hasNonUniversalForNiche =
+    !!niche && visibleTemplates.some((t) => t.universal !== true);
+  const showEmptyHint = !!niche && !hasNonUniversalForNiche;
 
   const handleSelect = (template) => {
     if (template.mode === "reverse_search") {
@@ -89,9 +110,22 @@ export default function SearchTemplatePicker({ onSelectTemplate, onSkip }) {
         </div>
       </div>
 
+      {/* Empty-state hint: niche has no non-universal templates seeded yet */}
+      {showEmptyHint && (
+        <div
+          className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-2.5"
+          data-testid="template-empty-niche-hint"
+        >
+          <Info className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-amber-900 leading-relaxed">
+            No starter templates for this niche yet — try Reverse Affiliate Search or build from scratch.
+          </p>
+        </div>
+      )}
+
       {/* Template grid */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {SEARCH_TEMPLATES.map((t) => (
+        {visibleTemplates.map((t) => (
           <div key={t.id} className="flex flex-col">
             <TemplateCard
               template={t}
