@@ -105,7 +105,7 @@ export default function SearchTemplatePicker({ onSelectTemplate, onSkip, niche }
             Start from a template
           </h2>
           <p className="text-sm text-slate-500 mt-1.5 max-w-xl">
-            Pre-configured starting points tuned for SaaS affiliate prospecting. Pick one and edit any field before running the search — or skip and start from scratch.
+            Pre-configured starting points tuned for affiliate prospecting. Pick one and edit any field before running the search — or skip and start from scratch.
           </p>
         </div>
       </div>
