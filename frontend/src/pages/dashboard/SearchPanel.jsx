@@ -471,6 +471,9 @@ export default function SearchPanel({
                     <p className="text-xs text-amber-700">
                       Run GPT-4o grading on every channel that passes standard filters — A/B grades surface to the top.
                     </p>
+                    <p className="text-xs font-medium text-amber-900 mt-1" data-testid="super-search-value-prop">
+                      Turn on AI grading to auto-rank these results by affiliate fit.
+                    </p>
                     <p className="text-[11px] text-amber-700/80 mt-1">
                       Costs <span className="font-semibold">12 credits per search</span>. Re-running the same search within 24h is free for previously-graded channels.
                     </p>

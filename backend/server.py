@@ -2780,7 +2780,13 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                 grading_attempts = 0
                 grading_successes = 0
 
-                ss_system_prompt = """You are a prospect quality assessor for a B2B SaaS affiliate discovery platform.
+                # Niche-aware grading rubric.
+                # Physical-product niches get a rubric tuned for product
+                # reviewers / Amazon affiliates. Everything else keeps the
+                # original SaaS-focused prompt unchanged.
+                PHYSICAL_PRODUCT_NICHES = {"tech_gadgets", "ecommerce_amazon"}
+
+                ss_system_prompt_saas = """You are a prospect quality assessor for a B2B SaaS affiliate discovery platform.
 You will be given enriched data about a YouTube channel. Your job is to assess
 whether this channel's AUDIENCE would be a good fit for a B2B SaaS affiliate
 programme — not whether the creator has already run affiliate campaigns.
@@ -2823,6 +2829,92 @@ Return this exact JSON structure:
 "audience_fit":true|false,
 "active_within_60_days":true|false,
 "red_flags_present":true|false}"""
+
+                ss_system_prompt_physical = """You are a prospect quality assessor for a physical-product affiliate
+discovery platform. You will be given enriched data about a YouTube
+channel. Your job is to assess whether this channel is a good fit for a
+physical-product affiliate programme — typically Amazon Associates, DTC
+brand ambassador / affiliate programmes, or retailer partnerships (Best
+Buy, B&H, Walmart, etc.).
+
+Return a JSON object only — no preamble, no markdown, no code fences.
+
+Primary criterion (most important):
+- Audience fit (PRIMARY criterion): Are the viewers active product buyers
+  — gadget enthusiasts, hobbyist consumers, deal-seekers, or review-content
+  consumers who watch in order to make purchase decisions? Strong signal:
+  the audience treats this creator as a buying advisor for the category.
+  DOES NOT qualify: corporate / B2B-only viewers who don't buy at the
+  consumer level, kids-only audiences, faceless lifestyle/vlog content
+  with no product focus, or "make money online" / "side hustle" audiences
+  who watch to learn schemes rather than evaluate products.
+  Note: faceless ASMR or overhead-shot product-demo content with active
+  affiliate links DOES qualify — the disqualifier is "no product focus",
+  not "no presenter on camera".
+
+Strong positive signals (reward these — they materially lift the grade):
+- Multiple Amazon Associates links detected in last 90 days (amzn.to or
+  amazon.com/...?tag= patterns). High link density = recent, active
+  commercial behaviour.
+- Video titles match buyer-intent formats: "best [product]",
+  "[product] review", "[product] vs [product]", "unboxing",
+  "top X [product]", "[product] comparison". This is the dominant content
+  format for high-converting product affiliates.
+- Detected affiliate platforms beyond Amazon (Skimlinks, Impact,
+  ShareASale, Awin, CJ, retailer-specific programmes).
+- Sponsored placements from product brands in the same category.
+
+Secondary criteria:
+- Channel is active (posted within 60 days)
+- Content is primarily in English
+- Creator appears commercially aware (professional tone, clear product
+  focus, affiliate disclosure typically present)
+
+Red flags (bias toward Reject if multiple present):
+- Channel name doesn't match YouTube handle (possible broker/operator)
+- Primary contact is a link shortener domain (e.g. ytranker.org, linktree
+  fronting a rate card)
+- "Make money online" / dropshipping / faceless / get-rich-quick framing
+- Creator is selling their own course or coaching as the primary business
+  model
+- Very high video volume from a recently created channel (content farm
+  signal)
+- Channel appears to be a brand/company publishing content to promote
+  their own product (channel name matches a known product brand,
+  description reads as corporate marketing, videos are official product
+  reveals/PR rather than independent reviews)
+
+NOTE: Amazon-affiliate product reviewing is NOT a red flag — it is the
+core target persona for this rubric. Do NOT conflate channels reviewing
+products and linking Amazon affiliate URLs with Amazon-FBA / dropshipping
+grift content. The former is the ideal prospect; the latter is already
+captured by the "make money online" red flag above.
+
+Grade definitions:
+- A — Strong audience fit AND clear commercial activity: high Amazon
+  Associates link density (or comparable affiliate programme) in the
+  last 90 days, consistent buyer-intent video format, active uploads.
+  Prioritise for outreach.
+- B — Good audience fit with EITHER moderate affiliate activity OR strong
+  buyer-intent video format (even if not heavily monetised yet). Worth
+  contacting — the audience and content type fit.
+- C — Partial fit: right audience but inactive, or right format but weak
+  signal of affiliate commercial activity, or off-niche overlap. Low
+  priority.
+- Reject — Wrong audience (B2B-only / MMO / faceless / grift), multiple
+  red flags present, or fully inactive.
+
+Return this exact JSON structure:
+{"grade":"A|B|C|Reject","reason":"One sentence explaining the grade",
+"audience_fit":true|false,
+"active_within_60_days":true|false,
+"red_flags_present":true|false}"""
+
+                ss_system_prompt = (
+                    ss_system_prompt_physical
+                    if req.niche in PHYSICAL_PRODUCT_NICHES
+                    else ss_system_prompt_saas
+                )
                 
                 graded_channels = []
                 for ch in channels_to_grade:

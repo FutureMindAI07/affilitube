@@ -32,7 +32,7 @@ export const SEARCH_TEMPLATES = [
     exclude_keywords: COMMON_EXCLUDE,
     min_subscribers: 2000,
     max_subscribers: 15000,
-    super_search: true,
+    super_search: false,
     strict_mode: false,
   },
   {
@@ -52,7 +52,7 @@ export const SEARCH_TEMPLATES = [
     exclude_keywords: COMMON_EXCLUDE,
     min_subscribers: 2000,
     max_subscribers: 15000,
-    super_search: true,
+    super_search: false,
     strict_mode: false,
   },
   {
@@ -71,7 +71,7 @@ export const SEARCH_TEMPLATES = [
     exclude_keywords: [...COMMON_EXCLUDE, "notion", "airtable"],
     min_subscribers: 2000,
     max_subscribers: 15000,
-    super_search: true,
+    super_search: false,
     strict_mode: false,
   },
   {
@@ -90,7 +90,7 @@ export const SEARCH_TEMPLATES = [
     exclude_keywords: COMMON_EXCLUDE,
     min_subscribers: 2000,
     max_subscribers: 15000,
-    super_search: true,
+    super_search: false,
     strict_mode: false,
   },
   {
@@ -109,7 +109,7 @@ export const SEARCH_TEMPLATES = [
     exclude_keywords: COMMON_EXCLUDE,
     min_subscribers: 500,
     max_subscribers: 10000,
-    super_search: true,
+    super_search: false,
     strict_mode: false,
   },
   {
@@ -127,7 +127,7 @@ export const SEARCH_TEMPLATES = [
     exclude_keywords: COMMON_EXCLUDE,
     min_subscribers: 2000,
     max_subscribers: 200000,
-    super_search: true,
+    super_search: false,
     strict_mode: false,
   },
   {
@@ -144,7 +144,7 @@ export const SEARCH_TEMPLATES = [
     exclude_keywords: COMMON_EXCLUDE,
     min_subscribers: 2000,
     max_subscribers: 15000,
-    super_search: true,
+    super_search: false,
     strict_mode: false,
   },
 ];

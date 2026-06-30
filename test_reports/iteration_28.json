@@ -1,0 +1,26 @@
+{
+  "summary": "End-to-end testing of niche-aware Super Search prompt routing (Item 1), Super Search defaulting OFF across templates + new value-prop copy (Item 2), and 503-guard / worker-status regressions. All 5 backend pytest cases PASSED and all 5 frontend Playwright assertions PASSED. Static source verification confirmed: PHYSICAL_PRODUCT_NICHES == {'tech_gadgets','ecommerce_amazon'}; ss_system_prompt_saas contains 'B2B SaaS affiliate discovery platform' (1x) and 'Amazon FBA' (1x) but NOT 'physical-product affiliate'; ss_system_prompt_physical contains 'physical-product affiliate discovery platform', 'Multiple Amazon Associates links detected in last 90 days', 'unboxing', the ASMR carve-out 'faceless ASMR or overhead-shot product-demo content with active affiliate links DOES qualify' (newline-wrapped in source but semantically intact); only the anti-conflation NOTE references Amazon-FBA — the red-flags section is FBA-free. Routing conditional ss_system_prompt = (ss_system_prompt_physical if req.niche in PHYSICAL_PRODUCT_NICHES else ss_system_prompt_saas) is present in /app/backend/server.py:2913-2917. Runtime smoke confirmed POST /api/channels/enrich for both niches returns 200, no 500/traceback in backend logs around the requests. Frontend: super-search-switch is data-state='unchecked' immediately after applying both product-gadget-reviewers and saas-tool-reviewers templates; super-search-value-prop renders the exact required copy and sits at DOM index 1 of 3 paragraphs (between 'Run GPT-4o grading…' and 'Costs 12 credits…'). Niche-scoped regressions still pass: tech_gadgets shows product-gadget-reviewers + partnerstack-reverse cards; fitness_health shows template-empty-niche-hint. The Super Search toggle card lives inside the collapsed 'Advanced Settings' section — testing required expanding it (note for future iterations).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/tests/test_super_search_routing.py",
+    "/app/test_reports/pytest/iter28_super_search.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "The spec referenced POST /api/channels/search but the actual endpoint is POST /api/channels/enrich (with /api/search returning channel_ids first). No code defect — adjust spec/internal docs if these are referenced elsewhere.",
+    "Super Search toggle is inside the 'Advanced Settings' collapsible region, so users (and tests) must expand that section to see it. Consider documenting this — current playbook for Super Search assumes it is directly visible.",
+    "/var/log/supervisor/backend.err.log keeps emitting a pre-existing passlib/bcrypt 'module has no attribute __about__' warning — harmless but noisy, unrelated to this iteration.",
+    "Dashboard.jsx remains 1500+ lines (carryover from iter27)."
+  ],
+  "updated_files": [
+    "/app/tests/test_super_search_routing.py (new)"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (5/5)"},
+  "test_credentials": "adrian@affilitube.com / admin123! (from /app/memory/test_credentials.md) — login succeeded",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend search/super-search pipeline lives in POST /api/channels/enrich (not /api/channels/search). Response field for super-search meta is response['super_search'] (not super_search_meta). Pipeline returns null for super_search key when channels list is empty (early return at server.py:2264-2267) — to validate runtime routing, first hit /api/search to obtain channel_ids then enrich them. Frontend: Super Search toggle is inside the collapsible Advanced Settings section on the dashboard SearchPanel — expand it before asserting on data-testid='super-search-switch'. data-testids confirmed: super-search-switch, super-search-value-prop, change-template-btn, niche-{key}, template-card-{id}, template-empty-niche-hint, clear-mismatched-template-btn. A cookies banner can intercept clicks on first visit — click Accept first. Backend on supervisor sometimes leaves a zombie reload state if files inside /app/backend get touched (uvicorn watchfiles); keep test files in /app/tests, not /app/backend/tests.",
+  "rca of the issue": "N/A — no defects found; all spec invariants validated."
+}
