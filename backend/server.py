@@ -32,9 +32,22 @@ from emergentintegrations.payments.stripe.checkout import StripeCheckout, Checko
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
+# MongoDB connection.
+# Timeouts + retries are tuned for MongoDB Atlas cold-start behaviour observed
+# in Emergent Kubernetes deployments: first requests can hit brief network hiccups
+# so we (a) give server selection a bigger window, (b) bound socket ops so a
+# stuck read doesn't tie up a request for minutes, and (c) enable retryable
+# reads/writes so transient blips don't surface as 500s to the user.
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(
+    mongo_url,
+    serverSelectionTimeoutMS=30000,
+    connectTimeoutMS=20000,
+    socketTimeoutMS=30000,
+    retryReads=True,
+    retryWrites=True,
+    tz_aware=True,
+)
 db = client[os.environ.get('DB_NAME', 'affilitube_db')]
 
 # Auth config
@@ -4791,6 +4804,20 @@ app.include_router(
     _build_saas_radar_router(db, get_admin_user),
     prefix="/api",
 )
+
+
+# --------------------------------------------------------------------------
+# Kubernetes liveness/readiness probe endpoint.
+# --------------------------------------------------------------------------
+# Emergent's K8s probes hit GET /health on localhost:8001 directly (bypassing
+# the ingress and therefore the /api prefix). Without this route, every probe
+# 404s, the pod is marked unhealthy, and Kubernetes tears it down mid-boot —
+# which manifests as a failed deployment. This handler responds fast and
+# does NOT touch MongoDB so a transient DB blip cannot fail liveness.
+@app.get("/health")
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok"}
 
 app.add_middleware(
     CORSMiddleware,

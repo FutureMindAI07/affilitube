@@ -311,6 +311,11 @@ class _RadarWorker:
             client = AsyncIOMotorClient(
                 mongo_url,
                 maxPoolSize=_WORKER_MOTOR_POOL_SIZE,
+                serverSelectionTimeoutMS=30000,
+                connectTimeoutMS=20000,
+                socketTimeoutMS=30000,
+                retryReads=True,
+                retryWrites=True,
                 tz_aware=True,  # Return TZ-aware datetimes so subtraction against
                                 # datetime.now(timezone.utc) never raises TypeError.
             )
