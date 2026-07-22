@@ -11,6 +11,7 @@ import csv
 import json
 import io
 import asyncio
+import contextvars
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any
@@ -75,9 +76,65 @@ security = HTTPBearer()
 # ============================================================================
 
 async def _yt_execute(request):
-    """Run a googleapiclient request.execute() off the event loop thread."""
+    """Run a googleapiclient request.execute() off the event loop thread.
+
+    Also fire-and-forget records the call to the quota-usage collection so the
+    admin dashboard can report YouTube API consumption per key (admin vs regular).
+    Tracking never blocks the caller and never raises.
+    """
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, request.execute)
+    result = await loop.run_in_executor(None, request.execute)
+    try:
+        key_label = _current_yt_key_ctx.get()
+        uri = getattr(request, "uri", "") or ""
+        m = re.search(r"/youtube/v3/([a-zA-Z]+)", uri)
+        op = m.group(1) if m else "unknown"
+        units = _YT_QUOTA_UNITS.get(op, 1)
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        asyncio.create_task(_record_yt_quota(today, key_label, op, units))
+    except Exception:
+        pass
+    return result
+
+
+# YouTube API v3 quota unit costs per operation.
+# https://developers.google.com/youtube/v3/determine_quota_cost
+_YT_QUOTA_UNITS = {
+    "search": 100,
+    "channels": 1,
+    "playlistItems": 1,
+    "videos": 1,
+    "commentThreads": 1,
+    "comments": 1,
+}
+# Standard YouTube Data API v3 free daily quota — used as the "% of budget"
+# reference on the quota-status endpoint. Both keys share this limit
+# independently per Google project.
+_YT_DAILY_QUOTA_LIMIT = 10000
+# Set by get_youtube_service() so _yt_execute knows which key just made a call.
+# ContextVar is asyncio-task-scoped, so concurrent requests never collide.
+_current_yt_key_ctx: "contextvars.ContextVar[str]" = contextvars.ContextVar(
+    "yt_key", default="regular"
+)
+
+
+async def _record_yt_quota(date_str: str, key_label: str, op: str, units: int) -> None:
+    """Fire-and-forget quota counter. Never raises to the caller."""
+    try:
+        await db.yt_quota_usage.update_one(
+            {"date": date_str, "key": key_label, "operation": op},
+            {
+                "$inc": {"calls": 1, "units": units},
+                "$setOnInsert": {
+                    "date": date_str,
+                    "key": key_label,
+                    "operation": op,
+                },
+            },
+            upsert=True,
+        )
+    except Exception:
+        logger.debug("yt quota tracking write failed", exc_info=True)
 
 
 async def _verify_password(plain: str, hashed: str) -> bool:
@@ -1039,13 +1096,20 @@ def filter_channels_by_country(channels, target_countries, include_unknown, drop
     return out
 
 def get_youtube_service(user=None):
-    """Get YouTube service — uses admin API key for admin users, default key for everyone else"""
+    """Get YouTube service — uses admin API key for admin users, default key for everyone else.
+
+    Also stamps the current asyncio-task ContextVar so that downstream
+    _yt_execute() calls can record which key was used for quota tracking.
+    """
     if user and user.get("role") == "admin":
         api_key = os.environ.get("YOUTUBE_API_KEY_ADMIN") or os.environ.get("YOUTUBE_API_KEY")
+        key_label = "admin"
     else:
         api_key = os.environ.get("YOUTUBE_API_KEY")
+        key_label = "regular"
     if not api_key:
         raise HTTPException(status_code=500, detail="YouTube API key not configured on server")
+    _current_yt_key_ctx.set(key_label)
     return build("youtube", "v3", developerKey=api_key, cache_discovery=False)
 
 # ==================== SCORING ENGINE ====================
@@ -4823,6 +4887,51 @@ app.include_router(
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}
+
+
+# --------------------------------------------------------------------------
+# YouTube API quota diagnostic — admin-only.
+# --------------------------------------------------------------------------
+# Reports today's + trailing-N-day YouTube API consumption split by which key
+# (admin vs regular) burned the units, and by operation (search / channels /
+# playlistItems / videos). Data source is the yt_quota_usage collection
+# populated fire-and-forget by _yt_execute() on every YouTube API call.
+# Use this to spot quota leaks (e.g. an admin flow accidentally burning regular
+# user quota) before either key hits its 10k daily unit cap.
+@app.get("/api/admin/quota-status")
+async def quota_status(days: int = 7, admin=Depends(get_admin_user)):
+    days = max(1, min(days, 30))
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    cursor = db.yt_quota_usage.find(
+        {"date": {"$gte": cutoff}},
+        projection={"_id": 0},
+    ).sort([("date", -1), ("key", 1), ("operation", 1)])
+    rows = await cursor.to_list(length=2000)
+
+    def _tally(filter_fn):
+        u = sum(r.get("units", 0) for r in rows if filter_fn(r))
+        c = sum(r.get("calls", 0) for r in rows if filter_fn(r))
+        return {"units": u, "calls": c}
+
+    today_admin = _tally(lambda r: r["date"] == today and r["key"] == "admin")
+    today_regular = _tally(lambda r: r["date"] == today and r["key"] == "regular")
+    window_admin = _tally(lambda r: r["key"] == "admin")
+    window_regular = _tally(lambda r: r["key"] == "regular")
+
+    def _pct(units):
+        return round(100 * units / _YT_DAILY_QUOTA_LIMIT, 1) if _YT_DAILY_QUOTA_LIMIT else None
+
+    return {
+        "today": today,
+        "daily_limit_units": _YT_DAILY_QUOTA_LIMIT,
+        "today_admin": {**today_admin, "pct_of_limit": _pct(today_admin["units"])},
+        "today_regular": {**today_regular, "pct_of_limit": _pct(today_regular["units"])},
+        "window_days": days,
+        "window_admin": window_admin,
+        "window_regular": window_regular,
+        "rows": rows,
+    }
 
 app.add_middleware(
     CORSMiddleware,

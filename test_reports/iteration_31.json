@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 31: Tested /api/admin/quota-status endpoint + YouTube quota tracking via ContextVar. All 14 tests passed (1 skipped, unrelated). Endpoint shape, admin-only auth (403 for non-admin, 401 for anon), days clamping (0->1, 100->30), fire-and-forget tracking attribution (admin key ticked +100 units +1 call after /api/search; regular key unchanged), and all static invariants verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/health", "issue": "/health (no /api prefix) is proxied to frontend by k8s ingress in preview → returns HTML not JSON. /api/health works and returns {status:'ok'}. Test was adjusted to skip if non-JSON. Not a regression from this iteration."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_quota_status.py",
+    "/app/test_reports/pytest/iter31_quota_status.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 5082 lines — well over the 700-line rule of thumb. Consider splitting into modules (auth, youtube, quota, admin, etc). Not a blocker for this iteration but tech debt is compounding.",
+    "quota_status endpoint is registered on the raw `app` (not api_router) as intended per the PR — this bypasses any api_router-scoped middleware (logging/rate-limit) if any is added later. Worth documenting inline.",
+    "Fire-and-forget asyncio.create_task in _yt_execute is unawaited — task exceptions are logged via _record_yt_quota's try/except but the task ref is discarded. If the event loop shuts down between execute and task run, writes may be lost. Acceptable for telemetry, but note it."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_quota_status.py (new)"
+  ],
+  "success_rate": {"backend": "100% (14/14 executed, 1 skip unrelated)", "frontend": "not tested (backend-only request)"},
+  "test_credentials": "adrian@affilitube.com / admin123! (admin); throwaway quotatest-{ts}@example.com / pass1234 (created per-run).",
+  "seed_data_creation": "Creates one throwaway non-admin user per test run (email quotatest-{ts}@example.com). No cleanup — cheap and unique per timestamp.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login response uses key 'token' (not 'access_token'). Register endpoint schema is {email,password,trial?} — no full_name field. YouTube search endpoint is /api/search (not /api/channels/search) — SearchFilters payload with niche/keywords/... . /api/admin/quota-status is registered on `app` directly, not api_router. Only 5 real callsites of get_youtube_service (not 6 as PR description said) — all pass user arg correctly.",
+  "rca of the issue": "N/A — no bugs found."
+}
