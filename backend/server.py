@@ -3293,10 +3293,15 @@ class UpdateOutreachStatusInput(BaseModel):
 class UpdateFollowUpDateInput(BaseModel):
     follow_up_date: Optional[str] = None  # ISO date string or null to clear
 
-async def _cache_sponsorship_data(channel_id: str):
-    """Background task to pre-cache sponsorship data for a channel."""
+async def _cache_sponsorship_data(channel_id: str, user: Optional[Dict[str, Any]] = None):
+    """Background task to pre-cache sponsorship data for a channel.
+
+    `user` is passed through so admin-initiated pre-caches use the admin YouTube
+    API key quota instead of the regular user key. Defaults to None for
+    backwards-compat with any caller that hasn't been updated.
+    """
     try:
-        youtube = get_youtube_service()
+        youtube = get_youtube_service(user)
         ch_response = await _yt_execute(youtube.channels().list(part="contentDetails", id=channel_id))
         if not ch_response.get("items"):
             return
@@ -3353,7 +3358,7 @@ async def update_outreach_status(channel_id: str, input: UpdateOutreachStatusInp
     is_entering_pipeline = input.status != "not_contacted"
     has_no_cache = not channel.get("sponsorship_data") or not channel.get("last_sponsorship_check")
     if was_not_contacted and is_entering_pipeline and has_no_cache:
-        background_tasks.add_task(_cache_sponsorship_data, channel_id)
+        background_tasks.add_task(_cache_sponsorship_data, channel_id, user)
     
     # Create contact log entry
     log_entry = {
