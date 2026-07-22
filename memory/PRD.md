@@ -100,6 +100,9 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
   - `pages/dashboard/ChannelDetailSheet.jsx` (828 lines)
   - `pages/dashboard/dialogs/{BugReport,AddToPipeline,SaveSearch,SaveReport}Dialog.jsx`
 
+## Completed (Jul 22, 2026)
+- **API Quota Admin UI — Per-Key Breakdown**: The "API Quota" tab in `/admin` now surfaces two side-by-side cards (Admin Key vs Regular User Key), each showing today's units, calls, % of the 10k daily YouTube limit, and 7-day totals. Added a stacked 7-day trend bar chart (indigo = Admin key, purple = Regular key) sourced from `/api/admin/quota-status?days=7`. Legacy `/api/admin/quota` per-user aggregation + hourly search chart retained as secondary sections. Answers the recurring "which key is this?" question — previously the tab combined both keys and only sliced by user_id. `AdminPanel.jsx` `loadQuota()` now fetches both endpoints in parallel.
+
 ## Completed (Jun 19, 2026)
 - **`/for-saas-founders` Showcase Redesign Complete**: Replaced the legacy 8-card grid with 4 full-width alternating `ShowcaseRow` components (L/R/L/R): (1) Templates built for SaaS affiliate prospecting, (2) Every result, pre-scored for affiliate fit, (3) Every score, fully explained (tall info card with custom scrollable lightbox + "Click to see the full card" prompt — uses patched info_card_1.5x_patched.png with full Score Breakdown visible), (4) Outreach emails that don't sound like outreach emails (AI Draft screenshot). Removed unused icon imports (Search, BarChart3, Gift, Mail, Zap). Export disclaimer ("Note: Export is not included during the trial...") retained directly below the showcase rows. Wide rows use react-medium-image-zoom; tall row uses custom `TallLightbox` modal with `overflow-y-auto` so users can scroll the full portrait image at min(90vw, 1100px). Verified via screenshot tool.
 

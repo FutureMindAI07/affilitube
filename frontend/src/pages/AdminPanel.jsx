@@ -83,6 +83,7 @@ export default function AdminPanel() {
   const [userSearch, setUserSearch] = useState("");
   const [userTierFilter, setUserTierFilter] = useState("all");
   const [quota, setQuota] = useState(null);
+  const [keyQuota, setKeyQuota] = useState(null);
   const [searchActivity, setSearchActivity] = useState([]);
   const [revenue, setRevenue] = useState(null);
   const [partnerApplications, setPartnerApplications] = useState([]);
@@ -152,8 +153,13 @@ export default function AdminPanel() {
   const loadQuota = async () => {
     setLoading(true);
     try {
-      const res = await api.get("/admin/quota");
-      setQuota(res.data);
+      // Fetch legacy per-user quota + new per-key split in parallel
+      const [legacyRes, keyRes] = await Promise.all([
+        api.get("/admin/quota"),
+        api.get("/admin/quota-status", { params: { days: 7 } }),
+      ]);
+      setQuota(legacyRes.data);
+      setKeyQuota(keyRes.data);
     } catch (e) {
       toast.error("Failed to load quota data");
     } finally {
@@ -697,32 +703,227 @@ export default function AdminPanel() {
         {/* Quota Tab */}
         {activeTab === "quota" && quota && (
           <div className="space-y-6">
-            {/* Quota Overview */}
+            {/* Per-Key Split (Admin vs Regular) */}
+            {keyQuota && (
+              <div className="grid md:grid-cols-2 gap-4" data-testid="quota-per-key-split">
+                {/* Admin Key */}
+                <Card data-testid="quota-card-admin-key">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <Shield className="h-5 w-5 text-indigo-500" />
+                        Admin Key — Today
+                      </CardTitle>
+                      <Badge variant="outline" className="text-xs">
+                        {keyQuota.today_admin.calls} calls
+                      </Badge>
+                    </div>
+                    <CardDescription>
+                      Powers admin-triggered searches, background caches & SaaS Radar enrich
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-slate-500">Units Used</span>
+                      <span className="font-medium">
+                        {keyQuota.today_admin.units.toLocaleString()} / {keyQuota.daily_limit_units.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          (keyQuota.today_admin.pct_of_limit ?? 0) > 80
+                            ? "bg-red-500"
+                            : (keyQuota.today_admin.pct_of_limit ?? 0) > 50
+                            ? "bg-amber-500"
+                            : "bg-emerald-500"
+                        }`}
+                        style={{
+                          width: `${Math.min(100, keyQuota.today_admin.pct_of_limit ?? 0)}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {keyQuota.today_admin.pct_of_limit ?? 0}% of daily limit
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 pt-4 mt-4 border-t">
+                      <div>
+                        <p className="text-xs text-slate-500">7-day units</p>
+                        <p className="text-lg font-semibold">
+                          {keyQuota.window_admin.units.toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">7-day calls</p>
+                        <p className="text-lg font-semibold">
+                          {keyQuota.window_admin.calls.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Regular (User) Key */}
+                <Card data-testid="quota-card-regular-key">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5 text-purple-500" />
+                        Regular (User) Key — Today
+                      </CardTitle>
+                      <Badge variant="outline" className="text-xs">
+                        {keyQuota.today_regular.calls} calls
+                      </Badge>
+                    </div>
+                    <CardDescription>
+                      Powers all non-admin (paying user) search & enrichment traffic
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-slate-500">Units Used</span>
+                      <span className="font-medium">
+                        {keyQuota.today_regular.units.toLocaleString()} / {keyQuota.daily_limit_units.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          (keyQuota.today_regular.pct_of_limit ?? 0) > 80
+                            ? "bg-red-500"
+                            : (keyQuota.today_regular.pct_of_limit ?? 0) > 50
+                            ? "bg-amber-500"
+                            : "bg-emerald-500"
+                        }`}
+                        style={{
+                          width: `${Math.min(100, keyQuota.today_regular.pct_of_limit ?? 0)}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {keyQuota.today_regular.pct_of_limit ?? 0}% of daily limit
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 pt-4 mt-4 border-t">
+                      <div>
+                        <p className="text-xs text-slate-500">7-day units</p>
+                        <p className="text-lg font-semibold">
+                          {keyQuota.window_regular.units.toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">7-day calls</p>
+                        <p className="text-lg font-semibold">
+                          {keyQuota.window_regular.calls.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* 7-Day Trend Per Key */}
+            {keyQuota && keyQuota.rows && keyQuota.rows.length > 0 && (
+              <Card data-testid="quota-7day-trend">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-indigo-500" />
+                    7-Day Trend by Key
+                  </CardTitle>
+                  <CardDescription>
+                    Daily units consumed — Admin key (indigo) vs Regular key (purple)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    // Aggregate rows into { date: { admin, regular } }
+                    const byDay = {};
+                    keyQuota.rows.forEach((r) => {
+                      if (!byDay[r.date]) byDay[r.date] = { admin: 0, regular: 0 };
+                      byDay[r.date][r.key] = (byDay[r.date][r.key] || 0) + (r.units || 0);
+                    });
+                    const days = Object.keys(byDay).sort(); // ascending
+                    const maxUnits = Math.max(
+                      ...days.flatMap((d) => [byDay[d].admin, byDay[d].regular]),
+                      1
+                    );
+                    return (
+                      <>
+                        <div className="flex items-end gap-3 h-40" data-testid="trend-bars">
+                          {days.map((d) => {
+                            const adminH = (byDay[d].admin / maxUnits) * 100;
+                            const regularH = (byDay[d].regular / maxUnits) * 100;
+                            return (
+                              <div
+                                key={d}
+                                className="flex-1 flex flex-col items-center gap-1"
+                              >
+                                <div className="w-full flex items-end gap-1 h-32">
+                                  <div
+                                    className="flex-1 bg-indigo-500 hover:bg-indigo-600 rounded-t transition-all relative group"
+                                    style={{ height: `${Math.max(adminH, 2)}%` }}
+                                    title={`Admin: ${byDay[d].admin} units`}
+                                  >
+                                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 hidden group-hover:block bg-slate-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
+                                      Admin: {byDay[d].admin.toLocaleString()}
+                                    </div>
+                                  </div>
+                                  <div
+                                    className="flex-1 bg-purple-500 hover:bg-purple-600 rounded-t transition-all relative group"
+                                    style={{ height: `${Math.max(regularH, 2)}%` }}
+                                    title={`Regular: ${byDay[d].regular} units`}
+                                  >
+                                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 hidden group-hover:block bg-slate-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
+                                      Regular: {byDay[d].regular.toLocaleString()}
+                                    </div>
+                                  </div>
+                                </div>
+                                <span className="text-xs text-slate-400">
+                                  {d.slice(5)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex gap-4 mt-4 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-3 h-3 bg-indigo-500 rounded-sm" />
+                            <span className="text-slate-600">Admin Key</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-3 h-3 bg-purple-500 rounded-sm" />
+                            <span className="text-slate-600">Regular Key</span>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Combined Overview + Top Users (legacy per-user aggregation) */}
             <div className="grid md:grid-cols-2 gap-4">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Gauge className="h-5 w-5 text-indigo-500" />
-                    Today's Usage
+                    Combined Usage — Today
                   </CardTitle>
-                  <CardDescription>YouTube API quota consumed today</CardDescription>
+                  <CardDescription>
+                    Total units across both keys, broken down by call type
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div>
                       <div className="flex justify-between text-sm mb-1">
                         <span className="text-slate-500">Total Used</span>
-                        <span className="font-medium">{quota.totals.total_units.toLocaleString()} / 10,000</span>
+                        <span className="font-medium">{quota.totals.total_units.toLocaleString()} units</span>
                       </div>
-                      <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            quota.percentage_used > 80 ? "bg-red-500" : quota.percentage_used > 50 ? "bg-amber-500" : "bg-emerald-500"
-                          }`}
-                          style={{ width: `${Math.min(100, quota.percentage_used)}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-slate-500 mt-1">{quota.percentage_used}% of daily limit</p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Each key has an independent 10,000-unit daily quota
+                      </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 pt-4 border-t">
