@@ -653,6 +653,117 @@ NICHE_CONFIGS = {
             'exclusive content', 'newsletter'
         ],
         "placeholder_examples": "best smartphones 2024\niphone vs android\ntech gadget review\nwireless earbuds comparison"
+    },
+    "fashion": {
+        "name": "Fashion & Style",
+        "icon": "👗",
+        "description": "Outfits, hauls, capsule wardrobes, style tips, fashion product reviews",
+        "topic_keywords": [
+            'fashion', 'outfit', 'ootd', 'style', 'wardrobe', 'capsule wardrobe',
+            'try on haul', 'clothing haul', 'thrift haul', 'streetwear', 'workwear',
+            'athleisure', 'petite fashion', 'plus size fashion', 'minimalist fashion',
+            'jewelry', 'shoes', 'handbags', 'accessories'
+        ],
+        "affiliate_signal_keywords": [
+            'try on', 'haul', 'review', 'vs', 'comparison', 'wardrobe essentials',
+            'what i wore', 'my closet', 'dupes', 'worth the money', 'best of'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in bio', 'link in description', 'discount code',
+            'coupon', 'shop my', 'ltk', 'shop the look',
+            'gifted', 'pr package', 'linked below', 'linked'
+        ],
+        "commercial_keywords": [
+            'shop my closet', 'my brand', 'my line', 'collection',
+            'presets', 'lightroom', 'ebook', 'lookbook', 'download',
+            'patreon', 'community', 'newsletter', 'linktree', 'ltk'
+        ],
+        "placeholder_examples": "capsule wardrobe basics\nzara try on haul\nnordstrom anniversary sale\nfall outfit ideas"
+    },
+    "lifestyle": {
+        "name": "Lifestyle & Vlogs",
+        "icon": "✨",
+        "description": "Day in the life, routines, aesthetic living, minimalism, favorites & haul videos",
+        "topic_keywords": [
+            'lifestyle', 'vlog', 'day in my life', 'daily vlog', 'morning routine',
+            'night routine', 'productivity', 'minimalism', 'aesthetic', 'that girl',
+            'romanticize your life', 'weekly vlog', 'reset day', 'sunday reset',
+            'apartment tour', 'monthly favorites', 'come with me', 'slow living'
+        ],
+        "affiliate_signal_keywords": [
+            'favorites', 'monthly favorites', 'must haves', 'review', 'haul',
+            'what i use', 'my routine', 'best of', 'worth it', 'holy grail'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in bio', 'link in description', 'discount code',
+            'coupon', 'shop my', 'ltk', 'amazon storefront',
+            'gifted', 'pr package', 'linked below', 'products mentioned'
+        ],
+        "commercial_keywords": [
+            'presets', 'lightroom', 'notion template', 'ebook', 'download',
+            'planner', 'community', 'newsletter', 'patreon', 'linktree',
+            'coaching', 'my course', 'shop my'
+        ],
+        "placeholder_examples": "morning routine\nday in my life\napartment tour\nmonthly favorites"
+    },
+    "parenting": {
+        "name": "Parenting & Family",
+        "icon": "👶",
+        "description": "Baby gear, mom vlogs, kids products, pregnancy, family life, registry reviews",
+        "topic_keywords": [
+            'parenting', 'mom vlog', 'family vlog', 'pregnancy', 'newborn', 'baby',
+            'toddler', 'baby gear', 'baby must haves', 'baby registry', 'nursery',
+            'stroller', 'car seat', 'baby carrier', 'diapers', 'breastfeeding',
+            'postpartum', 'kids toys', 'back to school', 'mom life', 'dad life'
+        ],
+        "affiliate_signal_keywords": [
+            'baby must haves', 'baby registry', 'review', 'vs', 'comparison',
+            'best baby', 'top baby', 'what i registered for', 'first time mom',
+            'worth it', 'do not buy'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in bio', 'link in description', 'discount code',
+            'coupon', 'amazon storefront', 'linked below',
+            'gifted', 'pr package', 'products mentioned', 'shop my'
+        ],
+        "commercial_keywords": [
+            'course', 'ebook', 'birth course', 'sleep course', 'community',
+            'membership', 'patreon', 'coaching', 'newsletter', 'download',
+            'my brand', 'linktree'
+        ],
+        "placeholder_examples": "baby registry must haves\npregnancy vlog\ntoddler morning routine\nstroller review"
+    },
+    "home_decor": {
+        "name": "Home & Decor",
+        "icon": "🛋️",
+        "description": "Interior design, home tours, DIY, home hauls, decor products, organization",
+        "topic_keywords": [
+            'home decor', 'interior design', 'home tour', 'apartment tour',
+            'apartment makeover', 'small space', 'cozy home', 'aesthetic decor',
+            'organization', 'kitchen organization', 'closet organization',
+            'diy home', 'ikea haul', 'target home haul', 'amazon home finds',
+            'house plants', 'rug', 'furniture', 'lighting', 'bedroom refresh'
+        ],
+        "affiliate_signal_keywords": [
+            'home haul', 'amazon home finds', 'target home haul', 'best home',
+            'review', 'vs', 'comparison', 'my favorites', 'must haves',
+            'worth it', 'what i bought'
+        ],
+        "affiliate_language_keywords": [
+            'affiliate', 'referral', 'partner', 'sponsor', 'sponsored',
+            'use my link', 'link in bio', 'link in description', 'discount code',
+            'coupon', 'amazon storefront', 'shop my home',
+            'ltk home', 'gifted', 'linked below', 'products mentioned'
+        ],
+        "commercial_keywords": [
+            'ebook', 'download', 'design services', 'e-design', 'consulting',
+            'course', 'community', 'newsletter', 'patreon', 'linktree',
+            'my shop', 'presets'
+        ],
+        "placeholder_examples": "small apartment tour\namazon home finds\nikea kitchen hack\ncozy bedroom refresh"
     }
 }
 
@@ -815,9 +926,19 @@ MASTER_AFFILIATE_LINK_PATTERNS = [
     # Amazon
     r"amzn\.to/",
     r"amazon\.[\w.]+/.*(?:tag=|ref=)",
+    # Amazon Influencer storefronts
+    r"amazon\.[\w.]+/shop/",
     # AppSumo
     r"8odi\.net/",
     r"appsumo\.com/",
+    # LTK / RewardStyle
+    r"liketoknow\.it/",
+    r"rewardstyle\.com/",
+    r"shopltk\.com/",
+    # Walmart Creator
+    r"walmart\.com/.*[?&]adid=",
+    # Sovrn / VigLink
+    r"viglink\.com/",
     # Impact / PartnerStack
     r"impact\.com/",
     r"impactradius\.com/",
@@ -918,6 +1039,10 @@ AFFILIATE_PLATFORMS = {
     "awin": {
         "name": "Awin",
         "patterns": ["awin1.com", "zenaps.com"]
+    },
+    "ltk": {
+        "name": "LTK",
+        "patterns": ["liketoknow.it", "rewardstyle.com", "shopltk.com"]
     }
 }
 
@@ -2861,7 +2986,10 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                 # Physical-product niches get a rubric tuned for product
                 # reviewers / Amazon affiliates. Everything else keeps the
                 # original SaaS-focused prompt unchanged.
-                PHYSICAL_PRODUCT_NICHES = {"tech_gadgets", "ecommerce_amazon"}
+                PHYSICAL_PRODUCT_NICHES = {
+                    "tech_gadgets", "ecommerce_amazon",
+                    "fashion", "lifestyle", "parenting", "home_decor",
+                }
 
                 ss_system_prompt_saas = """You are a prospect quality assessor for a B2B SaaS affiliate discovery platform.
 You will be given enriched data about a YouTube channel. Your job is to assess
@@ -3170,6 +3298,12 @@ SPONSORSHIP_PATTERNS = [
     (r"(?i)(?:discount|promo|coupon)\s+code[:\s]+['\"]?(\w+)['\"]?", "promo_code"),
     (r"(?i)use\s+(?:my\s+)?code\s+['\"]?(\w+)['\"]?", "promo_code"),
     (r"(?i)(\d+%?\s*off)\s+(?:with|using)\s+(?:code|link)", "promo_code"),
+    # Bare code followed by "at checkout" / "at the checkout" — no "use" or "code" label.
+    # Requires ≥2 chars, ≤20, mixed alnum with at least one letter and one digit-or-uppercase
+    # to avoid matching common English words. Anchored on a word boundary preceded by
+    # whitespace/quote/paren to reduce noise. Examples matched:
+    #   "SAVE20 at checkout", "MEG15 at the checkout", "GET10OFF at checkout"
+    (r"(?i)(?:^|[\s\"'(\[])([A-Z0-9]{2,20})\s+at\s+(?:the\s+)?checkout\b", "promo_code"),
     # FTC / disclosure
     (r"(?i)#(?:ad|sponsored|paidpartnership|partner)", "disclosure"),
     (r"(?i)includes?\s+paid\s+(?:promotion|partnership)", "disclosure"),
@@ -3188,10 +3322,34 @@ def detect_sponsorships(videos):
         dict with sponsorship_data
     """
     detected_brands = set()
+    detected_promo_codes = set()  # actual code strings (SAVE20, MEG15, ...)
     affiliate_link_count = 0
     disclosure_count = 0
     promo_code_count = 0
     videos_with_sponsorships = []
+
+    # Words that look like codes but aren't (all-caps English tokens ≤20 chars
+    # that occasionally precede "at checkout" in fashion/lifestyle copy).
+    PROMO_CODE_STOPWORDS = {
+        "FREE", "SALE", "SHIP", "SHIPPING", "OFF", "NEW", "GIFT",
+        "HERE", "NOW", "TODAY", "ORDER", "CART", "SIZE",
+    }
+
+    def _looks_like_promo_code(s: str) -> bool:
+        if not s:
+            return False
+        s = s.strip()
+        # Reject percentage phrases captured by "\d+% off" pattern
+        if "%" in s or " " in s:
+            return False
+        if len(s) < 2 or len(s) > 20:
+            return False
+        # Must contain at least one letter (rejects pure numbers like "2024")
+        if not any(ch.isalpha() for ch in s):
+            return False
+        if s.upper() in PROMO_CODE_STOPWORDS:
+            return False
+        return True
 
     for video in videos:
         desc = video.get("description", "")
@@ -3211,7 +3369,17 @@ def detect_sponsorships(videos):
                         video_signals.append(f"Sponsor: {brand}")
                 elif signal_type == "promo_code":
                     promo_code_count += 1
-                    video_signals.append("Promo code")
+                    # Capture the actual code string if the pattern has a group
+                    # AND it looks like a real code (not a "% off" phrase).
+                    try:
+                        raw = match.group(1) if match.groups() else ""
+                    except IndexError:
+                        raw = ""
+                    if _looks_like_promo_code(raw):
+                        detected_promo_codes.add(raw.upper())
+                        video_signals.append(f"Code: {raw.upper()}")
+                    else:
+                        video_signals.append("Promo code")
                 elif signal_type == "disclosure":
                     disclosure_count += 1
                     video_signals.append("Disclosure tag")
@@ -3247,6 +3415,8 @@ def detect_sponsorships(videos):
         "affiliate_link_count": affiliate_link_count,
         "disclosure_count": disclosure_count,
         "promo_code_count": promo_code_count,
+        # Cap surfaced codes at 10 to keep the UI clean and payload bounded.
+        "detected_promo_codes": sorted(detected_promo_codes)[:10],
         "confidence_score": confidence,
         "videos_analyzed": len(videos),
         "videos_with_sponsorships": videos_with_sponsorships,

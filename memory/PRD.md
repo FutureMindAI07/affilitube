@@ -103,6 +103,17 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 ## Completed (Jul 22, 2026)
 - **API Quota Admin UI — Per-Key Breakdown**: The "API Quota" tab in `/admin` now surfaces two side-by-side cards (Admin Key vs Regular User Key), each showing today's units, calls, % of the 10k daily YouTube limit, and 7-day totals. Added a stacked 7-day trend bar chart (indigo = Admin key, purple = Regular key) sourced from `/api/admin/quota-status?days=7`. Legacy `/api/admin/quota` per-user aggregation + hourly search chart retained as secondary sections. Answers the recurring "which key is this?" question — previously the tab combined both keys and only sliced by user_id. `AdminPanel.jsx` `loadQuota()` now fetches both endpoints in parallel.
 
+## Completed (Jul 22, 2026 — cont.)
+- **Four New Niches + Affiliate Platform Coverage + Promo-Code Surfacing**:
+  - Added `fashion`, `lifestyle`, `parenting`, `home_decor` to `NICHE_CONFIGS` (server.py:657+) with full 6-key config; user-approved keyword sets after review (bare `pr` cut from lifestyle → `pr package`; bare `code` cut from all four to avoid "dress code"/"zip code" collisions — Item 4 regex handles short-form).
+  - Added all four to `PHYSICAL_PRODUCT_NICHES` (server.py:2864) so Super Search AI grading uses the physical-product rubric (audience = shoppers) instead of the SaaS rubric.
+  - Extended `MASTER_AFFILIATE_LINK_PATTERNS` (server.py:814) with: `liketoknow.it`, `rewardstyle.com`, `shopltk.com`, `amazon.[tld]/shop/` (Amazon Influencer storefronts), `walmart.com/*?adid=` (Walmart Creator), `viglink.com` (Sovrn). LTK gets a named badge entry in `AFFILIATE_PLATFORMS` ("LTK"); the other three count silently.
+  - `detect_sponsorships()` now surfaces `detected_promo_codes` list (deduped, uppercased, stopword-filtered against FREE/SALE/SHIP/etc, capped at 10) in `sponsorship_data`. Previously only `promo_code_count` was stored.
+  - New "CODE at checkout" regex catches bare `SAVE20 at checkout` / `MEG15 at the checkout` phrasing without a `use`/`code` label — common in fashion/lifestyle sponsored posts.
+  - Coverage: 18 pytest cases in `tests/test_niches_and_affiliate_patterns.py` — all pass. `/api/niches` verified to return 18 niches end-to-end.
+  - Explicitly OUT of scope for this pass (noted for later): confidence formula tuning, 10-video cap, brand capitalisation, affiliate link de-dup, seeded search templates for the new niches.
+
+
 ## Completed (Jun 19, 2026)
 - **`/for-saas-founders` Showcase Redesign Complete**: Replaced the legacy 8-card grid with 4 full-width alternating `ShowcaseRow` components (L/R/L/R): (1) Templates built for SaaS affiliate prospecting, (2) Every result, pre-scored for affiliate fit, (3) Every score, fully explained (tall info card with custom scrollable lightbox + "Click to see the full card" prompt — uses patched info_card_1.5x_patched.png with full Score Breakdown visible), (4) Outreach emails that don't sound like outreach emails (AI Draft screenshot). Removed unused icon imports (Search, BarChart3, Gift, Mail, Zap). Export disclaimer ("Note: Export is not included during the trial...") retained directly below the showcase rows. Wide rows use react-medium-image-zoom; tall row uses custom `TallLightbox` modal with `overflow-y-auto` so users can scroll the full portrait image at min(90vw, 1100px). Verified via screenshot tool.
 
