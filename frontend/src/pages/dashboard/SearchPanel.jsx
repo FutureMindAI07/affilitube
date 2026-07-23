@@ -51,6 +51,32 @@ import CountryFilter from "@/components/CountryFilter";
 import SaveSearchDialog from "@/pages/dashboard/dialogs/SaveSearchDialog";
 import { SEARCH_PRESETS } from "@/lib/searchPresets";
 
+// Display-only ordering for the niche selector grid. Prioritises influencer/
+// creator-focused niches at the top and pushes SaaS/tech/marketing to the end.
+// Anything not in this list falls to the tail in alpha order, so a newly added
+// backend niche never disappears from the UI — you'll just want to explicitly
+// place it here to control its final position.
+const NICHE_DISPLAY_ORDER = [
+  "fashion", "lifestyle", "parenting", "home_decor",
+  "beauty_skincare", "travel", "food_cooking", "pet_care",
+  "personal_development", "home_diy", "gaming",
+  "tech_gadgets", "ecommerce_amazon", "fitness_health",
+  "finance_investing", "online_courses",
+  "marketing_tools", "saas_software",
+];
+
+function sortNichesForDisplay(niches) {
+  if (!niches || niches.length === 0) return [];
+  const orderIndex = new Map(NICHE_DISPLAY_ORDER.map((k, i) => [k, i]));
+  return [...niches].sort((a, b) => {
+    const ai = orderIndex.has(a.key) ? orderIndex.get(a.key) : Number.POSITIVE_INFINITY;
+    const bi = orderIndex.has(b.key) ? orderIndex.get(b.key) : Number.POSITIVE_INFINITY;
+    if (ai !== bi) return ai - bi;
+    // Tie-breaker for unmapped niches: alpha by name
+    return (a.name || "").localeCompare(b.name || "");
+  });
+}
+
 export default function SearchPanel({
   // Top-level config state
   userUsage,
@@ -151,7 +177,7 @@ export default function SearchPanel({
             Select Your Niche
           </Label>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {niches.map((niche) => (
+            {sortNichesForDisplay(niches).map((niche) => (
               <button
                 key={niche.key}
                 onClick={() => selectNiche(niche)}

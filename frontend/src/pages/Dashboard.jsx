@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import TrialBanner from "@/components/TrialBanner";
-import SearchTemplatePicker from "@/components/CollapsibleTemplatePicker";
+import CollapsibleTemplatePicker from "@/components/CollapsibleTemplatePicker";
 import {
   Card,
   CardContent,
@@ -1131,7 +1131,7 @@ export default function Dashboard() {
 
         {/* Saved Search Templates — Step 1 (only when no search has been run yet) */}
         {showTemplatePicker && !viewingReport && (
-          <SearchTemplatePicker
+          <CollapsibleTemplatePicker
             onSelectTemplate={applyTemplate}
             onSkip={skipTemplatePicker}
             niche={selectedNiche?.key}

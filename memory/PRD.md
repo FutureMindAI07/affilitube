@@ -105,6 +105,34 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 
 
 
+
+## Completed (Jul 23, 2026): Dashboard Layout — Niche Reorder + Collapsible Template Bar
+Two frontend-only UX changes to the dashboard Search Configuration page. No backend logic changes.
+
+**Niche reorder (SearchPanel.jsx):**
+- Added `NICHE_DISPLAY_ORDER` const (18 entries, top-to-bottom) that reverses the previous SaaS-first ordering. Creator/lifestyle niches (Fashion → Lifestyle → Parenting → Home & Decor) now lead; SaaS/tech (Marketing Tools, SaaS & Software) closes the grid.
+- `sortNichesForDisplay(niches)` helper applies the ordering and falls back to alpha for any niche not explicitly mapped (so newly added backend niches never disappear from the UI — they land at the tail).
+- No changes to `/api/niches`, `NICHE_CONFIGS`, or the card design (icon + title + description unchanged).
+
+**Collapsible Template Bar (`CollapsibleTemplatePicker.jsx` — new component):**
+- Wraps the existing `SearchTemplatePicker` in a slim, collapsed-by-default affordance so the template shortcut no longer visually competes with the niche grid.
+- Collapsed state: 44px slate-50 bar with subtle slate-200 border, ⚡ Zap icon (indigo-500), primary line "Start from a template instead" (indigo-700), secondary caption `"{n} pre-configured shortcuts for common search patterns · optional"` where `n = SEARCH_TEMPLATES.length` (dynamic — currently 7). Chevron on right rotates 180° on toggle (200ms).
+- Expanded state: same bar (chevron flipped) sits on top; existing template picker card renders below. STEP 1 pill removed from the picker header per proposal.
+- Auto-collapse on template select **except** for reverse-search templates, which need their inline product-name input to stay visible until the user confirms.
+- No cross-session persistence — always starts collapsed on mount. Local `useState` only.
+- `data-testid="collapsible-template-toggle"` for automated flows.
+
+**Cleanup:**
+- Dashboard.jsx now imports `CollapsibleTemplatePicker` (no aliasing of the old symbol carried forward).
+- The pre-existing `SearchTemplatePicker.jsx` remains as an internal-only component that `CollapsibleTemplatePicker` composes — not dead code, still the source of the grid rendering + reverse-search input UX.
+
+**Verified:**
+- Screenshot of collapsed bar (approved by user before shipping).
+- Screenshot of expanded state — chevron rotates, all 7 templates visible + Custom Search skip card.
+- Screenshot of reordered niche grid — Fashion & Style top-left, SaaS & Software bottom-right, all 18 present.
+- 31 backend pytest cases still green.
+- Lint clean on all files touched (existing pre-existing errors unrelated).
+
 ## Completed (Jul 22, 2026 — cont. 4): Video-Description Scan Now Unconditional + "Scan Video Descriptions" Toggle Removed
 Follow-up fix on the Option A badging work. Ziba Shops Style (fashion vlogger) rendered empty in the results column despite Brand Intelligence showing 340 affiliate links, because her affiliate URLs live in *video descriptions* rather than her channel bio — and the enrichment gate at `server.py:2588` only fetched video snippets when either the "Scan Video Descriptions" toggle was ticked OR the affiliate-platforms picker had entries. Under Option A defaults, both were empty → video snippets skipped → `affiliate_links_total = 0` → fallback pill couldn't fire.
 

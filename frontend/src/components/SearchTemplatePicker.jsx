@@ -98,9 +98,6 @@ export default function SearchTemplatePicker({ onSelectTemplate, onSkip, niche }
     >
       <div className="flex items-start justify-between gap-4 mb-5">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.18em] text-indigo-600 font-semibold mb-1">
-            Step 1
-          </p>
           <h2 className="text-xl sm:text-2xl font-heading font-bold text-slate-900 leading-tight">
             Start from a template
           </h2>
