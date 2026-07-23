@@ -398,10 +398,11 @@ export default function SearchPanel({
             <div className="space-y-2">
               <Label className="text-sm flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-purple-500" />
-                Detect Affiliate Platform Links
+                Filter by Affiliate Platform
               </Label>
               <p className="text-xs text-muted-foreground mb-2">
-                Select platforms to scan for in channel and video descriptions
+                Every named affiliate network is scanned automatically on every search — you&apos;ll see badges in the results column regardless of what&apos;s ticked here.
+                Tick one or more platforms to <span className="font-medium">filter results</span> to only channels using those networks. Leave empty to see all.
               </p>
               <div className="flex flex-wrap gap-2">
                 {availablePlatforms.map((platform) => (
@@ -418,10 +419,8 @@ export default function SearchPanel({
                 ))}
               </div>
               {affiliatePlatforms.length > 0 && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  {scanVideoDescriptions
-                    ? "Will scan channel + video descriptions for links"
-                    : "Will scan channel descriptions only. Enable 'Scan Video Descriptions' for deeper search."}
+                <p className="text-xs text-amber-700 mt-2">
+                  Filter active: only channels with links on the {affiliatePlatforms.length} selected platform{affiliatePlatforms.length === 1 ? "" : "s"} will show in results.
                 </p>
               )}
             </div>

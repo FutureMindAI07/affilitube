@@ -103,6 +103,32 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 ## Completed (Jul 22, 2026)
 - **API Quota Admin UI — Per-Key Breakdown**: The "API Quota" tab in `/admin` now surfaces two side-by-side cards (Admin Key vs Regular User Key), each showing today's units, calls, % of the 10k daily YouTube limit, and 7-day totals. Added a stacked 7-day trend bar chart (indigo = Admin key, purple = Regular key) sourced from `/api/admin/quota-status?days=7`. Legacy `/api/admin/quota` per-user aggregation + hourly search chart retained as secondary sections. Answers the recurring "which key is this?" question — previously the tab combined both keys and only sliced by user_id. `AdminPanel.jsx` `loadQuota()` now fetches both endpoints in parallel.
 
+
+## Completed (Jul 22, 2026 — cont. 3): Affiliate Platform Badging Fix (Option A)
+Fix for the two-list drift blocker: fashion channels with 340+ affiliate URLs (via rstyle.me / ShopMy / MagicLinks / etc.) were badging as empty in the results column because those creator networks were counted in `MASTER_AFFILIATE_LINK_PATTERNS` but not named in `AFFILIATE_PLATFORMS`. Plus a third invisible gate: `detect_affiliate_platform_links` only ran on platforms the user explicitly ticked in the "Detect Affiliate Platform Links" picker.
+
+**Backend changes (server.py):**
+- Expanded `AFFILIATE_PLATFORMS` from 11 → 20 named entries. Added: `shopmy`, `magiclinks`, `mavely`, `howl`, `collabs`, `skimlinks`, `sovrn` (VigLink), `partnerize`, `flexoffers`. Folded `rstyle.me` into the LTK entry; folded `shrsl.com` into the ShareASale entry; added `amazon.[tld]/shop/` (Influencer storefronts) to the Amazon entry.
+- **Semantic flip (Option A):** enrichment now ALWAYS scans every named platform (`list(AFFILIATE_PLATFORMS.keys())`), regardless of the user's picker state. Detection is no longer gated by the request `affiliate_platforms` param.
+- New `affiliate_links_total` field on `ChannelData` — count of ALL URL matches across `MASTER_AFFILIATE_LINK_PATTERNS` (named + unnamed networks). Populates the "N aff links" fallback pill.
+- Field exposed in CSV export whitelist.
+
+**Frontend changes:**
+- New display helper `frontend/src/lib/affiliatePlatformDisplay.js` with `PLATFORM_BADGE_PRIORITY` (Amazon → LTK → PartnerStack → Impact → ShopMy → MagicLinks → ShareASale → …), `PLATFORM_LABEL` map, and `selectVisiblePlatforms(cap=2)` helper.
+- Results column (`ResultsSection.jsx` + `HistoricalReportView.jsx`): cap badges at 2, overflow collapses to `+N` slate chip with tooltip listing hidden ones. If `affiliate_platforms_found` is empty but `affiliate_links_total > 0` → neutral "N aff link(s)" fallback pill. Empty means genuinely empty. Test-IDs: `affiliate-platforms-cell-*`, `affiliate-platforms-more-*`, `affiliate-links-fallback-*`.
+- Picker reframed in `SearchPanel.jsx`: renamed from "Detect Affiliate Platform Links" → "Filter by Affiliate Platform". Helper text now says "Every named affiliate network is scanned automatically… tick to filter results to specific networks. Leave empty to see all." When any are ticked, an amber warning explains the filter is active.
+- `Dashboard.jsx` `sortedChannels` now applies picker-as-filter locally: if `affiliatePlatforms.length > 0`, only channels whose `affiliate_platforms_found` intersects the picker selection stay.
+
+**Backwards compatibility audit (safe):**
+- `searchTemplates.js`: no template sets `affiliate_platforms`. Zero impact.
+- `search_reports` (saved reports): the persisted `filters` blob at Dashboard.jsx:851-858 doesn't include `affiliate_platforms`. Zero impact.
+- `autosaved_results` (autosave): stores enriched channel data + search metadata, not filter state. Zero impact.
+- Only in-memory session state carries the picker selection — no silent behaviour flip on load.
+
+**Test coverage:**
+- `tests/test_option_a_platform_semantics.py` — 13 new pytest cases (all 20 named platforms registered; ShopMy / MagicLinks / rstyle-via-LTK / VigLink detection; multi-platform matching; `affiliate_links_total` formula counts both named and unnamed networks like `geni.us`). All pass. Combined with previous 18 cases → 31 green.
+- `/api/affiliate-platforms` verified live: returns 20 platforms in the expected order.
+
 ## Completed (Jul 22, 2026 — cont.)
 - **Four New Niches + Affiliate Platform Coverage + Promo-Code Surfacing**:
   - Added `fashion`, `lifestyle`, `parenting`, `home_decor` to `NICHE_CONFIGS` (server.py:657+) with full 6-key config; user-approved keyword sets after review (bare `pr` cut from lifestyle → `pr package`; bare `code` cut from all four to avoid "dress code"/"zip code" collisions — Item 4 regex handles short-form).

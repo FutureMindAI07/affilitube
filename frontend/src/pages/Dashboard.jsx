@@ -1008,6 +1008,12 @@ export default function Dashboard() {
     .filter((ch) => ch.score_total >= filterMinScore)
     .filter((ch) => !filterHighAffiliate || (ch.affiliate_score >= 60))
     .filter((ch) => !filterHasPlatformLinks || (ch.affiliate_platforms_found?.length > 0))
+    // Option A picker-as-filter: if user ticked one or more platforms, keep only
+    // channels that actually match at least one of them. Empty picker = show all.
+    .filter((ch) => (
+      affiliatePlatforms.length === 0 ||
+      (ch.affiliate_platforms_found || []).some((p) => affiliatePlatforms.includes(p))
+    ))
     .filter((ch) => filterOutreachStatus === "all" || (ch.outreach_status || "not_contacted") === filterOutreachStatus)
     .filter((ch) => filterEngagementHealth === "all" || (ch.engagement_health || "") === filterEngagementHealth)
     .filter((ch) => !hidePipelineChannels || !pipelineChannelIds.has(ch.channel_id))

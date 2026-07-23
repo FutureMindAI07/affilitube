@@ -1006,7 +1006,7 @@ AFFILIATE_PLATFORMS = {
     },
     "amazon": {
         "name": "Amazon Associates", 
-        "patterns": ["amzn.to", "amazon.com/.*[?&]tag=", "amazon.co.uk/.*[?&]tag="]
+        "patterns": ["amzn.to", "amazon.com/.*[?&]tag=", "amazon.co.uk/.*[?&]tag=", "amazon.com/shop", "amazon.co.uk/shop"]
     },
     "impact": {
         "name": "Impact",
@@ -1018,11 +1018,11 @@ AFFILIATE_PLATFORMS = {
     },
     "shareasale": {
         "name": "ShareASale",
-        "patterns": ["shareasale.com"]
+        "patterns": ["shareasale.com", "shrsl.com"]
     },
     "cj": {
         "name": "CJ Affiliate",
-        "patterns": ["cj.com", "dpbolvw.net", "jdoqocy.com", "tkqlhce.com"]
+        "patterns": ["cj.com", "dpbolvw.net", "jdoqocy.com", "tkqlhce.com", "anrdoezrs.net"]
     },
     "gumroad": {
         "name": "Gumroad",
@@ -1042,7 +1042,43 @@ AFFILIATE_PLATFORMS = {
     },
     "ltk": {
         "name": "LTK",
-        "patterns": ["liketoknow.it", "rewardstyle.com", "shopltk.com"]
+        "patterns": ["liketoknow.it", "rewardstyle.com", "shopltk.com", "rstyle.me"]
+    },
+    "shopmy": {
+        "name": "ShopMy",
+        "patterns": ["shopmy.us"]
+    },
+    "magiclinks": {
+        "name": "MagicLinks",
+        "patterns": ["go.magik.ly", "magiclinks.com"]
+    },
+    "mavely": {
+        "name": "Mavely",
+        "patterns": ["mavely.co", "mavely.com"]
+    },
+    "howl": {
+        "name": "Howl",
+        "patterns": ["howl.me"]
+    },
+    "collabs": {
+        "name": "Collabs",
+        "patterns": ["collabs.shop", "glnk.io"]
+    },
+    "skimlinks": {
+        "name": "Skimlinks",
+        "patterns": ["skimlinks.com", "skimresources.com", "go.redirectingat.com"]
+    },
+    "sovrn": {
+        "name": "Sovrn VigLink",
+        "patterns": ["viglink.com"]
+    },
+    "partnerize": {
+        "name": "Partnerize",
+        "patterns": ["prf.hn", "partnerize.com"]
+    },
+    "flexoffers": {
+        "name": "FlexOffers",
+        "patterns": ["flexoffers.com"]
     }
 }
 
@@ -1104,6 +1140,9 @@ class ChannelData(BaseModel):
     affiliate_platform_links: Dict[str, List[str]] = {}  # platform_key -> list of URLs
     affiliate_platforms_found: List[str] = []
     affiliate_platforms_count: int = 0
+    # Total affiliate URL count across ALL master patterns (named + unnamed networks).
+    # Used to render "N aff links" fallback pill when platforms_found is empty.
+    affiliate_links_total: int = 0
     # Tool Stack Detection
     tools_section_detected: bool = False
     tools_stack_signal_score: int = 0
@@ -2658,21 +2697,23 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     # Business email detection
                     has_business_email, business_email = detect_business_email(description)
                     
-                    # Affiliate platform link detection
-                    # Combine channel description + video descriptions for scanning
+                    # Affiliate platform link detection.
+                    # Under Option A semantics, we ALWAYS scan every named platform
+                    # regardless of the user's picker selection — badges surface
+                    # everywhere. The `affiliate_platforms` request param is used
+                    # by the client only as a *display filter* (see Dashboard.jsx).
                     full_text_to_scan = description + " " + video_descriptions_text
-                    if affiliate_platforms:
-                        logger.info(f"Platform scan for {snippet.get('title', ch_id)}: text_len={len(full_text_to_scan)}, vid_desc_len={len(video_descriptions_text)}")
-                    affiliate_platform_links = {}
-                    affiliate_platforms_found = []
-                    affiliate_platforms_count = 0
-                    
-                    if affiliate_platforms:
-                        affiliate_platform_links, affiliate_platforms_found, affiliate_platforms_count = detect_affiliate_platform_links(
-                            full_text_to_scan, affiliate_platforms
-                        )
-                        if affiliate_platforms_found:
-                            logger.info(f"Affiliate platforms detected for {snippet.get('title', ch_id)}: {affiliate_platforms_found}")
+                    affiliate_platform_links, affiliate_platforms_found, affiliate_platforms_count = detect_affiliate_platform_links(
+                        full_text_to_scan, list(AFFILIATE_PLATFORMS.keys())
+                    )
+                    if affiliate_platforms_found:
+                        logger.info(f"Affiliate platforms detected for {snippet.get('title', ch_id)}: {affiliate_platforms_found}")
+
+                    # Total affiliate URL count across ALL master patterns (named + unnamed).
+                    # Powers the "N aff links" fallback pill when no named platform matched.
+                    affiliate_links_total = 0
+                    for _link_pattern in MASTER_AFFILIATE_LINK_PATTERNS:
+                        affiliate_links_total += len(re.findall(_link_pattern, full_text_to_scan, re.IGNORECASE))
                     
                     # Tool Stack Detection
                     tools_section_detected, tools_stack_signal_score, tools_section_phrases = detect_tools_section(
@@ -2742,6 +2783,7 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                         affiliate_platform_links=affiliate_platform_links,
                         affiliate_platforms_found=affiliate_platforms_found,
                         affiliate_platforms_count=affiliate_platforms_count,
+                        affiliate_links_total=affiliate_links_total,
                         # Tool Stack Detection
                         tools_section_detected=tools_section_detected,
                         tools_stack_signal_score=tools_stack_signal_score,
@@ -4202,6 +4244,7 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
         "brand_contact_signals", "brand_contact_signals_count", "has_business_email", "business_email",
         # Affiliate platform links
         "affiliate_platforms_found", "affiliate_platforms_count", "affiliate_platform_links",
+        "affiliate_links_total",
         # Tool Stack Detection
         "tools_section_detected", "tools_stack_signal_score",
         # Channel Health Indicators

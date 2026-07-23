@@ -58,6 +58,7 @@ import { getScoreClass, getAffiliateScoreClass, formatNumber } from "@/lib/forma
 import { OUTREACH_STATUS_CONFIG } from "@/lib/outreachConfig";
 import { ENGAGEMENT_HEALTH_CONFIG, UPLOAD_CONSISTENCY_ICONS } from "@/lib/healthIndicators";
 import { flagEmoji, countryName } from "@/lib/countries";
+import { selectVisiblePlatforms, platformLabelFor } from "@/lib/affiliatePlatformDisplay";
 
 // Link alias preserved for code inside that uses `<Link …>` from lucide
 const Link = LinkIcon;
@@ -557,15 +558,51 @@ export default function ResultsSection(props) {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {channel.affiliate_platforms_found?.map(
-                                (platform) => (
-                                  <span key={platform} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200">
-                                    <Link className="h-2.5 w-2.5" />
-                                    {platform}
-                                  </span>
-                                )
-                              )}
+                            <div className="flex flex-wrap gap-1" data-testid={`affiliate-platforms-cell-${channel.channel_id}`}>
+                              {(() => {
+                                const { visible, hiddenCount, hiddenLabels } = selectVisiblePlatforms(
+                                  channel.affiliate_platforms_found, 2
+                                );
+                                if (visible.length > 0) {
+                                  return (
+                                    <>
+                                      {visible.map((platform) => (
+                                        <span
+                                          key={platform}
+                                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200"
+                                          title={platformLabelFor(platform)}
+                                        >
+                                          <Link className="h-2.5 w-2.5" />
+                                          {platformLabelFor(platform)}
+                                        </span>
+                                      ))}
+                                      {hiddenCount > 0 && (
+                                        <span
+                                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200 cursor-default"
+                                          title={hiddenLabels}
+                                          data-testid={`affiliate-platforms-more-${channel.channel_id}`}
+                                        >
+                                          +{hiddenCount}
+                                        </span>
+                                      )}
+                                    </>
+                                  );
+                                }
+                                // Fallback: links detected but no named platform matched
+                                if ((channel.affiliate_links_total || 0) > 0) {
+                                  return (
+                                    <span
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200"
+                                      title="Affiliate links detected but no named network matched. Open channel for details."
+                                      data-testid={`affiliate-links-fallback-${channel.channel_id}`}
+                                    >
+                                      <Link className="h-2.5 w-2.5" />
+                                      {channel.affiliate_links_total} aff link{channel.affiliate_links_total === 1 ? "" : "s"}
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                               {channel.affiliate_signals?.slice(0, 2).map(
                                 (sig) => (
                                   <span key={sig} className="tag tag-signal">
