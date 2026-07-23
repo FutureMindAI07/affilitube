@@ -110,6 +110,7 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
   - Extended `MASTER_AFFILIATE_LINK_PATTERNS` (server.py:814) with: `liketoknow.it`, `rewardstyle.com`, `shopltk.com`, `amazon.[tld]/shop/` (Amazon Influencer storefronts), `walmart.com/*?adid=` (Walmart Creator), `viglink.com` (Sovrn). LTK gets a named badge entry in `AFFILIATE_PLATFORMS` ("LTK"); the other three count silently.
   - `detect_sponsorships()` now surfaces `detected_promo_codes` list (deduped, uppercased, stopword-filtered against FREE/SALE/SHIP/etc, capped at 10) in `sponsorship_data`. Previously only `promo_code_count` was stored.
   - New "CODE at checkout" regex catches bare `SAVE20 at checkout` / `MEG15 at the checkout` phrasing without a `use`/`code` label — common in fashion/lifestyle sponsored posts.
+  - **"Active Codes" chip row** added to `ChannelDetailSheet.jsx` (Brand Intelligence section), below Detected Past Partners. Amber palette + font-mono to visually differentiate from brand chips. Pro-gated with blurred preview + "N Codes — Upgrade to Pro" CTA, matching the existing brand-list gate pattern (competitive intel parity).
   - Coverage: 18 pytest cases in `tests/test_niches_and_affiliate_patterns.py` — all pass. `/api/niches` verified to return 18 niches end-to-end.
   - Explicitly OUT of scope for this pass (noted for later): confidence formula tuning, 10-video cap, brand capitalisation, affiliate link de-dup, seeded search templates for the new niches.
 

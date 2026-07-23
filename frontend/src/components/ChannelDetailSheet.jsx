@@ -588,6 +588,44 @@ export function ChannelDetailSheet({
                     )}
                   </div>
                 )}
+                {sponsorshipData.detected_promo_codes?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Active Codes</p>
+                    {isPro ? (
+                      <div className="flex flex-wrap gap-1" data-testid="pipeline-promo-codes-visible">
+                        {sponsorshipData.detected_promo_codes.map((code) => (
+                          <Badge
+                            key={code}
+                            variant="outline"
+                            className="text-xs bg-amber-50 text-amber-800 border-amber-200 font-mono"
+                          >
+                            {code}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="relative" data-testid="pipeline-promo-codes-gated">
+                        <div className="flex flex-wrap gap-1 blur-sm select-none pointer-events-none">
+                          {sponsorshipData.detected_promo_codes.map((code) => (
+                            <Badge key={code} variant="outline" className="text-xs font-mono">{code}</Badge>
+                          ))}
+                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 text-xs bg-white/90 shadow-sm border-amber-200 text-amber-800 hover:bg-amber-50"
+                            onClick={() => onUpgradeClick && onUpgradeClick()}
+                            data-testid="pipeline-promo-upgrade-btn"
+                          >
+                            <Lock className="h-3 w-3" />
+                            {sponsorshipData.detected_promo_codes.length} Codes — Upgrade to Pro
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {sponsorshipData.videos_with_sponsorships?.length > 0 && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-1.5">Videos with Disclosures</p>
