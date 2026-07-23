@@ -11,7 +11,6 @@ export const SEARCH_PRESETS = {
     description: "Fast, low quota usage",
     settings: {
       videos_to_scan: 3,
-      scan_video_descriptions: false,
       max_channels_to_enrich: 100,
     }
   },
@@ -21,7 +20,6 @@ export const SEARCH_PRESETS = {
     description: "Good coverage (default)",
     settings: {
       videos_to_scan: 5,
-      scan_video_descriptions: false,
       max_channels_to_enrich: 200,
     }
   },
@@ -31,7 +29,6 @@ export const SEARCH_PRESETS = {
     description: "Comprehensive, higher quota",
     settings: {
       videos_to_scan: 10,
-      scan_video_descriptions: true,
       max_channels_to_enrich: null,
     }
   },

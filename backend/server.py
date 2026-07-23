@@ -2152,10 +2152,9 @@ async def estimate_quota(filters: SearchFilters, user=Depends(get_current_user))
     total_videos = estimated_channels * videos_per_channel
     video_calls = (total_videos + 49) // 50
     
-    # Video description calls (only if scan_video_descriptions is enabled)
+    # Video description calls: no longer separately billable. `videos.list?part=statistics,snippet`
+    # is still 1 YouTube unit total (parts don't multiply cost), so under Option A this is always 0.
     video_description_calls = 0
-    if filters.scan_video_descriptions:
-        video_description_calls = video_calls  # Same as video stats calls
     
     total = (search_calls * 100) + channel_enrichment_calls + playlist_calls + video_calls + video_description_calls
     
@@ -2583,12 +2582,14 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                                 pub_date = datetime.fromisoformat(latest_upload_date.replace("Z", "+00:00"))
                                 days_since_upload = (datetime.now(timezone.utc) - pub_date).days
                             
-                            # Fetch video statistics (and descriptions if scanning or platform detection enabled)
+                            # Fetch video statistics + snippets. Under Option A we
+                            # always need video descriptions for platform detection —
+                            # the previous gate meant Ziba-style channels (links only
+                            # in video descriptions, never in the channel bio) showed
+                            # an empty badge column on default searches.
                             if video_ids:
-                                needs_descriptions = scan_video_descriptions or len(affiliate_platforms) > 0
-                                parts = ["statistics"]
-                                if needs_descriptions:
-                                    parts.append("snippet")
+                                needs_descriptions = True
+                                parts = ["statistics", "snippet"]
                                 
                                 vid_response = await _yt_execute(youtube.videos().list(
                                     part=",".join(parts),

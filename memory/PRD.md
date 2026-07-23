@@ -104,6 +104,27 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - **API Quota Admin UI — Per-Key Breakdown**: The "API Quota" tab in `/admin` now surfaces two side-by-side cards (Admin Key vs Regular User Key), each showing today's units, calls, % of the 10k daily YouTube limit, and 7-day totals. Added a stacked 7-day trend bar chart (indigo = Admin key, purple = Regular key) sourced from `/api/admin/quota-status?days=7`. Legacy `/api/admin/quota` per-user aggregation + hourly search chart retained as secondary sections. Answers the recurring "which key is this?" question — previously the tab combined both keys and only sliced by user_id. `AdminPanel.jsx` `loadQuota()` now fetches both endpoints in parallel.
 
 
+
+## Completed (Jul 22, 2026 — cont. 4): Video-Description Scan Now Unconditional + "Scan Video Descriptions" Toggle Removed
+Follow-up fix on the Option A badging work. Ziba Shops Style (fashion vlogger) rendered empty in the results column despite Brand Intelligence showing 340 affiliate links, because her affiliate URLs live in *video descriptions* rather than her channel bio — and the enrichment gate at `server.py:2588` only fetched video snippets when either the "Scan Video Descriptions" toggle was ticked OR the affiliate-platforms picker had entries. Under Option A defaults, both were empty → video snippets skipped → `affiliate_links_total = 0` → fallback pill couldn't fire.
+
+**Backend (server.py):**
+- Line 2588: `needs_descriptions = True` unconditionally. Video snippets are now always fetched during enrichment (part=`statistics,snippet` on `videos.list`).
+- Line 2155-2158: `video_description_calls = 0` unconditionally. `videos.list` costs 1 YouTube unit regardless of which parts are requested — the previous code was double-counting when the toggle was on.
+- `scan_video_descriptions` field kept in the `SearchFilters` and `QuotaEstimateRequest` Pydantic models so legacy clients that still send it don't 400. Field is silently ignored.
+
+**Frontend cleanup:**
+- Removed the "Scan Video Descriptions" toggle from Advanced Settings (`SearchPanel.jsx`). The `+quota` sublabel was actively misleading — post-fix the toggle would have both done nothing and falsely implied a quota cost.
+- Removed `scanVideoDescriptions` state, setter, prop-drill, and PropType from `SearchPanel.jsx` (`Dashboard.jsx` state + 2 request payloads + 1 preset-loader line + 1 dep-array entry).
+- Removed the `scan_video_descriptions` field from all 3 presets in `searchPresets.js` (fast / balanced / deep).
+- Updated `BlogAffiliateSaaS.jsx` onboarding step 2 copy: "…turn on Scan Video Descriptions to find affiliate signals…" → "…let Affilitube automatically scan video descriptions for affiliate signals — no toggles required."
+
+**Verified:**
+- 31 pytest cases still pass.
+- `/api/quota/estimate` returns identical output for default clients and legacy clients that still send `scan_video_descriptions: true` (both `video_description_calls: 0`).
+- Lint clean on all 5 changed files (existing pre-existing errors unrelated).
+- Ziba-style channels should now badge correctly on next re-enrichment (cache is 7 days per channel; older results may need to be searched again).
+
 ## Completed (Jul 22, 2026 — cont. 3): Affiliate Platform Badging Fix (Option A)
 Fix for the two-list drift blocker: fashion channels with 340+ affiliate URLs (via rstyle.me / ShopMy / MagicLinks / etc.) were badging as empty in the results column because those creator networks were counted in `MASTER_AFFILIATE_LINK_PATTERNS` but not named in `AFFILIATE_PLATFORMS`. Plus a third invisible gate: `detect_affiliate_platform_links` only ran on platforms the user explicitly ticked in the "Detect Affiliate Platform Links" picker.
 

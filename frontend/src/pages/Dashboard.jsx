@@ -97,7 +97,6 @@ export default function Dashboard() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [searchPreset, setSearchPreset] = useState("balanced");
   const [videosToScan, setVideosToScan] = useState(5);
-  const [scanVideoDescriptions, setScanVideoDescriptions] = useState(false);
   const [maxChannelsToEnrich, setMaxChannelsToEnrich] = useState(200);
   const [unlimitedChannels, setUnlimitedChannels] = useState(false);
   const [affiliatePlatforms, setAffiliatePlatforms] = useState([]);
@@ -479,7 +478,6 @@ export default function Dashboard() {
     const preset = SEARCH_PRESETS[presetKey];
     if (preset.settings) {
       setVideosToScan(preset.settings.videos_to_scan);
-      setScanVideoDescriptions(preset.settings.scan_video_descriptions);
       if (preset.settings.max_channels_to_enrich === null) {
         setUnlimitedChannels(true);
       } else {
@@ -539,7 +537,6 @@ export default function Dashboard() {
         max_results_per_keyword: maxResults,
         search_mode: searchMode,
         videos_to_scan: videosToScan,
-        scan_video_descriptions: scanVideoDescriptions,
         max_channels_to_enrich: unlimitedChannels ? null : maxChannelsToEnrich,
         affiliate_platforms: affiliatePlatforms,
       });
@@ -548,7 +545,7 @@ export default function Dashboard() {
       console.error("Error estimating quota:", e);
     }
   }, [keywords, minSubs, maxSubs, uploadedWithin, maxResults, searchMode, 
-      videosToScan, scanVideoDescriptions, maxChannelsToEnrich, unlimitedChannels, affiliatePlatforms]);
+      videosToScan, maxChannelsToEnrich, unlimitedChannels, affiliatePlatforms]);
 
   useEffect(() => {
     const timer = setTimeout(estimateQuota, 500);
@@ -650,7 +647,6 @@ export default function Dashboard() {
         min_subscribers: minSubs,
         max_subscribers: maxSubs,
         videos_to_scan: videosToScan,
-        scan_video_descriptions: scanVideoDescriptions,
         max_channels_to_enrich: unlimitedChannels ? null : maxChannelsToEnrich,
         affiliate_platforms: affiliatePlatforms,
         uploaded_within_days: uploadedWithin,
@@ -1261,8 +1257,6 @@ export default function Dashboard() {
           setMaxChannelsToEnrich={setMaxChannelsToEnrich}
           unlimitedChannels={unlimitedChannels}
           setUnlimitedChannels={setUnlimitedChannels}
-          scanVideoDescriptions={scanVideoDescriptions}
-          setScanVideoDescriptions={setScanVideoDescriptions}
           setSearchPreset={setSearchPreset}
           availablePlatforms={availablePlatforms}
           affiliatePlatforms={affiliatePlatforms}

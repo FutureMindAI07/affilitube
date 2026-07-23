@@ -150,7 +150,7 @@ export default function BlogAffiliateSaaS() {
               },
               {
                 num: 3, icon: Settings, title: "Configure your search",
-                desc: "Set your subscriber range, upload frequency, and turn on Scan Video Descriptions to find affiliate signals hidden inside video content — not just titles.",
+                desc: "Set your subscriber range, upload frequency, and let Affilitube automatically scan video descriptions for affiliate signals — no toggles required.",
               },
               {
                 num: 4, icon: BarChart3, title: "Enrich and qualify",

@@ -83,8 +83,6 @@ export default function SearchPanel({
   setMaxChannelsToEnrich,
   unlimitedChannels,
   setUnlimitedChannels,
-  scanVideoDescriptions,
-  setScanVideoDescriptions,
   setSearchPreset,
   availablePlatforms,
   affiliatePlatforms,
@@ -374,22 +372,6 @@ export default function SearchPanel({
                   <span className="text-sm text-muted-foreground">All</span>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-sm">Scan Video Descriptions</Label>
-                <div className="flex items-center gap-2 h-10">
-                  <Switch
-                    checked={scanVideoDescriptions}
-                    onCheckedChange={(checked) => {
-                      setScanVideoDescriptions(checked);
-                      setSearchPreset("custom");
-                    }}
-                    data-testid="scan-descriptions-switch"
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {scanVideoDescriptions ? "+quota" : "Off"}
-                  </span>
-                </div>
-              </div>
             </div>
 
             <Separator />
@@ -629,8 +611,6 @@ SearchPanel.propTypes = {
   setMaxChannelsToEnrich: PropTypes.func.isRequired,
   unlimitedChannels: PropTypes.bool.isRequired,
   setUnlimitedChannels: PropTypes.func.isRequired,
-  scanVideoDescriptions: PropTypes.bool.isRequired,
-  setScanVideoDescriptions: PropTypes.func.isRequired,
   setSearchPreset: PropTypes.func.isRequired,
   availablePlatforms: PropTypes.array.isRequired,
   affiliatePlatforms: PropTypes.array.isRequired,
