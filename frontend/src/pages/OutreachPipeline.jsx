@@ -51,6 +51,7 @@ import {
   Settings,
   CreditCard,
   Plus,
+  Download,
 } from "lucide-react";
 import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
 import TrialBanner from "@/components/TrialBanner";
@@ -282,6 +283,52 @@ export default function OutreachPipeline() {
   const copyToClipboard = (text, label) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied!`);
+  };
+
+  // Admin-only pipeline CSV export. Sends the currently-visible channel IDs
+  // (after all applied filters), receives a blob, triggers browser download,
+  // and toasts a warning if any exported rows had no Brand Intelligence data.
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const handleExportPipelineCsv = async () => {
+    const idsToExport = filteredChannels.map((ch) => ch.channel_id);
+    if (idsToExport.length === 0) {
+      toast.error("No prospects match the current filters");
+      return;
+    }
+    setExportingCsv(true);
+    try {
+      const res = await api.post(
+        "/pipeline/export/csv",
+        idsToExport,
+        { responseType: "blob" }
+      );
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      const today = new Date().toISOString().slice(0, 10);
+      const projectSlug = projectFilter !== "all"
+        ? projectFilter.replace(/[^a-z0-9]+/gi, "-").toLowerCase()
+        : "all-prospects";
+      link.setAttribute("download", `affilitube-pipeline-${projectSlug}-${today}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      const missingBi = parseInt(res.headers["x-missing-bi-count"] || "0", 10);
+      const total = parseInt(res.headers["x-total-rows"] || idsToExport.length, 10);
+      if (missingBi > 0) {
+        toast.warning(
+          `Exported ${total} prospects. ${missingBi} row${missingBi === 1 ? "" : "s"} had no Brand Intelligence data — open the Detail Sheet or re-run Super Search to populate.`
+        );
+      } else {
+        toast.success(`Exported ${total} prospects with full Brand Intelligence data`);
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to export CSV");
+    } finally {
+      setExportingCsv(false);
+    }
   };
 
   const copyAllDraft = (draft) => {
@@ -624,6 +671,28 @@ export default function OutreachPipeline() {
                 <AlertCircle className="h-4 w-4" />
                 Overdue Follow-ups
               </Button>
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  onClick={handleExportPipelineCsv}
+                  disabled={exportingCsv || filteredChannels.length === 0}
+                  className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                  data-testid="pipeline-export-csv-btn"
+                  title="Admin only · exports the currently-filtered pipeline with Brand Intelligence data"
+                >
+                  {exportingCsv ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  Export CSV
+                  {filteredChannels.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 bg-indigo-100 text-indigo-700 text-[10px]">
+                      {filteredChannels.length}
+                    </Badge>
+                  )}
+                </Button>
+              )}
             </div>
             {/* Score filter & Sort row */}
             <div className="flex flex-wrap gap-4 items-end mt-3 pt-3 border-t border-slate-100">

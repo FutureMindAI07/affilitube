@@ -4206,6 +4206,7 @@ async def delete_search_report(report_id: str, user=Depends(get_current_user)):
     await db.search_reports.delete_one({"id": report_id, "user_id": user["id"]})
     return {"success": True}
 
+
 # CSV Export endpoint
 @api_router.post("/export/csv")
 async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
@@ -4348,6 +4349,127 @@ async def get_admin_user(credentials: HTTPAuthorizationCredentials = Depends(sec
         return user
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+# Pipeline CSV Export — admin-only, richer than /export/csv:
+#   Adds pipeline state (outreach_status, project, notes, follow-up dates),
+#   full Brand Intelligence payload (confidence, brands, promo codes, video count),
+#   and BI-specific sponsored video titles column.
+@api_router.post("/pipeline/export/csv")
+async def pipeline_export_csv(channel_ids: List[str], admin=Depends(get_admin_user)):
+    """Admin-only pipeline export with Brand Intelligence + pipeline fields."""
+    channels = await db.channels.find(
+        {"channel_id": {"$in": channel_ids}, "user_id": admin["id"]},
+        {"_id": 0}
+    ).to_list(2000)
+    if not channels:
+        raise HTTPException(status_code=404, detail="No channels found")
+
+    output = io.StringIO()
+    fieldnames = [
+        # Identity
+        "channel_name", "channel_url", "channel_id", "subscriber_count",
+        "video_count", "country_name", "description",
+        # Pipeline state
+        "outreach_status", "project_name", "notes",
+        "added_to_pipeline_at", "last_status_change", "follow_up_at",
+        # Scores
+        "score_total", "score_topic", "score_activity", "score_subscriber",
+        "score_engagement", "score_contactability", "affiliate_score",
+        # Contact
+        "business_email", "website", "instagram", "twitter", "linkedin",
+        # Affiliate signals (search-time)
+        "affiliate_platforms_found", "affiliate_links_total",
+        "affiliate_signals", "commercial_signals",
+        # Brand Intelligence (from sponsorship_data)
+        "bi_confidence_score", "bi_is_sponsored_active",
+        "bi_detected_brands", "bi_detected_promo_codes",
+        "bi_affiliate_link_count", "bi_disclosure_count",
+        "bi_videos_analyzed",
+        # Video titles: general (last 5) and sponsored-only subset (from BI)
+        "latest_video_titles", "bi_sponsored_video_titles",
+        # Health
+        "upload_consistency", "upload_avg_days",
+        "engagement_health", "growth_indicator",
+        # Competitor overlap (Super Search only — usually empty for regular pipeline)
+        "competitor_brands_found", "competitor_brand_overlap_score",
+    ]
+
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+
+    missing_bi = 0
+    for ch in channels:
+        sp = ch.get("sponsorship_data") or {}
+        if not sp or sp.get("videos_analyzed", 0) == 0:
+            missing_bi += 1
+        sponsored_titles = [v.get("title", "") for v in sp.get("videos_with_sponsorships", [])]
+
+        row = {
+            "channel_name": ch.get("channel_name", ""),
+            "channel_url": ch.get("channel_url", ""),
+            "channel_id": ch.get("channel_id", ""),
+            "subscriber_count": ch.get("subscriber_count", 0),
+            "video_count": ch.get("video_count", 0),
+            "country_name": ch.get("country_name", ""),
+            "description": (ch.get("description") or "")[:500],
+            "outreach_status": ch.get("outreach_status", ""),
+            "project_name": ch.get("project_name", ""),
+            "notes": ch.get("notes", ""),
+            "added_to_pipeline_at": ch.get("added_to_pipeline_at", ""),
+            "last_status_change": ch.get("last_status_change", ""),
+            "follow_up_at": ch.get("follow_up_at", ""),
+            "score_total": ch.get("score_total", 0),
+            "score_topic": ch.get("score_topic", 0),
+            "score_activity": ch.get("score_activity", 0),
+            "score_subscriber": ch.get("score_subscriber", 0),
+            "score_engagement": ch.get("score_engagement", 0),
+            "score_contactability": ch.get("score_contactability", 0),
+            "affiliate_score": ch.get("affiliate_score", 0),
+            "business_email": ch.get("business_email", ""),
+            "website": (ch.get("public_links") or {}).get("website", ""),
+            "instagram": (ch.get("public_links") or {}).get("instagram", ""),
+            "twitter": (ch.get("public_links") or {}).get("twitter", ""),
+            "linkedin": (ch.get("public_links") or {}).get("linkedin", ""),
+            "affiliate_platforms_found": ", ".join(ch.get("affiliate_platforms_found") or []),
+            "affiliate_links_total": ch.get("affiliate_links_total", 0),
+            "affiliate_signals": ", ".join(ch.get("affiliate_signals") or []),
+            "commercial_signals": ", ".join(ch.get("commercial_signals") or []),
+            # Brand Intelligence — empty cells (not 0) when never scanned
+            "bi_confidence_score": sp.get("confidence_score", "") if sp else "",
+            "bi_is_sponsored_active": sp.get("is_sponsored_active", "") if sp else "",
+            "bi_detected_brands": ", ".join(sp.get("detected_brands") or []),
+            "bi_detected_promo_codes": ", ".join(sp.get("detected_promo_codes") or []),
+            "bi_affiliate_link_count": sp.get("affiliate_link_count", "") if sp else "",
+            "bi_disclosure_count": sp.get("disclosure_count", "") if sp else "",
+            "bi_videos_analyzed": sp.get("videos_analyzed", "") if sp else "",
+            "latest_video_titles": ch.get("latest_video_titles", ""),
+            "bi_sponsored_video_titles": " | ".join(sponsored_titles),
+            "upload_consistency": ch.get("upload_consistency", ""),
+            "upload_avg_days": ch.get("upload_avg_days", ""),
+            "engagement_health": ch.get("engagement_health", ""),
+            "growth_indicator": ch.get("growth_indicator", ""),
+            "competitor_brands_found": ", ".join(ch.get("competitor_brands_found") or []),
+            "competitor_brand_overlap_score": ch.get("competitor_brand_overlap_score", ""),
+        }
+        writer.writerow(row)
+
+    output.seek(0)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=affilitube-pipeline-{today}.csv",
+            # Surfaced back to the frontend so we can warn about prospects with no
+            # Brand Intelligence data yet. `Access-Control-Expose-Headers` lets
+            # browser JS actually read this custom header.
+            "X-Missing-BI-Count": str(missing_bi),
+            "X-Total-Rows": str(len(channels)),
+            "Access-Control-Expose-Headers": "X-Missing-BI-Count, X-Total-Rows",
+        }
+    )
+
 
 @api_router.get("/admin/overview")
 async def admin_overview(admin=Depends(get_admin_user)):

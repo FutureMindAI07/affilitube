@@ -106,6 +106,35 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 
 
 
+
+## Completed (Jul 28, 2026): Admin-Only Pipeline CSV Export with Brand Intelligence
+Adds a full-featured export for the Outreach Pipeline that includes pipeline state + Brand Intelligence data, unlike the existing `/api/export/csv` which only covers search-time enrichment.
+
+**Backend:**
+- New endpoint `POST /api/pipeline/export/csv` (positioned right after `get_admin_user` definition to satisfy Python forward-reference constraints for `Depends(get_admin_user)`).
+- Gated with `get_admin_user` — non-admins get 403 "Admin access required".
+- Accepts `channel_ids: List[str]` — frontend sends the currently-filtered channel IDs so client-side filters (country, score, etc.) are honoured without adding new server-side filter params.
+- Returns CSV via `StreamingResponse` with 43 columns organised into 8 groups: Identity (7), Pipeline state (6), Scores (7), Contact (5), Affiliate signals (4), Brand Intelligence (7), Video titles (2), Health (4), Competitor overlap (2).
+- New columns: `outreach_status`, `project_name`, `notes`, `added_to_pipeline_at`, `last_status_change`, `follow_up_at`, all 7 `bi_*` Brand Intelligence fields, `bi_sponsored_video_titles` (pipe-separated titles of videos where BI detected any signal).
+- Missing-BI handling: rows without `sponsorship_data` get empty cells (not 0) for BI columns, avoiding false negatives.
+- Response includes custom headers `X-Missing-BI-Count` and `X-Total-Rows` + `Access-Control-Expose-Headers` so frontend JS can read them via `res.headers`.
+
+**Frontend (`OutreachPipeline.jsx`):**
+- New "Export CSV" button in the filter bar, right of "Overdue Follow-ups". Only rendered when `isAdmin === true`. Indigo palette + Download icon + live count badge showing filtered channel count. Loader spinner during export.
+- `handleExportPipelineCsv` handler: sends `filteredChannels.map(ch => ch.channel_id)` (respects ALL client-side filters), receives blob, triggers browser download, revokes URL, reads custom headers to warn if any exported prospects lack Brand Intelligence.
+- Filename convention: `affilitube-pipeline-{project|all-prospects}-{YYYY-MM-DD}.csv`.
+- Toast messaging:
+  - Success: "Exported N prospects with full Brand Intelligence data"
+  - Warning: "Exported N prospects. K rows had no Brand Intelligence data — open the Detail Sheet or re-run Super Search to populate."
+- Test-id `pipeline-export-csv-btn`.
+
+**Verified:**
+- 403 for non-admin (Free user), 403 for unauth, 404 for admin with no matching channel_ids, 200 with valid CSV blob + custom headers for real admin request.
+- CSV header row confirmed to include all 43 columns in the specified order.
+- Screenshot: button renders at filter-bar (1209, 286) with correct count badge; UI shows "Export CSV [1]" for the live 1-channel pipeline.
+- Lint: 0 new backend errors. Frontend lint has 2 pre-existing errors at line 920 (unrelated to this change).
+- Not-in-scope (deferred): auto-enrich missing-BI rows during export, per-status export presets, scheduling recurring exports.
+
 ## Completed (Jul 23, 2026): Dashboard Layout — Niche Reorder + Collapsible Template Bar
 Two frontend-only UX changes to the dashboard Search Configuration page. No backend logic changes.
 
