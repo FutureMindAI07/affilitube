@@ -1085,7 +1085,7 @@ export default function OutreachPipeline() {
 
       {/* Move to Project Dialog */}
       <Dialog open={!!moveChannel} onOpenChange={() => setMoveChannel(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FolderOpen className="h-5 w-5 text-indigo-500" />
@@ -1095,12 +1095,17 @@ export default function OutreachPipeline() {
               Assign {moveChannel?.channel_name} to a project.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-3 space-y-3">
+          <div className="py-3 space-y-3 overflow-y-auto flex-1 min-h-0">
             {/* Existing projects */}
             {projects.length > 0 && (
               <div>
-                <label className="text-xs text-slate-500 mb-2 block">Existing Projects</label>
-                <div className="space-y-1.5">
+                <label className="text-xs text-slate-500 mb-2 block">
+                  Existing Projects{projects.length > 8 ? ` (${projects.length})` : ""}
+                </label>
+                <div
+                  className="space-y-1.5 max-h-64 overflow-y-auto pr-1"
+                  data-testid="move-to-project-list"
+                >
                   {projects.map((p) => (
                     <button
                       key={p}
