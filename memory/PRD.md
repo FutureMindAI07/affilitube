@@ -107,6 +107,44 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 
 
 
+
+## Completed (Jul 29, 2026): Pipeline Bulk Actions — Delete, Change Status, Move to Project
+Selection + bulk actions on the Outreach Pipeline for users with 20+ prospects. Matches user's exact ask: "sort by not contacted → delete the sorted results without doing individually."
+
+**Backend (server.py):**
+- Three new endpoints, all user-scoped + capped at 500 IDs per request via `_validate_bulk_ids()`:
+  - `POST /api/pipeline/bulk-delete` — single `update_many` reset of `outreach_status`/`project_name`/`follow_up_date`/`contact_log`. Soft-delete (preserves enrichment).
+  - `POST /api/pipeline/bulk-status` — validates against `OUTREACH_STATUSES`, `$set`s status + `$push`es a contact_log entry per row noting the bulk change.
+  - `POST /api/pipeline/bulk-project` — sets or clears `project_name` (empty string / null both remove).
+- New Pydantic models: `BulkDeleteInput`, `BulkStatusInput`, `BulkProjectInput`. Each takes `channel_ids: List[str]`.
+- Same auth level as single-row endpoints (`get_current_user`) — no admin gate, no tier gate. Parity with the free single-row delete.
+
+**Frontend (OutreachPipeline.jsx):**
+- `selectedIds: Set<string>` state + `useEffect` clearing it whenever any of `statusFilter, showOverdueOnly, projectFilter, searchQuery, minScore, sortBy, pipelineCountries, pipelineIncludeUnknown` change. Matches "select what I can see" mental model.
+- Sticky bulk-action bar rendered above the card list (`sticky top-2 z-20`). Two states:
+  - **Idle (0 selected):** shows header checkbox + "N prospects" count. No action buttons.
+  - **Active (>0 selected):** shows filled header checkbox + "N selected" + `[Change Status] [Move to Project] [Delete] [Clear]` buttons. Delete is red-outlined for visual differentiation.
+- Row-level `<Checkbox>` on each Card (leftmost, before channel info). Wrapped in `onClick={e => e.stopPropagation()}` so it doesn't trigger row-open handlers.
+- Header checkbox uses `filteredChannels.every(...)` → binary state (all/none). Click when all-selected clears.
+- Three dialogs:
+  - **Bulk Delete:** `AlertDialog` with red confirm button. Copy explicitly notes soft-remove (enrichment preserved, can be re-added).
+  - **Bulk Change Status:** `Dialog` with a `Select` populated from `STATUS_CONFIG`. Note that a contact-log entry will be added.
+  - **Bulk Move to Project:** `Dialog` with a `Select` including `— Remove from project —`, `+ Create new project…`, and existing projects. New project shows an inline `Input`. Uses the same 85vh + `flex-col` scroll pattern as the single-row Move dialog.
+- Handler `runBulk(label, apiCall)` centralises loading state, toast messaging, selection clear, and pipeline refresh.
+- Test-ids: `pipeline-bulk-bar`, `pipeline-header-checkbox`, `pipeline-selection-count`, `pipeline-row-checkbox-{id}`, `pipeline-bulk-status-btn`, `pipeline-bulk-project-btn`, `pipeline-bulk-delete-btn`, `pipeline-bulk-clear-btn`, three `-dialog` and three `-confirm` variants.
+
+**Verified:**
+- Backend edge cases: empty ids → 400, invalid status → 400, 501 ids → 400 with cap message, no auth → 403, valid call with no matching IDs → 200 with `{updated: 0}`.
+- Screenshots: idle state (bulk bar with "1 prospect", no action buttons) + active state (filled checkbox on Stacia Loo card, "1 selected", full 4-button action bar).
+- Lint: 0 backend errors. 2 pre-existing frontend errors at line 1099 (unrelated).
+
+**Not-in-scope (deferred per proposal):**
+- Hard delete of channel records (would nuke enrichment cache).
+- Undo/restore flow.
+- Bulk export (already achievable via filter-scoped CSV export button — no per-row selection needed).
+- Keyboard shift+click multi-select.
+- "Select all N matching this filter" affordance (not needed today since the pipeline has no pagination; will re-visit if pagination lands).
+
 ## Completed (Jul 28, 2026): Admin-Only Pipeline CSV Export with Brand Intelligence
 Adds a full-featured export for the Outreach Pipeline that includes pipeline state + Brand Intelligence data, unlike the existing `/api/export/csv` which only covers search-time enrichment.
 

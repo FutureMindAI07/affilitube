@@ -3773,6 +3773,92 @@ async def remove_from_pipeline(channel_id: str, user=Depends(get_current_user)):
     )
     return {"success": True}
 
+
+# ============== BULK PIPELINE OPERATIONS ==============
+# Three endpoints scoped to the current user + capped at 500 IDs per call.
+# All are soft (reversible) — match the semantics of the single-row endpoints.
+
+MAX_BULK_IDS = 500
+
+
+class BulkDeleteInput(BaseModel):
+    channel_ids: List[str]
+
+
+class BulkStatusInput(BaseModel):
+    channel_ids: List[str]
+    status: str
+    note: Optional[str] = None
+
+
+class BulkProjectInput(BaseModel):
+    channel_ids: List[str]
+    project_name: Optional[str] = None  # None removes the project association
+
+
+def _validate_bulk_ids(ids: List[str]) -> None:
+    if not ids:
+        raise HTTPException(status_code=400, detail="channel_ids cannot be empty")
+    if len(ids) > MAX_BULK_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many IDs — max {MAX_BULK_IDS} per bulk request"
+        )
+
+
+@api_router.post("/pipeline/bulk-delete")
+async def bulk_delete_from_pipeline(input: BulkDeleteInput, user=Depends(get_current_user)):
+    """Soft-remove multiple channels from the pipeline. Preserves enrichment data."""
+    _validate_bulk_ids(input.channel_ids)
+    result = await db.channels.update_many(
+        {"channel_id": {"$in": input.channel_ids}, "user_id": user["id"]},
+        {"$set": {
+            "outreach_status": "not_contacted",
+            "project_name": None,
+            "follow_up_date": None,
+            "contact_log": [],
+        }}
+    )
+    return {"success": True, "removed": result.modified_count}
+
+
+@api_router.post("/pipeline/bulk-status")
+async def bulk_update_status(input: BulkStatusInput, user=Depends(get_current_user)):
+    """Bulk set outreach_status on multiple channels + append a contact_log entry per row."""
+    _validate_bulk_ids(input.channel_ids)
+    if input.status not in OUTREACH_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Must be one of: {', '.join(OUTREACH_STATUSES)}"
+        )
+    log_entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "status": input.status,
+        "note": input.note or f"Bulk status change to '{input.status}'",
+    }
+    result = await db.channels.update_many(
+        {"channel_id": {"$in": input.channel_ids}, "user_id": user["id"]},
+        {
+            "$set": {"outreach_status": input.status},
+            "$push": {"contact_log": log_entry},
+        }
+    )
+    return {"success": True, "updated": result.modified_count, "status": input.status}
+
+
+@api_router.post("/pipeline/bulk-project")
+async def bulk_update_project(input: BulkProjectInput, user=Depends(get_current_user)):
+    """Bulk set (or clear) project_name on multiple channels."""
+    _validate_bulk_ids(input.channel_ids)
+    # Strip whitespace, treat empty string as null (remove-from-project)
+    proj = (input.project_name or "").strip() or None
+    result = await db.channels.update_many(
+        {"channel_id": {"$in": input.channel_ids}, "user_id": user["id"]},
+        {"$set": {"project_name": proj}}
+    )
+    return {"success": True, "updated": result.modified_count, "project_name": proj}
+
+
 @api_router.post("/channels/{channel_id}/ai-draft")
 async def generate_ai_draft(channel_id: str, user=Depends(get_current_user)):
     """Generate an AI outreach email draft for a pipeline channel. Paid tiers only."""

@@ -10,6 +10,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +63,7 @@ import {
   CreditCard,
   Plus,
   Download,
+  Trash2,
 } from "lucide-react";
 import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
 import TrialBanner from "@/components/TrialBanner";
@@ -150,6 +162,12 @@ export default function OutreachPipeline() {
   useEffect(() => {
     loadChannels();
   }, [statusFilter, showOverdueOnly, projectFilter]);
+
+  // Clear bulk selection whenever any filter/search/sort/scope changes.
+  // Matches user mental model: "select what I can see".
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [statusFilter, showOverdueOnly, projectFilter, searchQuery, minScore, sortBy, pipelineCountries, pipelineIncludeUnknown]);
 
   const loadProjects = async () => {
     try {
@@ -329,6 +347,85 @@ export default function OutreachPipeline() {
     } finally {
       setExportingCsv(false);
     }
+  };
+
+  // ============== BULK ACTIONS ==============
+  // Selection is a Set of channel_ids. Cleared whenever the visible set changes
+  // (filter change) to match user mental model: "select what I can see."
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [bulkProjectOpen, setBulkProjectOpen] = useState(false);
+  const [bulkStatusValue, setBulkStatusValue] = useState("contacted");
+  const [bulkProjectValue, setBulkProjectValue] = useState("");
+  const [bulkNewProject, setBulkNewProject] = useState("");
+  const [bulkRunning, setBulkRunning] = useState(false);
+
+  const toggleRowSelection = (channelId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(channelId)) next.delete(channelId);
+      else next.add(channelId);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const runBulk = async (label, apiCall) => {
+    if (selectedIds.size === 0) return;
+    setBulkRunning(true);
+    try {
+      const res = await apiCall();
+      const count = res.data?.removed ?? res.data?.updated ?? selectedIds.size;
+      toast.success(`${label}: ${count} prospect${count === 1 ? "" : "s"}`);
+      clearSelection();
+      setBulkDeleteOpen(false);
+      setBulkStatusOpen(false);
+      setBulkProjectOpen(false);
+      setBulkNewProject("");
+      loadChannels(true);
+      loadProjects();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || `Failed: ${label.toLowerCase()}`);
+    } finally {
+      setBulkRunning(false);
+    }
+  };
+
+  const handleBulkDelete = () =>
+    runBulk("Removed from pipeline", () =>
+      api.post("/pipeline/bulk-delete", { channel_ids: Array.from(selectedIds) })
+    );
+
+  const handleBulkStatus = () =>
+    runBulk(`Set status → ${bulkStatusValue}`, () =>
+      api.post("/pipeline/bulk-status", {
+        channel_ids: Array.from(selectedIds),
+        status: bulkStatusValue,
+      })
+    );
+
+  const handleBulkProject = () => {
+    // "__none__" sentinel = remove project; "__new__" sentinel = use bulkNewProject
+    let projectName = null;
+    if (bulkProjectValue === "__new__") {
+      const trimmed = bulkNewProject.trim();
+      if (!trimmed) {
+        toast.error("Please enter a project name");
+        return;
+      }
+      projectName = trimmed;
+    } else if (bulkProjectValue && bulkProjectValue !== "__none__") {
+      projectName = bulkProjectValue;
+    }
+    runBulk(
+      projectName ? `Moved to '${projectName}'` : "Removed from project",
+      () => api.post("/pipeline/bulk-project", {
+        channel_ids: Array.from(selectedIds),
+        project_name: projectName,
+      })
+    );
   };
 
   const copyAllDraft = (draft) => {
@@ -780,6 +877,80 @@ export default function OutreachPipeline() {
           </Card>
         ) : (
           <div className="space-y-3">
+            {/* Bulk selection header + action bar */}
+            {filteredChannels.length > 0 && (
+              <div
+                className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-lg border border-slate-200 bg-white sticky top-2 z-20 shadow-sm"
+                data-testid="pipeline-bulk-bar"
+              >
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    checked={
+                      filteredChannels.length > 0 &&
+                      filteredChannels.every((ch) => selectedIds.has(ch.channel_id))
+                    }
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedIds(new Set(filteredChannels.map((ch) => ch.channel_id)));
+                      } else {
+                        clearSelection();
+                      }
+                    }}
+                    aria-label="Select all visible"
+                    data-testid="pipeline-header-checkbox"
+                  />
+                  <span className="text-sm text-slate-600" data-testid="pipeline-selection-count">
+                    {selectedIds.size === 0
+                      ? `${filteredChannels.length} prospect${filteredChannels.length === 1 ? "" : "s"}`
+                      : `${selectedIds.size} selected`}
+                  </span>
+                </div>
+                {selectedIds.size > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBulkStatusOpen(true)}
+                      className="gap-1.5 text-xs h-8"
+                      data-testid="pipeline-bulk-status-btn"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Change Status
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setBulkProjectValue(""); setBulkNewProject(""); setBulkProjectOpen(true); }}
+                      className="gap-1.5 text-xs h-8"
+                      data-testid="pipeline-bulk-project-btn"
+                    >
+                      <FolderOpen className="h-3.5 w-3.5" />
+                      Move to Project
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBulkDeleteOpen(true)}
+                      className="gap-1.5 text-xs h-8 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
+                      data-testid="pipeline-bulk-delete-btn"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearSelection}
+                      className="gap-1 text-xs h-8 text-slate-500"
+                      data-testid="pipeline-bulk-clear-btn"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      Clear
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
             {filteredChannels.map((channel) => {
               const statusConfig = STATUS_CONFIG[channel.outreach_status] || STATUS_CONFIG.not_contacted;
               const StatusIcon = statusConfig.icon;
@@ -793,6 +964,14 @@ export default function OutreachPipeline() {
                 >
                   <CardContent className="py-4">
                     <div className="flex items-center gap-4">
+                      {/* Bulk-select checkbox */}
+                      <Checkbox
+                        checked={selectedIds.has(channel.channel_id)}
+                        onCheckedChange={() => toggleRowSelection(channel.channel_id)}
+                        aria-label={`Select ${channel.channel_name}`}
+                        data-testid={`pipeline-row-checkbox-${channel.channel_id}`}
+                        onClick={(e) => e.stopPropagation()}
+                      />
                       {/* Channel Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -1263,6 +1442,116 @@ export default function OutreachPipeline() {
             >
               {settingsSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
               Save Settings
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete confirmation */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent data-testid="pipeline-bulk-delete-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remove {selectedIds.size} prospect{selectedIds.size === 1 ? "" : "s"} from your pipeline?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This soft-removes them from the pipeline — enrichment data (scores, contacts, Brand Intelligence) is preserved and they can be re-added from a future search.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkRunning}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkRunning}
+              className="bg-red-600 hover:bg-red-700"
+              data-testid="pipeline-bulk-delete-confirm"
+            >
+              {bulkRunning ? "Removing…" : `Remove ${selectedIds.size}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Status change */}
+      <Dialog open={bulkStatusOpen} onOpenChange={setBulkStatusOpen}>
+        <DialogContent className="sm:max-w-md" data-testid="pipeline-bulk-status-dialog">
+          <DialogHeader>
+            <DialogTitle>Change status for {selectedIds.size} prospect{selectedIds.size === 1 ? "" : "s"}</DialogTitle>
+            <DialogDescription>
+              A contact-log entry will be added to each row noting the bulk change.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3">
+            <Label className="text-sm mb-1.5 block">New status</Label>
+            <Select value={bulkStatusValue} onValueChange={setBulkStatusValue}>
+              <SelectTrigger data-testid="pipeline-bulk-status-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+                  <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkStatusOpen(false)} disabled={bulkRunning}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkStatus}
+              disabled={bulkRunning}
+              data-testid="pipeline-bulk-status-confirm"
+            >
+              {bulkRunning ? "Updating…" : `Apply to ${selectedIds.size}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Move to Project */}
+      <Dialog open={bulkProjectOpen} onOpenChange={setBulkProjectOpen}>
+        <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col" data-testid="pipeline-bulk-project-dialog">
+          <DialogHeader>
+            <DialogTitle>Move {selectedIds.size} prospect{selectedIds.size === 1 ? "" : "s"} to a project</DialogTitle>
+            <DialogDescription>Existing project, remove from project, or create a new one.</DialogDescription>
+          </DialogHeader>
+          <div className="py-3 space-y-3 overflow-y-auto flex-1 min-h-0">
+            <Select value={bulkProjectValue} onValueChange={setBulkProjectValue}>
+              <SelectTrigger data-testid="pipeline-bulk-project-select">
+                <SelectValue placeholder="Choose action…" />
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                <SelectItem value="__none__">— Remove from project —</SelectItem>
+                <SelectItem value="__new__">+ Create new project…</SelectItem>
+                {projects.length > 0 && (
+                  <div className="border-t border-slate-100 my-1" />
+                )}
+                {projects.map((p) => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {bulkProjectValue === "__new__" && (
+              <Input
+                placeholder="New project name"
+                value={bulkNewProject}
+                onChange={(e) => setBulkNewProject(e.target.value)}
+                data-testid="pipeline-bulk-project-new-input"
+                autoFocus
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkProjectOpen(false)} disabled={bulkRunning}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkProject}
+              disabled={bulkRunning || !bulkProjectValue}
+              data-testid="pipeline-bulk-project-confirm"
+            >
+              {bulkRunning ? "Applying…" : `Apply to ${selectedIds.size}`}
             </Button>
           </DialogFooter>
         </DialogContent>
