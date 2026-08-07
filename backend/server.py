@@ -1136,6 +1136,9 @@ class ChannelData(BaseModel):
     brand_contact_signals_count: int = 0
     has_business_email: bool = False
     business_email: str = ""
+    # True when the current business_email was entered manually by the user
+    # (via the Info Card). Preserved across re-enrichment.
+    business_email_manual: bool = False
     # Affiliate platform links
     affiliate_platform_links: Dict[str, List[str]] = {}  # platform_key -> list of URLs
     affiliate_platforms_found: List[str] = []
@@ -2805,6 +2808,20 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     # Cache in database (scoped to user)
                     doc = channel_data.model_dump()
                     doc["user_id"] = user["id"]
+
+                    # Preserve manually-entered business email across re-enrichment.
+                    # If the user set an email via the Info Card (business_email_manual=True),
+                    # the fresh enrichment must NOT overwrite it, even if the description
+                    # scan produced a different value.
+                    prev = await db.channels.find_one(
+                        {"channel_id": ch_id, "user_id": user["id"]},
+                        {"_id": 0, "business_email_manual": 1, "business_email": 1, "has_business_email": 1}
+                    )
+                    if prev and prev.get("business_email_manual"):
+                        doc["business_email"] = prev.get("business_email", "")
+                        doc["has_business_email"] = prev.get("has_business_email", False)
+                        doc["business_email_manual"] = True
+
                     await db.channels.update_one(
                         {"channel_id": ch_id, "user_id": user["id"]},
                         {"$set": doc},
@@ -3570,6 +3587,10 @@ class UpdateOutreachStatusInput(BaseModel):
 class UpdateFollowUpDateInput(BaseModel):
     follow_up_date: Optional[str] = None  # ISO date string or null to clear
 
+
+class UpdateBusinessEmailInput(BaseModel):
+    email: Optional[str] = None  # empty/null clears both fields
+
 async def _cache_sponsorship_data(channel_id: str, user: Optional[Dict[str, Any]] = None):
     """Background task to pre-cache sponsorship data for a channel.
 
@@ -3675,6 +3696,46 @@ async def update_follow_up_date(channel_id: str, input: UpdateFollowUpDateInput,
     )
     
     return {"success": True, "follow_up_date": input.follow_up_date}
+
+
+# Basic email format check — used only for manual entries.
+_EMAIL_RX = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+
+@api_router.patch("/channels/{channel_id}/business-email")
+async def update_business_email(channel_id: str, input: UpdateBusinessEmailInput, user=Depends(get_current_user)):
+    """Manually set (or clear) the business email on a channel.
+    Writes to the same fields (`business_email`, `has_business_email`) auto-detection uses,
+    plus a `business_email_manual` flag so re-enrichment doesn't overwrite it.
+    """
+    channel = await db.channels.find_one({"channel_id": channel_id, "user_id": user["id"]})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    email = (input.email or "").strip()
+    if email:
+        if not _EMAIL_RX.match(email):
+            raise HTTPException(status_code=400, detail="Invalid email format")
+        set_fields = {
+            "business_email": email,
+            "has_business_email": True,
+            "business_email_manual": True,
+        }
+    else:
+        # Empty input clears the manual value AND the flag, so the next enrichment
+        # is free to re-populate from auto-detection.
+        set_fields = {
+            "business_email": "",
+            "has_business_email": False,
+            "business_email_manual": False,
+        }
+
+    await db.channels.update_one(
+        {"channel_id": channel_id, "user_id": user["id"]},
+        {"$set": set_fields}
+    )
+    return {"success": True, **set_fields}
+
 
 @api_router.get("/channels/follow-ups/due")
 async def get_due_follow_ups(user=Depends(get_current_user)):

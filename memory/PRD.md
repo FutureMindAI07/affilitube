@@ -108,6 +108,30 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 
 
 
+
+## Completed (Aug 7, 2026): Manual Business Email Entry from Info Card
+Adds an inline email editor to the Pipeline info card (`components/ChannelDetailSheet.jsx`). Manually-entered emails write to the exact same `business_email` field auto-detection uses, so they surface in pipeline card contact area, CSV exports, contactability score, AI Draft — everywhere. Confirmed edge cases with user upfront: manual overwrites auto-detected; manual entries survive re-enrichment via a preservation flag.
+
+**Backend (`server.py`):**
+- New `business_email_manual: bool = False` field on `ChannelData` model.
+- New `UpdateBusinessEmailInput` Pydantic model + `PATCH /api/channels/{channel_id}/business-email` endpoint. Format validated with a compiled regex (`_EMAIL_RX`). Empty payload clears `business_email`, `has_business_email`, AND resets the manual flag so future auto-detection is free to repopulate.
+- Enrichment write-time preservation (`server.py:2806+`): before `update_one($set=doc, upsert=True)`, look up any existing row and check `business_email_manual`. If True, override `doc.business_email` / `has_business_email` / `business_email_manual` with the persisted values. Prevents 24h cache-miss re-enrichment from silently wiping manual entries.
+
+**Frontend (`components/ChannelDetailSheet.jsx`):**
+- Added `toast` from sonner (previously silent-fail component).
+- New state: `editingEmail`, `emailDraft`, `emailSaving`.
+- Handlers: `startEditEmail`, `cancelEditEmail`, `saveManualEmail` (PATCH the endpoint, mutate `channel` prop in place for instant UI update, fire `onStatusUpdate` so parent refetches, toast success/error).
+- Email block reworked in-place:
+  - **No email:** shows "Add manually" affordance with Plus icon + italic hint "No email detected — add one manually to include in outreach and exports."
+  - **Auto-detected email:** shows mailto link with Mail icon + "Edit" pencil affordance.
+  - **Manually-entered email:** same as above + small "MANUAL" pill inline with the "Business Email" label so origin is transparent.
+  - **Editing state:** Input (autofocus, Enter=save, Escape=cancel) + green Save check + gray Cancel X.
+- Test-ids: `business-email-block`, `business-email-edit-btn`, `business-email-input`, `business-email-save-btn`, `business-email-cancel-btn`, `business-email-value`.
+
+**Scope decision:** Only the Pipeline variant of the info card (`components/ChannelDetailSheet.jsx`) got this. The search-results variant (`pages/dashboard/ChannelDetailSheet.jsx`) is pre-pipeline discovery — the UX moment for a manual email is when you're preparing outreach, which is post-add-to-pipeline. Adding it to that variant would require cross-Dashboard prop-drill for questionable benefit.
+
+**Verified:** 6 backend edge cases pass (invalid format 400 / missing channel 404 / no auth 403 / valid set 200 / GET verification / empty-string clear resets all 3 fields). Screenshots confirm both display and edit states render correctly in the Pipeline info card sheet. Lint clean on all files.
+
 ## Completed (Jul 29, 2026): Pipeline Bulk Actions — Delete, Change Status, Move to Project
 Selection + bulk actions on the Outreach Pipeline for users with 20+ prospects. Matches user's exact ask: "sort by not contacted → delete the sorted results without doing individually."
 

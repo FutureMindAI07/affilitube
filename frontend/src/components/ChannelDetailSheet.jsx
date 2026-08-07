@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,10 @@ import {
   Minus,
   Activity,
   Lock,
+  Pencil,
+  Check,
+  X,
+  Plus,
 } from "lucide-react";
 
 const OUTREACH_STATUS_CONFIG = {
@@ -86,6 +91,10 @@ export function ChannelDetailSheet({
   const [sponsorshipLoading, setSponsorshipLoading] = useState(false);
   const [contactNoteText, setContactNoteText] = useState("");
   const [statusUpdating, setStatusUpdating] = useState(false);
+  // Manual email edit state
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailSaving, setEmailSaving] = useState(false);
 
   useEffect(() => {
     if (open && channel) {
@@ -104,6 +113,41 @@ export function ChannelDetailSheet({
       setSponsorshipData(null);
     } finally {
       setSponsorshipLoading(false);
+    }
+  };
+
+  const startEditEmail = () => {
+    setEmailDraft(channel?.business_email || "");
+    setEditingEmail(true);
+  };
+
+  const cancelEditEmail = () => {
+    setEditingEmail(false);
+    setEmailDraft("");
+  };
+
+  const saveManualEmail = async () => {
+    if (!channel) return;
+    setEmailSaving(true);
+    try {
+      const res = await api.patch(`/channels/${channel.channel_id}/business-email`, {
+        email: emailDraft.trim() || null,
+      });
+      // Mutate the passed channel prop in place so the UI reflects instantly
+      // without waiting for a parent refetch. Parent onStatusUpdate callback
+      // will still fire so pipeline/dashboard rows re-sync.
+      if (channel) {
+        channel.business_email = res.data.business_email || "";
+        channel.has_business_email = !!res.data.has_business_email;
+        channel.business_email_manual = !!res.data.business_email_manual;
+      }
+      setEditingEmail(false);
+      toast.success(res.data.business_email ? "Email saved" : "Email cleared");
+      if (onStatusUpdate) onStatusUpdate();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to save email");
+    } finally {
+      setEmailSaving(false);
     }
   };
 
@@ -355,15 +399,80 @@ export function ChannelDetailSheet({
                 <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Open to Brand Deals</Badge>
               )}
             </div>
-            {channel.business_email && (
-              <div className="p-3 rounded-md bg-blue-50 border border-blue-100 mb-3">
-                <p className="text-xs text-blue-600 mb-1">Business Email</p>
-                <a href={`mailto:${channel.business_email}`} className="text-sm text-blue-700 font-medium hover:underline flex items-center gap-1">
+            {/* Business Email — editable */}
+            <div className="p-3 rounded-md bg-blue-50 border border-blue-100 mb-3" data-testid="business-email-block">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-blue-600">
+                  Business Email
+                  {channel.business_email_manual && (
+                    <span className="ml-1.5 text-[10px] uppercase tracking-wide bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                      manual
+                    </span>
+                  )}
+                </p>
+                {!editingEmail && (
+                  <button
+                    type="button"
+                    onClick={startEditEmail}
+                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                    data-testid="business-email-edit-btn"
+                  >
+                    {channel.business_email ? (
+                      <><Pencil className="h-3 w-3" /> Edit</>
+                    ) : (
+                      <><Plus className="h-3 w-3" /> Add manually</>
+                    )}
+                  </button>
+                )}
+              </div>
+              {editingEmail ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="email"
+                    value={emailDraft}
+                    onChange={(e) => setEmailDraft(e.target.value)}
+                    placeholder="name@example.com"
+                    className="h-8 text-sm bg-white"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveManualEmail();
+                      else if (e.key === "Escape") cancelEditEmail();
+                    }}
+                    data-testid="business-email-input"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={saveManualEmail}
+                    disabled={emailSaving}
+                    className="h-8 px-2"
+                    data-testid="business-email-save-btn"
+                  >
+                    {emailSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={cancelEditEmail}
+                    disabled={emailSaving}
+                    className="h-8 px-2 text-slate-500"
+                    data-testid="business-email-cancel-btn"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : channel.business_email ? (
+                <a
+                  href={`mailto:${channel.business_email}`}
+                  className="text-sm text-blue-700 font-medium hover:underline flex items-center gap-1"
+                  data-testid="business-email-value"
+                >
                   <Mail className="h-3.5 w-3.5" />
                   {channel.business_email}
                 </a>
-              </div>
-            )}
+              ) : (
+                <p className="text-xs text-slate-500 italic">No email detected — add one manually to include in outreach and exports.</p>
+              )}
+            </div>
           </div>
 
           <Separator />
