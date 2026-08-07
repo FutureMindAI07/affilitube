@@ -1111,6 +1111,9 @@ class ChannelData(BaseModel):
     topic_tags: List[str] = []
     affiliate_signals: List[str] = []
     public_links: Dict[str, str] = {}
+    # Platform keys that were entered manually via the Info Card. Preserved
+    # across re-enrichment; enrichment respects these overrides.
+    public_links_manual: List[str] = []
     score_total: int = 0
     score_topic: int = 0
     score_tutorial: int = 0
@@ -2815,12 +2818,27 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                     # scan produced a different value.
                     prev = await db.channels.find_one(
                         {"channel_id": ch_id, "user_id": user["id"]},
-                        {"_id": 0, "business_email_manual": 1, "business_email": 1, "has_business_email": 1}
+                        {"_id": 0, "business_email_manual": 1, "business_email": 1, "has_business_email": 1,
+                         "public_links_manual": 1, "public_links": 1}
                     )
                     if prev and prev.get("business_email_manual"):
                         doc["business_email"] = prev.get("business_email", "")
                         doc["has_business_email"] = prev.get("has_business_email", False)
                         doc["business_email_manual"] = True
+
+                    # Preserve manually-entered public links (Instagram, etc.).
+                    # For any platform in `public_links_manual`, keep the persisted value
+                    # regardless of what the fresh description scan produced.
+                    if prev and prev.get("public_links_manual"):
+                        prev_links = prev.get("public_links") or {}
+                        merged = dict(doc.get("public_links") or {})
+                        for p in prev.get("public_links_manual") or []:
+                            if p in prev_links:
+                                merged[p] = prev_links[p]
+                        doc["public_links"] = merged
+                        doc["public_links_manual"] = prev["public_links_manual"]
+                        # Recompute contactability so merged links get credit
+                        doc["score_contactability"] = calculate_contactability_score(merged)
 
                     await db.channels.update_one(
                         {"channel_id": ch_id, "user_id": user["id"]},
@@ -3591,6 +3609,11 @@ class UpdateFollowUpDateInput(BaseModel):
 class UpdateBusinessEmailInput(BaseModel):
     email: Optional[str] = None  # empty/null clears both fields
 
+
+class UpdatePublicLinkInput(BaseModel):
+    platform: str  # instagram | twitter | linkedin | tiktok | website (+ others)
+    url: Optional[str] = None  # empty/null clears both link + manual flag
+
 async def _cache_sponsorship_data(channel_id: str, user: Optional[Dict[str, Any]] = None):
     """Background task to pre-cache sponsorship data for a channel.
 
@@ -3735,6 +3758,73 @@ async def update_business_email(channel_id: str, input: UpdateBusinessEmailInput
         {"$set": set_fields}
     )
     return {"success": True, **set_fields}
+
+
+# Platforms accepted by the manual public-links editor. Auto-detection today
+# only populates the first four; TikTok is manual-only for now.
+_MANUAL_LINK_PLATFORMS = {"instagram", "twitter", "linkedin", "website", "tiktok"}
+_URL_RX = re.compile(r"^https?://[^\s]+$", re.IGNORECASE)
+
+
+@api_router.patch("/channels/{channel_id}/public-link")
+async def update_public_link(channel_id: str, input: UpdatePublicLinkInput, user=Depends(get_current_user)):
+    """Manually set (or clear) a single public link on a channel.
+    Writes into the same `public_links` dict auto-detection uses, plus tracks
+    the platform key in `public_links_manual` so re-enrichment respects it.
+    Recomputes contactability score on every write so the manual link gets
+    credit immediately.
+    """
+    platform = (input.platform or "").strip().lower()
+    if platform not in _MANUAL_LINK_PLATFORMS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported platform. Allowed: {', '.join(sorted(_MANUAL_LINK_PLATFORMS))}"
+        )
+
+    channel = await db.channels.find_one({"channel_id": channel_id, "user_id": user["id"]})
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    url = (input.url or "").strip()
+    public_links = dict(channel.get("public_links") or {})
+    manual = list(channel.get("public_links_manual") or [])
+
+    if url:
+        # Auto-prepend https:// if user typed a bare domain
+        if not _URL_RX.match(url):
+            if "://" in url or " " in url:
+                raise HTTPException(status_code=400, detail="Invalid URL format")
+            url = f"https://{url}"
+            if not _URL_RX.match(url):
+                raise HTTPException(status_code=400, detail="Invalid URL format")
+        public_links[platform] = url
+        if platform not in manual:
+            manual.append(platform)
+    else:
+        # Empty input clears the link AND the manual flag so a future
+        # enrichment scan is free to re-populate from auto-detection.
+        public_links.pop(platform, None)
+        manual = [p for p in manual if p != platform]
+
+    # Recompute contactability score so credit lands immediately.
+    new_score = calculate_contactability_score(public_links)
+
+    await db.channels.update_one(
+        {"channel_id": channel_id, "user_id": user["id"]},
+        {"$set": {
+            "public_links": public_links,
+            "public_links_manual": manual,
+            "score_contactability": new_score,
+        }}
+    )
+    return {
+        "success": True,
+        "platform": platform,
+        "url": url or None,
+        "public_links": public_links,
+        "public_links_manual": manual,
+        "score_contactability": new_score,
+    }
 
 
 @api_router.get("/channels/follow-ups/due")

@@ -109,6 +109,35 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 
 
 
+
+## Completed (Aug 7, 2026): Manual Social/Public Link Editing from Info Card
+Extends the manual-email pattern to Instagram, Twitter/X, LinkedIn, TikTok, and Website. Writes to the same `channel.public_links` dict auto-detection uses, so any consumer (info card contact areas, CSV exports, contactability score, AI Draft) picks up the manual values transparently.
+
+**Backend:**
+- New `public_links_manual: List[str] = []` field on `ChannelData` — list of platform keys with manual overrides.
+- New `UpdatePublicLinkInput` Pydantic model + `PATCH /api/channels/{channel_id}/public-link` endpoint. Takes `{platform, url}`. Platform whitelist: `instagram | twitter | linkedin | tiktok | website`. Bare domains get `https://` auto-prepended. Empty url clears both the link entry and the manual flag. **Recomputes `score_contactability` on every write** so manual additions get credit immediately.
+- Enrichment write-time preservation extended: for any platform in the existing row's `public_links_manual`, keep the persisted value regardless of what the fresh description scan produced. Manual overrides survive 24h cache-miss re-enrichment. Contactability score recomputed against the merged links.
+- TikTok is manual-only (auto-detection still doesn't parse tiktok.com URLs — separate backlog item to add).
+
+**Frontend (`components/ChannelDetailSheet.jsx`):**
+- Contact Links block reworked to always render all 5 platforms in a fixed order (Instagram, Twitter/X, LinkedIn, TikTok, Website), regardless of which have values.
+- Per-platform states:
+  - **Empty:** grey "+ Add manually" ghost affordance
+  - **Populated (auto):** ExternalLink icon + truncated URL + pencil edit affordance
+  - **Populated (manual):** same + small blue "MANUAL" pill for provenance
+  - **Editing:** Input (autofocus, Enter=save, Escape=cancel) + green Save check + gray Cancel X
+- New state: `editingLink` (platform key or null), `linkDraft`, `linkSaving`.
+- Handlers: `startEditLink`, `cancelEditLink`, `saveManualLink` — patches endpoint, mutates channel prop in place, fires `onStatusUpdate` for parent re-sync.
+- Test-ids: `contact-links-block`, `contact-link-row-{platform}`, `contact-link-add-{platform}`, `contact-link-edit-{platform}`, `contact-link-value-{platform}`, `contact-link-input-{platform}`, `contact-link-save-{platform}`, `contact-link-cancel-{platform}`.
+
+**Verified:**
+- 6 backend edge cases: invalid platform → 400; bare domain → https:// auto-prepend + saved; TikTok add → added to `public_links_manual`; clear → removed from both places; URL with spaces → 400; no auth → 403.
+- UI screenshot: contact links block renders all 5 rows with mixed states (empty, editing, manual-pilled, auto-detected). Blue MANUAL pill visible on manually-entered TikTok row while auto-detected Website has no pill.
+- Contactability score (0-10 scale, not 0-100 as previously miscited) recomputes correctly: website+instagram = 3+2 = 5.
+- Lint clean.
+
+**Scope decision:** Same as manual email — only the Pipeline variant of the info card. Search-results Dashboard variant unchanged.
+
 ## Completed (Aug 7, 2026): Manual Business Email Entry from Info Card
 Adds an inline email editor to the Pipeline info card (`components/ChannelDetailSheet.jsx`). Manually-entered emails write to the exact same `business_email` field auto-detection uses, so they surface in pipeline card contact area, CSV exports, contactability score, AI Draft — everywhere. Confirmed edge cases with user upfront: manual overwrites auto-detected; manual entries survive re-enrichment via a preservation flag.
 

@@ -95,6 +95,10 @@ export function ChannelDetailSheet({
   const [editingEmail, setEditingEmail] = useState(false);
   const [emailDraft, setEmailDraft] = useState("");
   const [emailSaving, setEmailSaving] = useState(false);
+  // Manual public-link edit state (single row edited at a time)
+  const [editingLink, setEditingLink] = useState(null); // platform key or null
+  const [linkDraft, setLinkDraft] = useState("");
+  const [linkSaving, setLinkSaving] = useState(false);
 
   useEffect(() => {
     if (open && channel) {
@@ -148,6 +152,40 @@ export function ChannelDetailSheet({
       toast.error(e.response?.data?.detail || "Failed to save email");
     } finally {
       setEmailSaving(false);
+    }
+  };
+
+  const startEditLink = (platform, currentUrl) => {
+    setEditingLink(platform);
+    setLinkDraft(currentUrl || "");
+  };
+
+  const cancelEditLink = () => {
+    setEditingLink(null);
+    setLinkDraft("");
+  };
+
+  const saveManualLink = async (platform) => {
+    if (!channel) return;
+    setLinkSaving(true);
+    try {
+      const res = await api.patch(`/channels/${channel.channel_id}/public-link`, {
+        platform,
+        url: linkDraft.trim() || null,
+      });
+      channel.public_links = res.data.public_links || {};
+      channel.public_links_manual = res.data.public_links_manual || [];
+      if (typeof res.data.score_contactability === "number") {
+        channel.score_contactability = res.data.score_contactability;
+      }
+      setEditingLink(null);
+      setLinkDraft("");
+      toast.success(res.data.url ? `${platform} saved` : `${platform} cleared`);
+      if (onStatusUpdate) onStatusUpdate();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || `Failed to save ${platform}`);
+    } finally {
+      setLinkSaving(false);
     }
   };
 
@@ -574,23 +612,102 @@ export function ChannelDetailSheet({
 
           <Separator />
 
-          {/* Contact Links */}
-          {Object.keys(channel.public_links || {}).length > 0 && (
-            <>
-              <div>
-                <h4 className="text-sm font-semibold mb-3">Contact Links</h4>
-                <div className="space-y-2">
-                  {Object.entries(channel.public_links).map(([platform, url]) => (
-                    <a key={platform} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:underline">
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      {platform.charAt(0).toUpperCase() + platform.slice(1)}
-                    </a>
-                  ))}
-                </div>
-              </div>
-              <Separator />
-            </>
-          )}
+          {/* Contact Links — always shown so users can add missing platforms manually */}
+          <div data-testid="contact-links-block">
+            <h4 className="text-sm font-semibold mb-3">Contact Links</h4>
+            <div className="space-y-2">
+              {[
+                { key: "instagram", label: "Instagram" },
+                { key: "twitter", label: "Twitter / X" },
+                { key: "linkedin", label: "LinkedIn" },
+                { key: "tiktok", label: "TikTok" },
+                { key: "website", label: "Website" },
+              ].map(({ key, label }) => {
+                const url = (channel.public_links || {})[key];
+                const isManual = (channel.public_links_manual || []).includes(key);
+                const isEditing = editingLink === key;
+                return (
+                  <div key={key} className="flex items-center gap-2 py-1" data-testid={`contact-link-row-${key}`}>
+                    <span className="text-xs text-slate-500 w-20 shrink-0">{label}</span>
+                    {isEditing ? (
+                      <>
+                        <Input
+                          type="url"
+                          value={linkDraft}
+                          onChange={(e) => setLinkDraft(e.target.value)}
+                          placeholder={key === "website" ? "https://example.com" : `https://${key}.com/handle`}
+                          className="h-8 text-xs flex-1"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveManualLink(key);
+                            else if (e.key === "Escape") cancelEditLink();
+                          }}
+                          data-testid={`contact-link-input-${key}`}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => saveManualLink(key)}
+                          disabled={linkSaving}
+                          className="h-8 px-2"
+                          data-testid={`contact-link-save-${key}`}
+                        >
+                          {linkSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={cancelEditLink}
+                          disabled={linkSaving}
+                          className="h-8 px-2 text-slate-500"
+                          data-testid={`contact-link-cancel-${key}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    ) : url ? (
+                      <>
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-sm text-primary hover:underline flex-1 min-w-0 truncate"
+                          data-testid={`contact-link-value-${key}`}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{url.replace(/^https?:\/\//, "")}</span>
+                        </a>
+                        {isManual && (
+                          <span className="text-[10px] uppercase tracking-wide bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shrink-0">
+                            manual
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => startEditLink(key, url)}
+                          className="text-slate-400 hover:text-slate-700 shrink-0"
+                          title="Edit"
+                          data-testid={`contact-link-edit-${key}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startEditLink(key, "")}
+                        className="text-xs text-slate-400 hover:text-blue-600 flex items-center gap-1 flex-1"
+                        data-testid={`contact-link-add-${key}`}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add manually
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <Separator />
 
           {/* Recent Videos */}
           {channel.recent_videos?.length > 0 && (
