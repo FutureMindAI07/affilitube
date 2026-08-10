@@ -11,6 +11,13 @@
 - Password: password123
 - Tier: free
 
+## Client Test User (read-only access role)
+- Email: testclient@brand.com
+- Password: clientpass123
+- Role: client
+- Has assignment to project "Refactor smoke project" (export enabled)
+- On login, auto-redirects to /client/project/{id} when they have exactly one active assignment
+
 ## YouTube API Key
 - Key should be set via YOUTUBE_API_KEY environment variable
 

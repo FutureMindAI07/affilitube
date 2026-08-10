@@ -3903,21 +3903,31 @@ class UpdateProjectNameInput(BaseModel):
 @api_router.patch("/channels/{channel_id}/project-name")
 async def update_channel_project_name(channel_id: str, input: UpdateProjectNameInput, user=Depends(get_current_user)):
     """Update the project name for a channel"""
+    _assert_not_client(user)
     channel = await db.channels.find_one({"channel_id": channel_id, "user_id": user["id"]})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
+    current = channel.get("project_name")
+    new_project = input.project_name or ""
+    # Guard: if moving OUT of an assigned project, block.
+    if current and current != new_project:
+        await _assert_no_assignment_orphan(user["id"], current, f"move channel out of project '{current}'")
     await db.channels.update_one(
         {"channel_id": channel_id, "user_id": user["id"]},
-        {"$set": {"project_name": input.project_name or ""}}
+        {"$set": {"project_name": new_project}}
     )
     return {"success": True, "project_name": input.project_name}
 
 @api_router.delete("/channels/{channel_id}/pipeline")
 async def remove_from_pipeline(channel_id: str, user=Depends(get_current_user)):
     """Remove a channel from the pipeline by resetting outreach fields"""
+    _assert_not_client(user)
     channel = await db.channels.find_one({"channel_id": channel_id, "user_id": user["id"]})
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
+    current = channel.get("project_name")
+    if current:
+        await _assert_no_assignment_orphan(user["id"], current, f"remove channel from assigned project '{current}'")
     await db.channels.update_one(
         {"channel_id": channel_id, "user_id": user["id"]},
         {"$set": {"outreach_status": "not_contacted", "project_name": None, "follow_up_date": None, "contact_log": []}}
@@ -4000,9 +4010,25 @@ async def bulk_update_status(input: BulkStatusInput, user=Depends(get_current_us
 @api_router.post("/pipeline/bulk-project")
 async def bulk_update_project(input: BulkProjectInput, user=Depends(get_current_user)):
     """Bulk set (or clear) project_name on multiple channels."""
+    _assert_not_client(user)
     _validate_bulk_ids(input.channel_ids)
-    # Strip whitespace, treat empty string as null (remove-from-project)
     proj = (input.project_name or "").strip() or None
+    # Guard: if any channel currently in a project being emptied would leave
+    # a client assignment stranded, fail loudly.
+    current = await db.channels.find(
+        {"channel_id": {"$in": input.channel_ids}, "user_id": user["id"]},
+        {"_id": 0, "project_name": 1}
+    ).to_list(len(input.channel_ids))
+    affected_projects = {c.get("project_name") for c in current if c.get("project_name")}
+    if proj:
+        # Moving TO another project — check we're not emptying source projects with assignments
+        for p in affected_projects:
+            if p != proj:
+                await _assert_no_assignment_orphan(user["id"], p, f"move channels out of project '{p}'")
+    else:
+        # Clearing project — every affected project would lose channels
+        for p in affected_projects:
+            await _assert_no_assignment_orphan(user["id"], p, f"clear channels from project '{p}'")
     result = await db.channels.update_many(
         {"channel_id": {"$in": input.channel_ids}, "user_id": user["id"]},
         {"$set": {"project_name": proj}}
@@ -4588,6 +4614,225 @@ async def get_admin_user(credentials: HTTPAuthorizationCredentials = Depends(sec
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
+async def get_client_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Dependency: role == client (read-only project viewer)."""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        uid = payload.get("sub")
+        if not uid:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        if user.get("role") != "client":
+            raise HTTPException(status_code=403, detail="Client access required")
+        return user
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def _assert_not_client(user: dict) -> None:
+    if user.get("role") == "client":
+        raise HTTPException(status_code=403, detail="Not available for client accounts")
+
+
+class ProjectAssignmentInput(BaseModel):
+    client_user_id: str
+    project_name: str
+    export_enabled: bool = False
+    expires_at: Optional[str] = None
+
+
+class ProjectAssignmentUpdate(BaseModel):
+    export_enabled: Optional[bool] = None
+    expires_at: Optional[str] = None
+    clear_expiry: bool = False
+
+
+def _is_assignment_expired(a: dict) -> bool:
+    exp = a.get("expires_at")
+    if not exp:
+        return False
+    try:
+        dt = datetime.fromisoformat(exp.replace("Z", "+00:00")) if isinstance(exp, str) else exp
+        return datetime.now(timezone.utc) > dt
+    except Exception:
+        return False
+
+
+@api_router.post("/admin/assignments")
+async def admin_create_assignment(data: ProjectAssignmentInput, admin=Depends(get_admin_user)):
+    client = await db.users.find_one({"id": data.client_user_id})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client user not found")
+    if client.get("role") != "client":
+        raise HTTPException(status_code=400, detail="Target user is not a client account")
+    project = (data.project_name or "").strip()
+    if not project:
+        raise HTTPException(status_code=400, detail="project_name is required")
+    if not await db.channels.find_one({"user_id": admin["id"], "project_name": project}, {"_id": 1}):
+        raise HTTPException(status_code=400,
+            detail=f"Project '{project}' does not exist in your pipeline. Create or populate it first.")
+    if await db.project_assignments.find_one({
+        "client_user_id": data.client_user_id, "owner_user_id": admin["id"], "project_name": project
+    }):
+        raise HTTPException(status_code=400, detail="This project is already assigned to this client")
+    doc = {"id": str(uuid.uuid4()), "client_user_id": data.client_user_id,
+           "owner_user_id": admin["id"], "project_name": project,
+           "export_enabled": bool(data.export_enabled), "expires_at": data.expires_at,
+           "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.project_assignments.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/admin/assignments")
+async def admin_list_assignments(client_user_id: Optional[str] = None, admin=Depends(get_admin_user)):
+    q = {"owner_user_id": admin["id"]}
+    if client_user_id:
+        q["client_user_id"] = client_user_id
+    rows = await db.project_assignments.find(q, {"_id": 0}).to_list(1000)
+    return {"assignments": rows}
+
+
+@api_router.patch("/admin/assignments/{assignment_id}")
+async def admin_update_assignment(assignment_id: str, data: ProjectAssignmentUpdate, admin=Depends(get_admin_user)):
+    row = await db.project_assignments.find_one({"id": assignment_id, "owner_user_id": admin["id"]})
+    if not row:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    updates = {}
+    if data.export_enabled is not None:
+        updates["export_enabled"] = bool(data.export_enabled)
+    if data.clear_expiry:
+        updates["expires_at"] = None
+    elif data.expires_at is not None:
+        updates["expires_at"] = data.expires_at or None
+    if updates:
+        await db.project_assignments.update_one({"id": assignment_id}, {"$set": updates})
+    row.update(updates)
+    row.pop("_id", None)
+    return row
+
+
+@api_router.delete("/admin/assignments/{assignment_id}")
+async def admin_delete_assignment(assignment_id: str, admin=Depends(get_admin_user)):
+    r = await db.project_assignments.delete_one({"id": assignment_id, "owner_user_id": admin["id"]})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return {"success": True}
+
+
+_CLIENT_STRIP_FIELDS = {"notes", "contact_log", "outreach_status", "follow_up_date",
+                       "last_status_change", "added_to_pipeline_at", "business_email_manual",
+                       "public_links_manual", "user_id"}
+
+
+def _sanitise_channel_for_client(ch: dict) -> dict:
+    return {k: v for k, v in ch.items() if k not in _CLIENT_STRIP_FIELDS and not k.startswith("_")}
+
+
+@api_router.get("/client/assignments")
+async def client_list_assignments(client=Depends(get_client_user)):
+    rows = await db.project_assignments.find({"client_user_id": client["id"]}, {"_id": 0}).to_list(100)
+    out = []
+    for r in rows:
+        expired = _is_assignment_expired(r)
+        cnt = 0
+        if not expired:
+            cnt = await db.channels.count_documents({"user_id": r["owner_user_id"], "project_name": r["project_name"]})
+        out.append({**r, "expired": expired, "channel_count": cnt})
+    return {"assignments": out}
+
+
+@api_router.get("/client/assignments/{assignment_id}/channels")
+async def client_get_assignment_channels(assignment_id: str, client=Depends(get_client_user)):
+    row = await db.project_assignments.find_one({"id": assignment_id, "client_user_id": client["id"]})
+    if not row:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if _is_assignment_expired(row):
+        raise HTTPException(status_code=410, detail="This access has expired")
+    channels = await db.channels.find(
+        {"user_id": row["owner_user_id"], "project_name": row["project_name"]}, {"_id": 0}
+    ).to_list(2000)
+    return {
+        "assignment": {"id": row["id"], "project_name": row["project_name"],
+                       "export_enabled": row.get("export_enabled", False),
+                       "expires_at": row.get("expires_at")},
+        "channels": [_sanitise_channel_for_client(ch) for ch in channels],
+    }
+
+
+@api_router.post("/client/assignments/{assignment_id}/export/csv")
+async def client_export_assignment_csv(assignment_id: str, client=Depends(get_client_user)):
+    """Client-facing CSV export. Gated on assignment.export_enabled + not expired.
+    Excludes pipeline state (notes, status, contact_log) — clients never see it."""
+    row = await db.project_assignments.find_one({"id": assignment_id, "client_user_id": client["id"]})
+    if not row:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if _is_assignment_expired(row):
+        raise HTTPException(status_code=410, detail="This access has expired")
+    if not row.get("export_enabled"):
+        raise HTTPException(status_code=403, detail="CSV export is not enabled for this project")
+
+    channels = await db.channels.find(
+        {"user_id": row["owner_user_id"], "project_name": row["project_name"]}, {"_id": 0}
+    ).to_list(2000)
+
+    output = io.StringIO()
+    fieldnames = [
+        "channel_name", "channel_url", "subscriber_count", "video_count",
+        "country_name", "score_total", "affiliate_score",
+        "business_email", "website", "instagram", "twitter", "linkedin", "tiktok",
+        "affiliate_platforms_found", "affiliate_links_total",
+        "upload_consistency", "engagement_health",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for ch in channels:
+        links = ch.get("public_links") or {}
+        writer.writerow({
+            "channel_name": ch.get("channel_name", ""),
+            "channel_url": ch.get("channel_url", ""),
+            "subscriber_count": ch.get("subscriber_count", 0),
+            "video_count": ch.get("video_count", 0),
+            "country_name": ch.get("country_name", ""),
+            "score_total": ch.get("score_total", 0),
+            "affiliate_score": ch.get("affiliate_score", 0),
+            "business_email": ch.get("business_email", ""),
+            "website": links.get("website", ""),
+            "instagram": links.get("instagram", ""),
+            "twitter": links.get("twitter", ""),
+            "linkedin": links.get("linkedin", ""),
+            "tiktok": links.get("tiktok", ""),
+            "affiliate_platforms_found": ", ".join(ch.get("affiliate_platforms_found") or []),
+            "affiliate_links_total": ch.get("affiliate_links_total", 0),
+            "upload_consistency": ch.get("upload_consistency", ""),
+            "engagement_health": ch.get("engagement_health", ""),
+        })
+
+    output.seek(0)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    safe_name = re.sub(r"[^a-z0-9]+", "-", row["project_name"].lower()).strip("-") or "project"
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={safe_name}-{today}.csv"}
+    )
+
+
+async def _assert_no_assignment_orphan(owner_user_id: str, project_name: str, action: str) -> None:
+    """Loud-fail guard: block operations that would orphan an active client assignment."""
+    if not project_name:
+        return
+    rows = await db.project_assignments.find(
+        {"owner_user_id": owner_user_id, "project_name": project_name}, {"_id": 1}
+    ).to_list(50)
+    if rows:
+        raise HTTPException(status_code=400,
+            detail=(f"Cannot {action}: project '{project_name}' has {len(rows)} active "
+                    f"client assignment(s). Revoke assignments first to avoid breaking client access."))
+
+
 # Pipeline CSV Export — admin-only, richer than /export/csv:
 #   Adds pipeline state (outreach_status, project, notes, follow-up dates),
 #   full Brand Intelligence payload (confidence, brands, promo codes, video count),
@@ -4866,6 +5111,7 @@ class AdminCreateUserInput(BaseModel):
     tier: str = "free"
     draft_credits: int = 0
     access_expires_at: Optional[str] = None
+    role: str = "user"  # "user" | "client" ; "admin" not creatable via this endpoint
 
 @api_router.post("/admin/users")
 async def admin_create_user(data: AdminCreateUserInput, admin=Depends(get_admin_user)):
@@ -4877,7 +5123,9 @@ async def admin_create_user(data: AdminCreateUserInput, admin=Depends(get_admin_
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     if data.tier not in ("free", "starter", "pro"):
         raise HTTPException(status_code=400, detail="Tier must be free, starter, or pro")
-    
+    if data.role not in ("user", "client"):
+        raise HTTPException(status_code=400, detail="Role must be 'user' or 'client'")
+
     existing = await db.users.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -4888,7 +5136,7 @@ async def admin_create_user(data: AdminCreateUserInput, admin=Depends(get_admin_
         "id": user_id,
         "email": email,
         "password_hash": hashed_password,
-        "role": "user",
+        "role": data.role,
         "tier": data.tier,
         "monthly_search_count": 0,
         "search_count_reset_date": datetime.now(timezone.utc).strftime("%Y-%m"),
@@ -4899,7 +5147,7 @@ async def admin_create_user(data: AdminCreateUserInput, admin=Depends(get_admin_
         user_doc["access_expires_at"] = data.access_expires_at
     
     await db.users.insert_one(user_doc)
-    return {"success": True, "user_id": user_id, "email": email, "tier": data.tier}
+    return {"success": True, "user_id": user_id, "email": email, "tier": data.tier, "role": data.role}
 
 class AdminUpdateExpiryInput(BaseModel):
     access_expires_at: Optional[str] = None

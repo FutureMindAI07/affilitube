@@ -49,6 +49,9 @@ import {
   CalendarClock,
   Handshake,
   Radar,
+  UserCog,
+  Link2,
+  Copy,
 } from "lucide-react";
 import SaaSRadarPanel from "@/components/SaaSRadarPanel";
 
@@ -103,6 +106,19 @@ export default function AdminPanel() {
   });
   const [createLoading, setCreateLoading] = useState(false);
 
+  // Client Access tab
+  const [clientAccounts, setClientAccounts] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [adminProjects, setAdminProjects] = useState([]);
+  const [createClientOpen, setCreateClientOpen] = useState(false);
+  const [createClientForm, setCreateClientForm] = useState({ email: "", password: "" });
+  const [createClientLoading, setCreateClientLoading] = useState(false);
+  const [createAssignmentOpen, setCreateAssignmentOpen] = useState(false);
+  const [assignmentForm, setAssignmentForm] = useState({
+    client_user_id: "", project_name: "", export_enabled: false, expires_at: "",
+  });
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
+
   // Load data based on active tab
   useEffect(() => {
     if (activeTab === "overview") loadOverview();
@@ -111,6 +127,7 @@ export default function AdminPanel() {
     else if (activeTab === "activity") loadActivity();
     else if (activeTab === "revenue") loadRevenue();
     else if (activeTab === "partner-applications") loadPartnerApplications();
+    else if (activeTab === "client-access") loadClientAccess();
   }, [activeTab, usersPage, userSearch, userTierFilter]);
 
   const loadOverview = async () => {
@@ -213,6 +230,104 @@ export default function AdminPanel() {
       toast.error(e.response?.data?.detail || "Failed to delete application");
     }
   };
+
+  // ============ CLIENT ACCESS TAB ============
+  const loadClientAccess = async () => {
+    setLoading(true);
+    try {
+      const [usersRes, assignmentsRes, projectsRes] = await Promise.all([
+        api.get("/admin/users", { params: { limit: 100 } }),
+        api.get("/admin/assignments"),
+        api.get("/pipeline/projects"),
+      ]);
+      // /admin/users doesn't filter by role today; filter client-side as a fallback.
+      const allUsers = usersRes.data.users || [];
+      setClientAccounts(allUsers.filter((u) => u.role === "client"));
+      setAssignments(assignmentsRes.data.assignments || []);
+      setAdminProjects(projectsRes.data.projects || []);
+    } catch (e) {
+      toast.error("Failed to load client access data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createClientAccount = async () => {
+    if (!createClientForm.email || !createClientForm.password) return;
+    setCreateClientLoading(true);
+    try {
+      await api.post("/admin/users", {
+        email: createClientForm.email,
+        password: createClientForm.password,
+        role: "client",
+        tier: "free",
+      });
+      toast.success(`Client account created: ${createClientForm.email}`);
+      setCreateClientOpen(false);
+      setCreateClientForm({ email: "", password: "" });
+      loadClientAccess();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to create client");
+    } finally {
+      setCreateClientLoading(false);
+    }
+  };
+
+  const createAssignment = async () => {
+    if (!assignmentForm.client_user_id || !assignmentForm.project_name) {
+      toast.error("Client and project are required");
+      return;
+    }
+    setAssignmentLoading(true);
+    try {
+      const payload = {
+        client_user_id: assignmentForm.client_user_id,
+        project_name: assignmentForm.project_name,
+        export_enabled: assignmentForm.export_enabled,
+      };
+      if (assignmentForm.expires_at) {
+        payload.expires_at = new Date(assignmentForm.expires_at).toISOString();
+      }
+      await api.post("/admin/assignments", payload);
+      toast.success("Project assigned to client");
+      setCreateAssignmentOpen(false);
+      setAssignmentForm({ client_user_id: "", project_name: "", export_enabled: false, expires_at: "" });
+      loadClientAccess();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to create assignment");
+    } finally {
+      setAssignmentLoading(false);
+    }
+  };
+
+  const toggleAssignmentExport = async (a) => {
+    try {
+      await api.patch(`/admin/assignments/${a.id}`, { export_enabled: !a.export_enabled });
+      toast.success(`Export ${!a.export_enabled ? "enabled" : "disabled"}`);
+      loadClientAccess();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to update assignment");
+    }
+  };
+
+  const deleteAssignment = async (a) => {
+    if (!window.confirm(`Revoke client access to '${a.project_name}'? The client will lose access immediately.`)) return;
+    try {
+      await api.delete(`/admin/assignments/${a.id}`);
+      toast.success("Assignment revoked");
+      loadClientAccess();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to revoke assignment");
+    }
+  };
+
+  const copyClientLoginUrl = () => {
+    const url = `${window.location.origin}/login`;
+    navigator.clipboard.writeText(url);
+    toast.success("Client login URL copied");
+  };
+
+  const clientEmailForId = (id) => clientAccounts.find((c) => c.id === id)?.email || id;
 
   const updateUserTier = async () => {
     if (!editingUser || !newTier) return;
@@ -393,6 +508,7 @@ export default function AdminPanel() {
             { id: "activity", label: "Search Activity", icon: Activity },
             { id: "revenue", label: "Revenue", icon: DollarSign },
             { id: "partner-applications", label: "Partner Apps", icon: Handshake },
+            { id: "client-access", label: "Client Access", icon: UserCog },
             { id: "saas-radar", label: "SaaS Radar", icon: Radar },
           ].map((tab) => (
             <button
@@ -1254,6 +1370,146 @@ export default function AdminPanel() {
           </div>
         )}
 
+        {/* Client Access Tab */}
+        {activeTab === "client-access" && (
+          <div className="space-y-6">
+            {/* Header + Actions */}
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-2xl font-heading font-bold text-slate-900">Client Access</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Give clients read-only access to specific projects from your pipeline.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={copyClientLoginUrl} data-testid="copy-client-login-url">
+                  <Link2 className="h-4 w-4 mr-1.5" /> Copy client login URL
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setCreateClientOpen(true)} data-testid="create-client-btn">
+                  <UserPlus className="h-4 w-4 mr-1.5" /> Create client account
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setCreateAssignmentOpen(true)}
+                  disabled={clientAccounts.length === 0 || adminProjects.length === 0}
+                  data-testid="assign-project-btn"
+                >
+                  <Sparkles className="h-4 w-4 mr-1.5" /> Assign project
+                </Button>
+              </div>
+            </div>
+
+            {/* Clients Card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Client accounts ({clientAccounts.length})</CardTitle>
+                <CardDescription>
+                  Clients only see the projects assigned to them. They can&apos;t create searches or modify data.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {clientAccounts.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-4 text-center">
+                    No client accounts yet. Create one to start sharing curated lists.
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Assigned Projects</TableHead>
+                        <TableHead>Created</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody data-testid="client-accounts-table">
+                      {clientAccounts.map((c) => {
+                        const clientAssignments = assignments.filter((a) => a.client_user_id === c.id);
+                        return (
+                          <TableRow key={c.id} data-testid={`client-row-${c.id}`}>
+                            <TableCell className="font-medium">{c.email}</TableCell>
+                            <TableCell>
+                              {clientAssignments.length === 0 ? (
+                                <span className="text-xs text-slate-400">None assigned</span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {clientAssignments.map((a) => (
+                                    <Badge key={a.id} variant="outline" className="text-xs">{a.project_name}</Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-500">{formatDate(c.created_at)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Assignments Card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Project assignments ({assignments.length})</CardTitle>
+                <CardDescription>
+                  Renaming or moving channels out of an assigned project will fail loudly — revoke access first.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {assignments.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-4 text-center">
+                    No assignments yet. Create a client account and a pipeline project first, then assign it here.
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Client</TableHead>
+                        <TableHead>Project</TableHead>
+                        <TableHead>Export</TableHead>
+                        <TableHead>Expires</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody data-testid="assignments-table">
+                      {assignments.map((a) => (
+                        <TableRow key={a.id} data-testid={`assignment-row-${a.id}`}>
+                          <TableCell className="text-sm">{clientEmailForId(a.client_user_id)}</TableCell>
+                          <TableCell className="font-medium">{a.project_name}</TableCell>
+                          <TableCell>
+                            <button
+                              onClick={() => toggleAssignmentExport(a)}
+                              className={`text-xs px-2 py-1 rounded ${a.export_enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+                              data-testid={`assignment-toggle-export-${a.id}`}
+                            >
+                              {a.export_enabled ? "Enabled" : "Disabled"}
+                            </button>
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-500">
+                            {a.expires_at ? formatDate(a.expires_at) : "No expiry"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => deleteAssignment(a)}
+                              className="text-red-500 hover:text-red-700"
+                              data-testid={`assignment-delete-${a.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* SaaS Radar Tab */}
         {activeTab === "saas-radar" && (
           <SaaSRadarPanel token={token} />
@@ -1516,6 +1772,176 @@ export default function AdminPanel() {
             >
               <UserPlus className="h-4 w-4" />
               {createLoading ? "Creating..." : "Create User"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Client Account Dialog */}
+      <Dialog open={createClientOpen} onOpenChange={setCreateClientOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create client account</DialogTitle>
+            <DialogDescription>
+              Clients get a read-only view of the projects you assign to them. No searches, no exports (unless enabled per-assignment), no data edits.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm font-medium">Email *</Label>
+              <Input
+                type="email"
+                placeholder="client@brand.com"
+                value={createClientForm.email}
+                onChange={(e) => setCreateClientForm(p => ({ ...p, email: e.target.value }))}
+                data-testid="create-client-email"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Password *</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="At least 6 characters"
+                  value={createClientForm.password}
+                  onChange={(e) => setCreateClientForm(p => ({ ...p, password: e.target.value }))}
+                  className="flex-1"
+                  data-testid="create-client-password"
+                />
+                <Button
+                  variant="outline" size="sm"
+                  onClick={() => {
+                    const chars = "abcdefghijkmnpqrstuvwxyz23456789";
+                    let pass = "";
+                    for (let i = 0; i < 10; i++) pass += chars[Math.floor(Math.random() * chars.length)];
+                    setCreateClientForm(p => ({ ...p, password: pass }));
+                  }}
+                  className="shrink-0 h-9 text-xs"
+                >
+                  Generate
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500 mt-1.5">Share these credentials with your client along with the login URL.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateClientOpen(false)}>Cancel</Button>
+            <Button
+              onClick={createClientAccount}
+              disabled={createClientLoading || !createClientForm.email || !createClientForm.password}
+              className="bg-indigo-600 hover:bg-indigo-700 gap-1.5"
+              data-testid="create-client-submit"
+            >
+              <UserPlus className="h-4 w-4" />
+              {createClientLoading ? "Creating..." : "Create Client"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Assignment Dialog */}
+      <Dialog open={createAssignmentOpen} onOpenChange={setCreateAssignmentOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign project to client</DialogTitle>
+            <DialogDescription>
+              The client will see every channel currently in this project. Changes to the project (add/remove channels) surface to them in real time.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm font-medium">Client *</Label>
+              <Select
+                value={assignmentForm.client_user_id}
+                onValueChange={(v) => setAssignmentForm(p => ({ ...p, client_user_id: v }))}
+              >
+                <SelectTrigger className="mt-1" data-testid="assignment-client-select">
+                  <SelectValue placeholder="Select a client account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clientAccounts.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Project *</Label>
+              <Select
+                value={assignmentForm.project_name}
+                onValueChange={(v) => setAssignmentForm(p => ({ ...p, project_name: v }))}
+              >
+                <SelectTrigger className="mt-1" data-testid="assignment-project-select">
+                  <SelectValue placeholder="Select a pipeline project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {adminProjects.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {adminProjects.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1.5">
+                  No projects found. Add channels to a project in the Pipeline first.
+                </p>
+              )}
+            </div>
+            <div className="flex items-center justify-between border rounded-lg p-3">
+              <div>
+                <Label className="text-sm font-medium">Allow CSV export</Label>
+                <p className="text-xs text-slate-500">Let the client download the list. Off by default.</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={assignmentForm.export_enabled}
+                onChange={(e) => setAssignmentForm(p => ({ ...p, export_enabled: e.target.checked }))}
+                className="h-4 w-4"
+                data-testid="assignment-export-toggle"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Access expiry</Label>
+              <p className="text-xs text-slate-500 mb-1.5">Optional. Access auto-revokes on this date.</p>
+              <Input
+                type="date"
+                value={assignmentForm.expires_at}
+                onChange={(e) => setAssignmentForm(p => ({ ...p, expires_at: e.target.value }))}
+                data-testid="assignment-expiry-input"
+              />
+              <div className="flex gap-2 mt-2">
+                {[
+                  { label: "1 week", days: 7 },
+                  { label: "2 weeks", days: 14 },
+                  { label: "1 month", days: 30 },
+                  { label: "3 months", days: 90 },
+                ].map((p) => (
+                  <Button
+                    key={p.label}
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + p.days);
+                      setAssignmentForm(prev => ({ ...prev, expires_at: d.toISOString().split("T")[0] }));
+                    }}
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateAssignmentOpen(false)}>Cancel</Button>
+            <Button
+              onClick={createAssignment}
+              disabled={assignmentLoading || !assignmentForm.client_user_id || !assignmentForm.project_name}
+              className="bg-indigo-600 hover:bg-indigo-700 gap-1.5"
+              data-testid="assignment-submit"
+            >
+              <Sparkles className="h-4 w-4" />
+              {assignmentLoading ? "Assigning..." : "Assign"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 32: Full regression sweep of the Client-facing read-only project view feature. 28/28 backend pytest cases passed (role isolation, admin CRUD on /api/admin/assignments, all four loud guards, expired-assignment 410, export gating 403, sanitisation of pipeline fields). Frontend E2E via Playwright verified: client login auto-redirects to /client/project/{id}, /admin & /dashboard both redirect clients back to /client, Export CSV button renders + downloads a correctly-named CSV (refactor-smoke-project-2026-08-10.csv), and the admin Client Access tab renders both cards with the seeded client + assignment (no error toasts).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_client_access.py",
+    "/app/test_reports/pytest/iter32_client_access.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py continues to grow (now 5903 lines). The whole client-access surface (roles, assignments CRUD, guards, CSV export, sanitisation) is a natural extraction candidate into backend/routers/client_access.py.",
+    "_assert_no_assignment_orphan runs one DB find per source project inside the bulk-project loop (N queries for N distinct source projects). For a 500-id bulk request touching many projects, batch into a single $in aggregation. Not a bug, just a scaling concern.",
+    "Client CSV export streams via StringIO->BytesIO in memory. Fine for the current cap (2000 channels) but should be documented as the ceiling; add an explicit .to_list(2000) guard log if truncated.",
+    "The seeded client fixture depends on 'testclient@brand.com' having exactly one active assignment. If a prior test run leaves stale expired assignments, the auto-redirect-to-single-project branch may break. Consider making seed idempotent or hard-clearing before tests.",
+    "PATCH /admin/assignments/{id} update path mutates `row` with `updates` before pop('_id') and returns it — but `row` was fetched with default projection so it still includes password-free but potentially _id. Verified pop happens; still, safer to project _id:0 in the initial find_one to make the code self-documenting."
+  ],
+  "updated_files": ["/app/backend/tests/test_client_access.py"],
+  "success_rate": {"backend": "100% (28/28)", "frontend": "100% (all 5 flows verified: login redirect, /admin block, /dashboard block, CSV download+filename, admin Client Access tab)"},
+  "seed_data_creation": "Creates one throwaway client user per run (TEST_client_<hex>@example.com) via /api/admin/users; module-scoped, best-effort cleanup in teardown. One temp assignment created + deleted in the same run.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Admin: adrian@affilitube.com / admin123!  •  Client: testclient@brand.com / clientpass123 (pre-seeded assignment 'Refactor smoke project', export_enabled=true).",
+  "context_for_next_testing_agent": "Login response uses key 'token' (not 'access_token'). /api/admin/users returns {success, user_id, email, tier, role} — no 'id' key at top level. Client sanitisation strips {notes, contact_log, outreach_status, follow_up_date, last_status_change, added_to_pipeline_at, business_email_manual, public_links_manual, user_id} plus anything starting with '_'. Loud guards live in _assert_no_assignment_orphan and gate PATCH /channels/{id}/project-name, DELETE /channels/{id}/pipeline, POST /pipeline/bulk-project. Same-name (no-op) rename correctly does NOT trip the guard.",
+  "rca_of_the_issue": "N/A — feature works end-to-end. All 5 stated must-pass flows plus every edge case in the request (expired 410, duplicate 400, non-client target 400, missing project 400, admin token blocked on /client endpoints, client token blocked on /admin & /channels endpoints, export disabled 403) are verified."
+}

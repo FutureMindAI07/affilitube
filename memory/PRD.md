@@ -60,11 +60,47 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - Stripe Price ID: price_1TNvfwBQhyjmku0lRxcunLPq
 
 ## Backlog
-- Bulk actions in Pipeline view (P1)
+- YouTube API quota banner at 70% usage (P1)
+- "Refresh channel data" button in ChannelDetailSheet (P2)
 - Priority support system for Pro tier (P2)
 - Dashboard.jsx refactoring (3800+ lines → break into smaller components) (P2)
-- server.py modularisation (4258 lines → split into routers: auth, search, export, trial, pipeline) (P2)
+- server.py modularisation (5900 lines → split into routers: auth, search, export, trial, pipeline, client_access) (P2)
+- OutreachPipeline.jsx / ChannelDetailSheet.jsx refactor (>1400 / >900 lines each) (P3)
+- Improve public link detection (bit.ly HEAD, TikTok/Facebook/LinkTree regex) (P3)
+- SaaS Radar Phase 4: Productize for users (P3)
+- Batch _assert_no_assignment_orphan into single $in aggregation for large bulk-project requests (P3, perf)
 - Migrate react-helmet → react-helmet-async (P3, removes StrictMode warning)
+
+## Completed (Aug 10, 2026): Client-Facing Read-Only Project View
+Sell curated, vetted YouTube-affiliate lists to DTC brands and agencies. Client accounts have zero access to the admin dashboard, searches, or writes — they only see the projects assigned to them.
+
+**Data model:**
+- `users.role` accepts new value `client` (in addition to `user`, `admin`).
+- New collection `project_assignments`: `{id, client_user_id, owner_user_id (admin), project_name, export_enabled, expires_at, created_at}`.
+
+**Backend (`server.py`):**
+- `get_client_user()` auth dependency (role must be `client`).
+- `_assert_not_client()` gate used on all write endpoints that a client must not hit (project-name PATCH, DELETE pipeline, bulk-project).
+- `_assert_no_assignment_orphan(owner_user_id, project_name, action)` — LOUD 400 guard called by (1) `PATCH /channels/{id}/project-name` when renaming out of the current project, (2) `DELETE /channels/{id}/pipeline` when removing a channel from an assigned project, (3) `POST /pipeline/bulk-project` when moving or clearing. Returns detailed error: `"Cannot {action}: project '{name}' has {n} active client assignment(s). Revoke assignments first..."`.
+- Admin CRUD: `POST/GET/PATCH/DELETE /api/admin/assignments` — enforces: (a) target user must exist and have role=client, (b) project must exist in admin's pipeline, (c) no duplicate (client_user_id, owner_user_id, project_name).
+- Client endpoints: `GET /api/client/assignments` (lists with per-assignment `expired` flag + live `channel_count`), `GET /api/client/assignments/{id}/channels` (410 if expired), `POST /api/client/assignments/{id}/export/csv` (403 if `export_enabled=false` or 410 if expired). CSV columns are a reduced 17-column set (no pipeline state like outreach_status/notes — those are stripped).
+- `_sanitise_channel_for_client()` strips `notes`, `contact_log`, `outreach_status`, `follow_up_date`, `last_status_change`, `added_to_pipeline_at`, `business_email_manual`, `public_links_manual`, `user_id`, and any `_*` prefixed fields before returning to the client.
+
+**Frontend:**
+- `App.js`: new `<ClientRoute>` wrapper (redirects non-clients away from /client). `<ProtectedRoute>` and `<AdminRoute>` both redirect clients into /client. All auth-guarded routes are role-aware.
+- `/pages/client/ClientLayout.jsx` — sticky header with "PREVIEW ACCESS" badge, email, logout.
+- `/pages/client/ClientAssignments.jsx` — grid of assignment cards. Auto-redirects to /client/project/{id} when the client has exactly one active assignment. Expired assignments render disabled.
+- `/pages/client/ClientProjectView.jsx` — read-only card list of vetted creators (channel_name, subs, video count, country, score, upload_consistency, platform badges, contact links, mailto). "Export CSV" button only renders when `assignment.export_enabled=true`.
+- `AdminPanel.jsx` — new "Client Access" tab with two cards:
+  - Clients table (email · assigned projects · created)
+  - Assignments table (client · project · export toggle chip · expiry · delete)
+  - Actions: "+ Create client account" dialog, "+ Assign project" dialog (client dropdown + project dropdown from `/api/pipeline/projects` + export toggle + expiry with quick-preset buttons), "Copy client login URL" affordance.
+
+**Verified (iteration_32):**
+- Backend: 28/28 pytest cases pass — role isolation, admin CRUD, all 4 loud guards return HTTP 400, expired-assignment returns 410, export gating returns 403, sanitisation strips pipeline fields.
+- Frontend: 5/5 flows pass — client login auto-redirects to single project, /admin & /dashboard both redirect clients back to /client, Export CSV downloads a correctly-named CSV, admin Client Access tab renders cards with seeded client + assignment (no error toasts).
+
+**Scope decision:** Clients never see the ChannelDetailSheet (no drill-down). If ever needed, the sheet already has a `readOnly` prop scaffold — this session did not need it.
 
 ## Completed (Feb 26, 2026)
 - **Super Search credit gating + admin gate removed + cached AI grades**: Super Search is now available to all users (admin gate removed). Each run costs **12 credits flat** (deducted atomically before grading). **Soft cap** of 80 channels sent to GPT-4o per run. **Cached AI grades** persist on the channel cache doc for 24h → re-runs charge 0 for previously-graded channels. **Auto-refund** of 12 credits if every AI call fails. **Don't charge** when zero channels reach grading. Response includes `super_search` meta block (`credits_charged`, `cached_grades_used`, `graded_now`, `grading_failed`, `soft_capped`, `refunded`) so the frontend shows clean toasts and refreshes the user credit balance. Insufficient credits returns `402` with structured error payload. Verified end-to-end via curl: 12 credits charged on fresh run (100→88), 0 credits on cached re-run, 402 on insufficient balance.
