@@ -86,6 +86,7 @@ export function ChannelDetailSheet({
   onStatusUpdate,
   onNotesUpdate,
   onUpgradeClick,
+  readOnly = false,
 }) {
   const [sponsorshipData, setSponsorshipData] = useState(null);
   const [sponsorshipLoading, setSponsorshipLoading] = useState(false);
@@ -102,10 +103,18 @@ export function ChannelDetailSheet({
 
   useEffect(() => {
     if (open && channel) {
-      fetchSponsorshipData(channel.channel_id);
+      if (readOnly) {
+        // Read-only mode: sponsorship_data comes embedded on the channel object
+        // (client backend returns it already). Skip the separate fetch which
+        // would 404 for client-role tokens.
+        setSponsorshipData(channel.sponsorship_data || null);
+        setSponsorshipLoading(false);
+      } else {
+        fetchSponsorshipData(channel.channel_id);
+      }
       setContactNoteText("");
     }
-  }, [open, channel?.channel_id]);
+  }, [open, channel?.channel_id, readOnly]);
 
   const fetchSponsorshipData = async (channelId) => {
     setSponsorshipData(null);
@@ -228,7 +237,9 @@ export function ChannelDetailSheet({
     }
   };
 
-  const isPro = userTier === "pro" || userTier === "appsumo";
+  // In read-only client mode, always show full BI data — clients are paid
+  // buyers, not upsell targets.
+  const isPro = readOnly || userTier === "pro" || userTier === "appsumo";
 
   if (!channel) return null;
 
@@ -297,7 +308,8 @@ export function ChannelDetailSheet({
 
           <Separator />
 
-          {/* Outreach Tracking */}
+          {/* Outreach Tracking — hidden in client read-only mode */}
+          {!readOnly && (
           <div>
             <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
               <Handshake className="h-4 w-4 text-indigo-500" />
@@ -397,6 +409,7 @@ export function ChannelDetailSheet({
               )}
             </div>
           </div>
+          )}
 
           <Separator />
 
@@ -448,7 +461,7 @@ export function ChannelDetailSheet({
                     </span>
                   )}
                 </p>
-                {!editingEmail && (
+                {!editingEmail && !readOnly && (
                   <button
                     type="button"
                     onClick={startEditEmail}
@@ -508,7 +521,11 @@ export function ChannelDetailSheet({
                   {channel.business_email}
                 </a>
               ) : (
-                <p className="text-xs text-slate-500 italic">No email detected — add one manually to include in outreach and exports.</p>
+                <p className="text-xs text-slate-500 italic">
+                  {readOnly
+                    ? "No public business email listed by this creator."
+                    : "No email detected — add one manually to include in outreach and exports."}
+                </p>
               )}
             </div>
           </div>
@@ -626,6 +643,9 @@ export function ChannelDetailSheet({
                 const url = (channel.public_links || {})[key];
                 const isManual = (channel.public_links_manual || []).includes(key);
                 const isEditing = editingLink === key;
+                // In read-only mode, skip rows that have no URL — clients only
+                // see actual populated links.
+                if (readOnly && !url) return null;
                 return (
                   <div key={key} className="flex items-center gap-2 py-1" data-testid={`contact-link-row-${key}`}>
                     <span className="text-xs text-slate-500 w-20 shrink-0">{label}</span>
@@ -681,6 +701,7 @@ export function ChannelDetailSheet({
                             manual
                           </span>
                         )}
+                        {!readOnly && (
                         <button
                           type="button"
                           onClick={() => startEditLink(key, url)}
@@ -690,6 +711,7 @@ export function ChannelDetailSheet({
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
+                        )}
                       </>
                     ) : (
                       <button
@@ -885,7 +907,8 @@ export function ChannelDetailSheet({
 
           <Separator />
 
-          {/* Notes */}
+          {/* Notes — hidden in client read-only mode */}
+          {!readOnly && (
           <div>
             <h4 className="text-sm font-semibold mb-3">Notes</h4>
             <Textarea
@@ -898,9 +921,11 @@ export function ChannelDetailSheet({
               data-testid="pipeline-channel-notes-input"
             />
           </div>
+          )}
 
           {/* Actions */}
           <div className="space-y-2 pt-4">
+            {!readOnly && (
             <div className="flex items-center gap-2 p-2 rounded-lg bg-indigo-50 border border-indigo-100">
               <Handshake className="h-4 w-4 text-indigo-600" />
               <span className="text-sm font-medium text-indigo-700">In Pipeline</span>
@@ -908,6 +933,7 @@ export function ChannelDetailSheet({
                 <Badge variant="outline" className="text-xs border-indigo-200 text-indigo-600">{channel.project_name}</Badge>
               )}
             </div>
+            )}
             <Button variant="outline" className="w-full" asChild>
               <a href={channel.channel_url} target="_blank" rel="noopener noreferrer">
                 <Youtube className="h-4 w-4 mr-2" />

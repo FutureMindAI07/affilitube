@@ -90,7 +90,8 @@ Sell curated, vetted YouTube-affiliate lists to DTC brands and agencies. Client 
 - `App.js`: new `<ClientRoute>` wrapper (redirects non-clients away from /client). `<ProtectedRoute>` and `<AdminRoute>` both redirect clients into /client. All auth-guarded routes are role-aware.
 - `/pages/client/ClientLayout.jsx` — sticky header with "PREVIEW ACCESS" badge, email, logout.
 - `/pages/client/ClientAssignments.jsx` — grid of assignment cards. Auto-redirects to /client/project/{id} when the client has exactly one active assignment. Expired assignments render disabled.
-- `/pages/client/ClientProjectView.jsx` — read-only card list of vetted creators (channel_name, subs, video count, country, score, upload_consistency, platform badges, contact links, mailto). "Export CSV" button only renders when `assignment.export_enabled=true`.
+- `/pages/client/ClientProjectView.jsx` — read-only card list of vetted creators. Clicking any card opens `ChannelDetailSheet` on the right (same component as admin pipeline) with `readOnly={true}`. "Export CSV" button only renders when `assignment.export_enabled=true`.
+- `components/ChannelDetailSheet.jsx` — new `readOnly` prop. When true: hides the entire Outreach Tracking section, Notes textarea, "In Pipeline" indicator, business-email edit pencil, and manual-add affordances on contact links; filters contact-link rows to only populated ones; auto-unlocks Brand Intelligence brands/promo codes (clients are paid buyers, not upsell targets); reads embedded `channel.sponsorship_data` instead of hitting `/channels/{id}/sponsorship-data` (which 404s for client tokens).
 - `AdminPanel.jsx` — new "Client Access" tab with two cards:
   - Clients table (email · assigned projects · created)
   - Assignments table (client · project · export toggle chip · expiry · delete)
@@ -100,7 +101,7 @@ Sell curated, vetted YouTube-affiliate lists to DTC brands and agencies. Client 
 - Backend: 28/28 pytest cases pass — role isolation, admin CRUD, all 4 loud guards return HTTP 400, expired-assignment returns 410, export gating returns 403, sanitisation strips pipeline fields.
 - Frontend: 5/5 flows pass — client login auto-redirects to single project, /admin & /dashboard both redirect clients back to /client, Export CSV downloads a correctly-named CSV, admin Client Access tab renders cards with seeded client + assignment (no error toasts).
 
-**Scope decision:** Clients never see the ChannelDetailSheet (no drill-down). If ever needed, the sheet already has a `readOnly` prop scaffold — this session did not need it.
+**Scope decision:** Same detail-sheet component as the admin pipeline (`ChannelDetailSheet`), driven by a new `readOnly` prop. Ensures visual and interaction parity between what the admin sees and what the client sees, so the depth-of-data pitch survives the handoff.
 
 ## Completed (Feb 26, 2026)
 - **Super Search credit gating + admin gate removed + cached AI grades**: Super Search is now available to all users (admin gate removed). Each run costs **12 credits flat** (deducted atomically before grading). **Soft cap** of 80 channels sent to GPT-4o per run. **Cached AI grades** persist on the channel cache doc for 24h → re-runs charge 0 for previously-graded channels. **Auto-refund** of 12 credits if every AI call fails. **Don't charge** when zero channels reach grading. Response includes `super_search` meta block (`credits_charged`, `cached_grades_used`, `graded_now`, `grading_failed`, `soft_capped`, `refunded`) so the frontend shows clean toasts and refreshes the user credit balance. Insufficient credits returns `402` with structured error payload. Verified end-to-end via curl: 12 credits charged on fresh run (100→88), 0 credits on cached re-run, 402 on insufficient balance.

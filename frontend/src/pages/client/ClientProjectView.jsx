@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,6 +10,7 @@ import { formatNumber } from "@/lib/formatters";
 import { selectVisiblePlatforms, platformLabelFor } from "@/lib/affiliatePlatformDisplay";
 import { flagEmoji, countryName } from "@/lib/countries";
 import { toast } from "sonner";
+import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -20,6 +21,16 @@ export default function ClientProjectView() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  // Axios instance passed to ChannelDetailSheet. Client tokens can't hit
+  // /channels/{id}/sponsorship-data (returns 404), so the sheet is told to
+  // use embedded channel.sponsorship_data via readOnly=true.
+  const api = useMemo(() => axios.create({
+    baseURL: API,
+    headers: { Authorization: `Bearer ${token}` },
+  }), [token]);
 
   useEffect(() => {
     (async () => {
@@ -57,6 +68,11 @@ export default function ClientProjectView() {
     }
   };
 
+  const openChannelSheet = (ch) => {
+    setSelectedChannel(ch);
+    setSheetOpen(true);
+  };
+
   if (error) {
     return (
       <div className="text-center py-24">
@@ -92,24 +108,39 @@ export default function ClientProjectView() {
         )}
       </div>
 
+      <p className="text-xs text-slate-400 mb-3">Click any creator to see the full profile — scores, health signals, brand intelligence, and past sponsorship history.</p>
+
       <div className="space-y-3">
         {channels.map((ch) => {
           const { visible, hiddenCount, hiddenLabels } = selectVisiblePlatforms(ch.affiliate_platforms_found, 2);
           const links = ch.public_links || {};
           return (
-            <Card key={ch.channel_id} data-testid={`client-creator-card-${ch.channel_id}`}>
+            <Card
+              key={ch.channel_id}
+              className="cursor-pointer hover:border-indigo-300 hover:shadow-sm transition"
+              onClick={() => openChannelSheet(ch)}
+              data-testid={`client-creator-card-${ch.channel_id}`}
+            >
               <CardContent className="py-4">
                 <div className="flex items-start gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <a href={ch.channel_url} target="_blank" rel="noopener noreferrer"
-                         className="font-semibold text-slate-900 hover:underline flex items-center gap-1">
+                      <span className="font-semibold text-slate-900 hover:text-indigo-700">
                         {ch.channel_name}
-                        <ExternalLink className="h-3 w-3 text-slate-400" />
+                      </span>
+                      <a
+                        href={ch.channel_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-slate-400 hover:text-slate-700"
+                        title="Open on YouTube"
+                      >
+                        <ExternalLink className="h-3 w-3" />
                       </a>
                       {ch.country_name && (
-                        <span className="text-xs text-slate-500" title={countryName(ch.country_code)}>
-                          {flagEmoji(ch.country_code)} {ch.country_name}
+                        <span className="text-xs text-slate-500" title={countryName(ch.country_code || ch.country)}>
+                          {flagEmoji(ch.country_code || ch.country)} {ch.country_name}
                         </span>
                       )}
                     </div>
@@ -145,12 +176,16 @@ export default function ClientProjectView() {
                   </div>
                   <div className="text-right shrink-0 space-y-1 text-sm">
                     {ch.business_email && (
-                      <a href={`mailto:${ch.business_email}`} className="flex items-center gap-1 justify-end text-blue-600 hover:underline">
+                      <a
+                        href={`mailto:${ch.business_email}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1 justify-end text-blue-600 hover:underline"
+                      >
                         <Mail className="h-3.5 w-3.5" />
                         <span className="text-xs truncate max-w-[200px]">{ch.business_email}</span>
                       </a>
                     )}
-                    <div className="flex gap-2 justify-end flex-wrap">
+                    <div className="flex gap-2 justify-end flex-wrap" onClick={(e) => e.stopPropagation()}>
                       {links.instagram && <a href={links.instagram} target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 hover:text-slate-800">IG</a>}
                       {links.twitter && <a href={links.twitter} target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 hover:text-slate-800">X</a>}
                       {links.linkedin && <a href={links.linkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 hover:text-slate-800">LI</a>}
@@ -164,6 +199,16 @@ export default function ClientProjectView() {
           );
         })}
       </div>
+
+      {/* Read-only detail sheet — same component as the admin pipeline */}
+      <ChannelDetailSheet
+        channel={selectedChannel}
+        open={sheetOpen}
+        onOpenChange={(v) => { setSheetOpen(v); if (!v) setSelectedChannel(null); }}
+        api={api}
+        userTier="pro"
+        readOnly={true}
+      />
     </div>
   );
 }
