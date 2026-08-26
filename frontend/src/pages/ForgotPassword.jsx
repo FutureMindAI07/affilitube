@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Youtube, ArrowRight, Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import {ArrowRight, Loader2, ArrowLeft, CheckCircle2} from "lucide-react";
 import { motion } from "framer-motion";
 import axios from "axios";
 
@@ -62,7 +62,7 @@ export default function ForgotPassword() {
       <nav className="relative px-6 h-16 flex items-center">
         <a href="/" className="flex items-center gap-2.5">
           <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Youtube className="h-5 w-5 text-white" />
+            <span className="font-heading font-black text-white text-xs tracking-tighter leading-none select-none">AT</span>
           </div>
           <span className="font-heading font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Affilitube</span>
         </a>

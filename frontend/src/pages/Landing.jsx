@@ -1,18 +1,4 @@
-import {
-  Search,
-  BarChart3,
-  Target,
-  Download,
-  Zap,
-  CheckCircle2,
-  ChevronDown,
-  Wrench,
-  Link2,
-  Youtube,
-  ArrowRight,
-  Sparkles,
-  LayoutGrid,
-} from "lucide-react";
+import {Search, BarChart3, Target, Download, Zap, CheckCircle2, ChevronDown, Wrench, Link2, ArrowRight, Sparkles, LayoutGrid} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -186,7 +172,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Youtube className="h-5 w-5 text-white" />
+              <span className="font-heading font-black text-white text-xs tracking-tighter leading-none select-none">AT</span>
             </div>
             <span className="font-heading font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Affilitube</span>
           </div>
@@ -545,7 +531,7 @@ export default function Landing() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2.5">
               <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
-                <Youtube className="h-4 w-4 text-white" />
+                <span className="font-heading font-black text-white text-[11px] tracking-tighter leading-none select-none">AT</span>
               </div>
               <span className="text-slate-300 font-heading font-semibold">Affilitube</span>
             </div>
@@ -554,6 +540,7 @@ export default function Landing() {
               <a href="/privacy" className="hover:text-white transition-colors">Privacy</a>
               <a href="/affilitube-affiliate-program" className="hover:text-white transition-colors">Partner Program</a>
               <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
+              <a href="mailto:support@affilitube.com" className="hover:text-white transition-colors" data-testid="footer-contact-email">support@affilitube.com</a>
             </div>
             <p>&copy; {new Date().getFullYear()} Affilitube. All rights reserved.</p>
           </div>

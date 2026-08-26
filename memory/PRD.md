@@ -71,6 +71,31 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - Batch _assert_no_assignment_orphan into single $in aggregation for large bulk-project requests (P3, perf)
 - Migrate react-helmet → react-helmet-async (P3, removes StrictMode warning)
 
+## Completed (Aug 26, 2026): YouTube Compliance — Legal & Branding (Policy III.A.1, III.A.2c, III.A.2i, III.F.2a/b)
+Response to Google Developer Policy compliance report addressing four items alongside the 30-day retention work.
+
+**1. YouTube ToS reference (Policy III.A.1)** — `Terms.jsx` now has a dedicated section 1a "YouTube Terms of Service" with a direct linked reference to `https://www.youtube.com/t/terms`, informing users that using Affilitube constitutes agreement to the YouTube Terms of Service.
+
+**2. Google Privacy Policy reference (Policy III.A.2c)** — `Privacy.jsx` section 3 (YouTube Data) now includes a linked reference to `http://www.google.com/policies/privacy` plus a linked pointer to the Google security-settings page for revoking API access.
+
+**3. Contact information (Policy III.A.2i)** — `support@affilitube.com` mailto link visible in:
+- Every marketing footer: `Landing`, `FreeLanding`, `GetStartedFree`, `AffiliatesLanding`, `SaaSFoundersLanding`, `PartnerProgramLanding`, `Pricing`, `BlogAffiliateSaaS`, `Terms`, `Privacy`
+- Logged-in dashboard user menu ("Contact Support" item)
+- Client-facing layout footer for buyers
+- Section 12 of both Terms and Privacy
+
+**4. Logo redesign (Policy III.F.2a/b)** — New "AT" monogram logo replaces the prior YouTube play-button-style icon everywhere:
+- New reusable component `components/BrandMark.jsx` (kept purple/indigo gradient scheme, "AT" in bold Outfit weight-900 white, tight letter-spacing, rounded square tile)
+- Every page header/nav/footer/auth-page logo instance across 20 files swapped: `FreeLanding`, `Landing`, `Login`, `Signup`, `ForgotPassword`, `Pricing`, `Privacy`, `Terms`, `CheckoutSuccess`, `AdminPanel`, `OutreachPage`, `OutreachPipeline`, `GetStartedFree`, `GettingStarted`, `GettingStartedPage`, `AffiliatesLanding`, `PartnerProgramLanding`, `SaaSFoundersLanding`, `BlogAffiliateSaaS`, `dashboard/DashboardHeader`
+- Legitimate-reference Youtube icons also swapped away to remove all play-button shapes: `Youtube` → `Play` on the GettingStarted tutorials section, `Youtube` → `ExternalLink` on the "View Channel" outbound buttons in both `ChannelDetailSheet` variants
+- New SVG favicon (`public/favicon.svg`) with the same "AT" monogram, wired up via `<link rel="icon">` and `<link rel="apple-touch-icon">` in `index.html`; browser tab and homescreen icons now match the app UI
+- `theme-color` meta tag updated from `#000000` to `#4f46e5` to match the new brand
+- Unused `Youtube` lucide-react imports removed from all 20 pages
+- Full codebase grep verified: zero `<Youtube ` JSX references remain
+
+**Files changed:** 26 files across `frontend/src/pages/`, `frontend/src/components/`, `frontend/public/`.
+
+
 ## Completed (Aug 26, 2026): YouTube 30-Day Data Retention Compliance (Google Developer Policy)
 Google Developer Policy: API Client must not display or store statistics/metadata retrieved via the YouTube Data API for more than 30 days without refresh. Full implementation matching the policy requirement of "refresh-or-delete within 30 days".
 

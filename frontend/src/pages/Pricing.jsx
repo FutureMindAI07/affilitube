@@ -1,4 +1,4 @@
-import { CheckCircle2, X, Youtube, Zap, ArrowRight, Crown } from "lucide-react";
+import {CheckCircle2, X, Zap, ArrowRight, Crown} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -136,7 +136,7 @@ export default function Pricing() {
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Youtube className="h-5 w-5 text-white" />
+              <span className="font-heading font-black text-white text-xs tracking-tighter leading-none select-none">AT</span>
             </div>
             <span className="font-heading font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Affilitube</span>
           </a>
@@ -348,10 +348,11 @@ export default function Pricing() {
       <footer className="py-8 border-t border-slate-100">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-500">
           <p>&copy; {new Date().getFullYear()} Affilitube. All rights reserved.</p>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6 flex-wrap">
             <a href="/terms" className="hover:text-slate-700 transition-colors">Terms</a>
             <a href="/privacy" className="hover:text-slate-700 transition-colors">Privacy</a>
             <a href="/affilitube-affiliate-program" className="hover:text-slate-700 transition-colors">Partner Program</a>
+            <a href="mailto:support@affilitube.com" className="hover:text-slate-700 transition-colors" data-testid="footer-contact-email">support@affilitube.com</a>
           </div>
         </div>
       </footer>

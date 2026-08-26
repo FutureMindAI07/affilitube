@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Youtube, Search, Mail, BookOpen, LayoutGrid, Sparkles, Target, Download, CheckCircle2 } from "lucide-react";
+import { Play, Search, Mail, BookOpen, LayoutGrid, Sparkles, Target, Download, CheckCircle2 } from "lucide-react";
 
 const quickStartSteps = [
   {
@@ -64,7 +64,7 @@ export default function GettingStarted() {
           <div className="flex items-center gap-3">
             <a href="/" className="flex items-center gap-2.5">
               <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <Youtube className="h-4 w-4 text-white" />
+                <span className="font-heading font-black text-white text-[11px] tracking-tighter leading-none select-none">AT</span>
               </div>
               <span className="font-heading font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 hidden sm:inline">Affilitube</span>
             </a>
@@ -187,7 +187,7 @@ export default function GettingStarted() {
         {/* Video Tutorials */}
         <section>
           <h2 className="font-heading text-xl font-semibold text-slate-900 mb-6 flex items-center gap-2">
-            <Youtube className="h-5 w-5 text-red-500" />
+            <Play className="h-5 w-5 text-indigo-500" />
             Video Tutorials
           </h2>
           <div className="grid md:grid-cols-3 gap-4">
@@ -195,7 +195,7 @@ export default function GettingStarted() {
               <Card key={t.title} className="bg-white/80 border-slate-100 overflow-hidden group hover:shadow-md transition-shadow">
                 <div className="relative aspect-video bg-slate-100 flex items-center justify-center">
                   <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center">
-                    <Youtube className="h-6 w-6 text-slate-400" />
+                    <Play className="h-6 w-6 text-slate-400" />
                   </div>
                   <span className="absolute bottom-2 right-2 text-xs bg-black/70 text-white px-2 py-0.5 rounded">{t.duration}</span>
                 </div>

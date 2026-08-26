@@ -1,4 +1,4 @@
-import { Youtube, Search, Sparkles, Zap, BarChart3, ArrowRight, CheckCircle2, X, Target, TrendingUp } from "lucide-react";
+import {Search, Sparkles, Zap, BarChart3, ArrowRight, CheckCircle2, X, Target, TrendingUp} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -71,7 +71,7 @@ export default function FreeLanding() {
       <div className="px-6 h-16 flex items-center justify-center">
         <a href="/" className="flex items-center gap-2.5">
           <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Youtube className="h-5 w-5 text-white" />
+            <span className="font-heading font-black text-white text-xs tracking-tighter leading-none select-none">AT</span>
           </div>
           <span className="font-heading font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
             Affilitube
@@ -270,7 +270,7 @@ export default function FreeLanding() {
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <a href="/" className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center">
-              <Youtube className="h-4 w-4 text-white" />
+              <span className="font-heading font-black text-white text-[11px] tracking-tighter leading-none select-none">AT</span>
             </div>
             <span className="font-heading font-bold text-sm bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
               Affilitube
@@ -280,6 +280,7 @@ export default function FreeLanding() {
             <Link to="/privacy" className="hover:text-slate-600 transition-colors">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-slate-600 transition-colors">Terms of Service</Link>
             <Link to="/affilitube-affiliate-program" className="hover:text-slate-600 transition-colors">Partner Program</Link>
+            <a href="mailto:support@affilitube.com" className="hover:text-slate-600 transition-colors" data-testid="footer-contact-email">support@affilitube.com</a>
           </div>
           <p className="text-xs text-slate-400">&copy; {new Date().getFullYear()} Affilitube</p>
         </div>

@@ -39,6 +39,12 @@ export default function ClientLayout() {
       <main className="max-w-6xl mx-auto px-4 py-6">
         <Outlet />
       </main>
+      <footer className="max-w-6xl mx-auto px-4 py-6 mt-8 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+        <span>&copy; {new Date().getFullYear()} Affilitube</span>
+        <a href="mailto:support@affilitube.com" className="hover:text-slate-800" data-testid="client-footer-contact-email">
+          Questions? support@affilitube.com
+        </a>
+      </footer>
     </div>
   );
 }

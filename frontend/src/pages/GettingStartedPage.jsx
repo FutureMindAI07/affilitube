@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Youtube, Search, Mail, BookOpen, LogOut, Bug, Loader2 } from "lucide-react";
+import {Search, Mail, BookOpen, LogOut, Bug, Loader2} from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
 import GettingStarted from "@/pages/GettingStarted";
@@ -50,7 +50,7 @@ export default function GettingStartedPage() {
         <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Youtube className="h-4 w-4 text-white" />
+              <span className="font-heading font-black text-white text-[11px] tracking-tighter leading-none select-none">AT</span>
             </div>
             <span className="font-heading font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 hidden sm:inline">Affilitube</span>
           </a>

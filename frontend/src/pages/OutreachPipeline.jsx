@@ -29,42 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Youtube,
-  Search,
-  Mail,
-  BookOpen,
-  Users,
-  Calendar,
-  Clock,
-  ExternalLink,
-  RefreshCw,
-  Filter,
-  AlertCircle,
-  CheckCircle2,
-  XCircle,
-  MessageSquare,
-  ArrowRight,
-  Handshake,
-  Shield,
-  FolderOpen,
-  Pencil,
-  Check,
-  Info,
-  ArrowUpDown,
-  SlidersHorizontal,
-  Sparkles,
-  Loader2,
-  Copy,
-  RefreshCcw,
-  ChevronDown,
-  ChevronUp,
-  Settings,
-  CreditCard,
-  Plus,
-  Download,
-  Trash2,
-} from "lucide-react";
+import {Search, Mail, BookOpen, Users, Calendar, Clock, ExternalLink, RefreshCw, Filter, AlertCircle, CheckCircle2, XCircle, MessageSquare, ArrowRight, Handshake, Shield, FolderOpen, Pencil, Check, Info, ArrowUpDown, SlidersHorizontal, Sparkles, Loader2, Copy, RefreshCcw, ChevronDown, ChevronUp, Settings, CreditCard, Plus, Download, Trash2} from "lucide-react";
 import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
 import TrialBanner from "@/components/TrialBanner";
 import CountryFilter from "@/components/CountryFilter";
@@ -592,7 +557,7 @@ export default function OutreachPipeline() {
           <div className="flex items-center gap-3">
             <a href="/" className="flex items-center gap-2.5">
               <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <Youtube className="h-4 w-4 text-white" />
+                <span className="font-heading font-black text-white text-[11px] tracking-tighter leading-none select-none">AT</span>
               </div>
               <span className="font-heading font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 hidden sm:inline">Affilitube</span>
             </a>

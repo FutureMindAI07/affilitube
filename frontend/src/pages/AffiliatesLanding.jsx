@@ -5,23 +5,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Search,
-  BarChart3,
-  Target,
-  Zap,
-  CheckCircle2,
-  Youtube,
-  ArrowRight,
-  Sparkles,
-  Users,
-  Mail,
-  Activity,
-  Gift,
-  Clock,
-  TrendingUp,
-  Shield,
-} from "lucide-react";
+import {Search, BarChart3, Target, Zap, CheckCircle2, ArrowRight, Sparkles, Users, Mail, Activity, Gift, Clock, TrendingUp, Shield} from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -64,7 +48,7 @@ export default function AffiliatesLanding() {
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
-              <Youtube className="h-4 w-4 text-white" />
+              <span className="font-heading font-black text-white text-[11px] tracking-tighter leading-none select-none">AT</span>
             </div>
             <span className="font-heading font-bold text-white">Affilitube</span>
           </a>
@@ -470,7 +454,7 @@ export default function AffiliatesLanding() {
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
-              <Youtube className="h-3 w-3 text-white" />
+              <span className="font-heading font-black text-white text-[9px] tracking-tighter leading-none select-none">AT</span>
             </div>
             <span className="text-sm text-slate-500">Affilitube</span>
           </div>
@@ -480,6 +464,7 @@ export default function AffiliatesLanding() {
             <a href="/pricing" className="hover:text-slate-300 transition-colors">Pricing</a>
             <a href="/affilitube-affiliate-program" className="hover:text-slate-300 transition-colors">Partner Program</a>
             <a href="/login" className="hover:text-slate-300 transition-colors">Login</a>
+            <a href="mailto:support@affilitube.com" className="hover:text-slate-300 transition-colors" data-testid="footer-contact-email">support@affilitube.com</a>
           </div>
         </div>
       </footer>

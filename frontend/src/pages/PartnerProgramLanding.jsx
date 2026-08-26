@@ -7,23 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Youtube,
-  ArrowRight,
-  CheckCircle2,
-  Star,
-  Clock,
-  Shield,
-  TrendingUp,
-  Cookie,
-  DollarSign,
-  RefreshCw,
-  Sparkles,
-  Award,
-  Loader2,
-  CheckCircle,
-  Image as ImageIcon,
-} from "lucide-react";
+import {ArrowRight, CheckCircle2, Star, Clock, Shield, TrendingUp, Cookie, DollarSign, RefreshCw, Sparkles, Award, Loader2, CheckCircle, Image as ImageIcon} from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -84,7 +68,7 @@ export default function PartnerProgramLanding() {
           <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
             <a href="/" className="flex items-center gap-2.5">
               <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
-                <Youtube className="h-4 w-4 text-white" />
+                <span className="font-heading font-black text-white text-[11px] tracking-tighter leading-none select-none">AT</span>
               </div>
               <span className="font-heading font-bold text-white">Affilitube</span>
             </a>
@@ -587,15 +571,16 @@ export default function PartnerProgramLanding() {
           <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
-                <Youtube className="h-3 w-3 text-white" />
+                <span className="font-heading font-black text-white text-[9px] tracking-tighter leading-none select-none">AT</span>
               </div>
               <span className="text-sm text-slate-500">Affilitube</span>
             </div>
-            <div className="flex items-center gap-6 text-sm text-slate-500">
+            <div className="flex items-center gap-6 text-sm text-slate-500 flex-wrap">
               <a href="/terms" className="hover:text-slate-300 transition-colors">Terms</a>
               <a href="/privacy" className="hover:text-slate-300 transition-colors">Privacy</a>
               <a href="/pricing" className="hover:text-slate-300 transition-colors">Pricing</a>
               <a href="/login" className="hover:text-slate-300 transition-colors">Login</a>
+              <a href="mailto:support@affilitube.com" className="hover:text-slate-300 transition-colors" data-testid="footer-contact-email">support@affilitube.com</a>
             </div>
           </div>
         </footer>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Youtube, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import {CheckCircle2, Loader2, XCircle} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import axios from "axios";
 
@@ -49,7 +49,7 @@ export default function CheckoutSuccess() {
     <div className="min-h-screen bg-white font-body flex flex-col items-center justify-center px-6">
       <a href="/" className="flex items-center gap-2.5 mb-12">
         <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-          <Youtube className="h-5 w-5 text-white" />
+          <span className="font-heading font-black text-white text-xs tracking-tighter leading-none select-none">AT</span>
         </div>
         <span className="font-heading font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Affilitube</span>
       </a>

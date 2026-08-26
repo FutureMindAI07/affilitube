@@ -1,4 +1,4 @@
-import { Youtube, ArrowLeft } from "lucide-react";
+import {ArrowLeft} from "lucide-react";
 import { Link } from "react-router-dom";
 
 export default function Terms() {
@@ -8,7 +8,7 @@ export default function Terms() {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Youtube className="h-5 w-5 text-white" />
+              <span className="font-heading font-black text-white text-xs tracking-tighter leading-none select-none">AT</span>
             </div>
             <span className="font-heading font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Affilitube</span>
           </Link>
@@ -26,6 +26,9 @@ export default function Terms() {
         <div className="legal-prose text-sm leading-relaxed">
           <h2>1. Acceptance of Terms</h2>
           <p>By accessing or using Affilitube ("the Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, do not use the Service.</p>
+
+          <h2>1a. YouTube Terms of Service</h2>
+          <p>Affilitube uses the YouTube Data API v3 to retrieve publicly available data from YouTube. By accessing or using the Service, you also agree to be bound by the <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">YouTube Terms of Service</a>. If you do not agree to the YouTube Terms of Service, you must not use Affilitube.</p>
 
           <h2>2. Description of Service</h2>
           <p>The Service is a web-based tool that helps users identify and evaluate YouTube channels as potential affiliate marketing partners across multiple niches. The Service uses the YouTube Data API v3 to retrieve publicly available channel and video information.</p>
@@ -70,16 +73,17 @@ export default function Terms() {
           <p>We may suspend or terminate your account if you violate these terms or engage in abusive behavior. Upon termination, your access to saved data will be revoked, though we may retain certain information as required by law.</p>
 
           <h2>12. Contact</h2>
-          <p>If you have questions about these Terms, please contact us through the Service's bug report feature or support channels.</p>
+          <p>If you have questions about these Terms, please email us at <a href="mailto:support@affilitube.com" className="text-indigo-600 hover:underline">support@affilitube.com</a>.</p>
         </div>
       </div>
 
       <footer className="py-8 border-t border-slate-100 text-sm text-slate-400">
-        <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <span>&copy; {new Date().getFullYear()} Affilitube</span>
-          <div className="flex gap-6">
+          <div className="flex flex-wrap gap-6">
             <Link to="/terms" className="text-indigo-600 font-medium">Terms</Link>
             <Link to="/privacy" className="hover:text-slate-600 transition-colors">Privacy</Link>
+            <a href="mailto:support@affilitube.com" className="hover:text-slate-600 transition-colors" data-testid="footer-contact-email">support@affilitube.com</a>
           </div>
         </div>
       </footer>

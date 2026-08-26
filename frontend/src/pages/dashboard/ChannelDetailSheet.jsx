@@ -25,29 +25,7 @@
  */
 import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
-import {
-  ExternalLink,
-  Handshake,
-  Sparkles,
-  Plus,
-  Lock,
-  CheckCircle2,
-  ListChecks,
-  Youtube,
-  XCircle,
-  MessageSquare,
-  Activity,
-  Gift,
-  ArrowUp,
-  ArrowDown,
-  Minus,
-  Link as LinkIcon,
-  ShoppingBag,
-  Mail,
-  Wrench,
-  Loader2,
-  ExternalLink as ExternalLinkIcon,
-} from "lucide-react";
+import {ExternalLink, Handshake, Sparkles, Plus, Lock, CheckCircle2, ListChecks, XCircle, MessageSquare, Activity, Gift, ArrowUp, ArrowDown, Minus, Link as LinkIcon, ShoppingBag, Mail, Wrench, Loader2, ExternalLink as ExternalLinkIcon} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -782,8 +760,8 @@ export default function ChannelDetailSheet({
                   </Button>
                   <Button variant="outline" asChild>
                     <a href={channel.channel_url} target="_blank" rel="noopener noreferrer">
-                      <Youtube className="h-4 w-4 mr-2" />
-                      View Channel
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open Channel
                     </a>
                   </Button>
                 </div>

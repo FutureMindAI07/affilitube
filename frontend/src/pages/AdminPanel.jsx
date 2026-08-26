@@ -25,34 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Users,
-  Search,
-  DollarSign,
-  Activity,
-  Gauge,
-  TrendingUp,
-  Calendar,
-  Mail,
-  Trash2,
-  Edit,
-  Youtube,
-  Clock,
-  BarChart3,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  Shield,
-  ArrowLeft,
-  Sparkles,
-  UserPlus,
-  CalendarClock,
-  Handshake,
-  Radar,
-  UserCog,
-  Link2,
-  Copy,
-} from "lucide-react";
+import {Users, Search, DollarSign, Activity, Gauge, TrendingUp, Calendar, Mail, Trash2, Edit, Clock, BarChart3, RefreshCw, ChevronLeft, ChevronRight, Shield, ArrowLeft, Sparkles, UserPlus, CalendarClock, Handshake, Radar, UserCog, Link2, Copy} from "lucide-react";
 import SaaSRadarPanel from "@/components/SaaSRadarPanel";
 
 const API = `${import.meta.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_BACKEND_URL}/api`;
@@ -465,7 +438,7 @@ export default function AdminPanel() {
           <div className="flex items-center gap-4">
             <a href="/" className="flex items-center gap-2.5">
               <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <Youtube className="h-4 w-4 text-white" />
+                <span className="font-heading font-black text-white text-[11px] tracking-tighter leading-none select-none">AT</span>
               </div>
               <span className="font-heading font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Affilitube</span>
             </a>

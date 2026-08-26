@@ -16,27 +16,7 @@
 import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  Search,
-  Handshake,
-  Mail,
-  BookOpen,
-  History,
-  FileText,
-  Clock,
-  Eye,
-  Trash2,
-  Play,
-  Zap,
-  Gauge,
-  Shield,
-  Youtube,
-  CreditCard,
-  Bug,
-  LogOut,
-  User as UserIcon,
-  ChevronDown as ChevronDownIcon,
-} from "lucide-react";
+import {Search, Handshake, Mail, BookOpen, History, FileText, Clock, Eye, Trash2, Play, Zap, Gauge, Shield, CreditCard, Bug, LogOut, User as UserIcon, ChevronDown as ChevronDownIcon} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -95,7 +75,7 @@ export default function DashboardHeader({
           <div className="flex items-center gap-3">
             <a href="/" className="flex items-center gap-2.5">
               <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <Youtube className="h-4 w-4 text-white" />
+                <span className="font-heading font-black text-white text-[11px] tracking-tighter leading-none select-none">AT</span>
               </div>
               <span className="font-heading font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 hidden sm:inline">Affilitube</span>
             </a>
@@ -396,6 +376,14 @@ export default function DashboardHeader({
                 <DropdownMenuItem className="gap-2 cursor-pointer" onClick={onOpenBugReport} data-testid="bug-report-btn">
                   <Bug className="h-4 w-4" />
                   Report a Bug
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2 cursor-pointer"
+                  onClick={() => { window.location.href = "mailto:support@affilitube.com"; }}
+                  data-testid="header-contact-support"
+                >
+                  <Mail className="h-4 w-4" />
+                  Contact Support
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="gap-2 cursor-pointer text-red-600 focus:text-red-600" onClick={() => { navigate("/"); setTimeout(onLogout, 100); }} data-testid="logout-btn">

@@ -21,26 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  ExternalLink,
-  Youtube,
-  Mail,
-  CheckCircle2,
-  Handshake,
-  MessageSquare,
-  XCircle,
-  Gift,
-  Loader2,
-  ArrowUp,
-  ArrowDown,
-  Minus,
-  Activity,
-  Lock,
-  Pencil,
-  Check,
-  X,
-  Plus,
-} from "lucide-react";
+import {ExternalLink, Mail, CheckCircle2, Handshake, MessageSquare, XCircle, Gift, Loader2, ArrowUp, ArrowDown, Minus, Activity, Lock, Pencil, Check, X, Plus} from "lucide-react";
 
 const OUTREACH_STATUS_CONFIG = {
   not_contacted: { label: "Not Contacted", color: "bg-slate-100 text-slate-700 border-slate-200" },
@@ -950,8 +931,8 @@ export function ChannelDetailSheet({
             )}
             <Button variant="outline" className="w-full" asChild>
               <a href={channel.channel_url} target="_blank" rel="noopener noreferrer">
-                <Youtube className="h-4 w-4 mr-2" />
-                View Channel
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open Channel
               </a>
             </Button>
           </div>
