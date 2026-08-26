@@ -106,7 +106,13 @@ export default function Signup() {
                 <div className="flex items-start gap-2.5">
                   <Checkbox id="agree-terms" checked={agreedTerms} onCheckedChange={setAgreedTerms} data-testid="agree-terms-checkbox" className="mt-0.5" />
                   <Label htmlFor="agree-terms" className="text-sm text-slate-600 leading-snug cursor-pointer">
-                    I agree to the <Link to="/terms" target="_blank" className="text-indigo-600 hover:underline font-medium">Terms of Service</Link>
+                    I agree to the{" "}
+                    <Link to="/terms" target="_blank" className="text-indigo-600 hover:underline font-medium">Affilitube Terms of Service</Link>
+                    {" "}and the{" "}
+                    <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline font-medium" data-testid="signup-youtube-terms-link">YouTube Terms of Service</a>
+                    . I acknowledge that Google&apos;s handling of my data is governed by the{" "}
+                    <a href="http://www.google.com/policies/privacy" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline font-medium" data-testid="signup-google-privacy-link">Google Privacy Policy</a>
+                    .
                   </Label>
                 </div>
               </div>
