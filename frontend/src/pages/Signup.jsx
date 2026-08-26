@@ -31,14 +31,23 @@ export default function Signup() {
   const planFromPricing = searchParams.get("plan");
   const trialParam = searchParams.get("trial");
 
+  // Frozen copy of the consent text — persisted server-side for audit trail.
+  // Update this whenever the visible consent copy below changes and bump the
+  // policy_version on the backend.
+  const CONSENT_TEXT = "I agree to the Affilitube Terms of Service and the YouTube Terms of Service. I acknowledge that Google's handling of my data is governed by the Google Privacy Policy.";
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
     if (password !== confirmPassword) { setError("Passwords do not match"); return; }
+    if (!agreedTerms) { setError("You must accept the terms to create an account"); return; }
     setLoading(true);
     try {
-      const res = await register(email, password, trialParam || null);
+      const res = await register(email, password, trialParam || null, {
+        accepted: true,
+        text: CONSENT_TEXT,
+      });
       if (planFromPricing) {
         // User came from pricing page with a paid plan — trigger checkout
         const token = res.token;

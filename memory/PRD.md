@@ -71,6 +71,33 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - Batch _assert_no_assignment_orphan into single $in aggregation for large bulk-project requests (P3, perf)
 - Migrate react-helmet → react-helmet-async (P3, removes StrictMode warning)
 
+## Completed (Aug 26, 2026): Consent Audit Trail (server-side evidence for Policy III.A.1 + III.A.2c)
+Persists proof-of-consent at signup so Google can be shown per-user evidence that each account holder agreed to the Affilitube Terms, YouTube Terms, and Google Privacy Policy.
+
+**Backend:**
+- Constant `POLICY_VERSION = "2026-08-26-v1"` in `server.py` — bump whenever consent copy or linked policies change.
+- Public endpoint `GET /api/auth/policy-version` returns the current version string.
+- `POST /api/auth/register` now:
+  - Rejects with HTTP 400 if `consent_accepted !== true` (loud, explicit error message)
+  - Captures client IP from `X-Forwarded-For` (falls back to `request.client.host`)
+  - Captures user agent (truncated to 400 chars)
+  - Stores frozen `consent_text` from the frontend so audit records match what the user actually saw
+  - Persists `latest_consent` snapshot on the user document
+  - Writes an immutable record into new collection `consent_audit`: `{id, user_id, email, event, policy_version, accepted_at, ip, user_agent, consent_text, policies_accepted: [...]}` — separate collection so it survives user edits/deletes
+- Admin endpoints: `GET /api/admin/consent-log` (paginated + email filter), `GET /api/admin/consent-log/export` (CSV export for regulator handoff)
+
+**Frontend:**
+- `AuthContext.jsx` `register()` accepts an optional `consentContext` object and forwards `consent_accepted` + `consent_text` to the register API
+- `Signup.jsx` — frozen `CONSENT_TEXT` constant matches the visible checkbox label; sent server-side on submit. Blocks submission if checkbox unchecked. Backend still enforces regardless (defense in depth)
+- `AdminPanel.jsx` — new "Consent Log" tab (icon: ShieldCheck) between Client Access and SaaS Radar. Shows immutable audit trail as a table (timestamp UTC · email · policy version · policies list badges · IP), with email filter and CSV export button
+
+**Verified end-to-end:**
+- `POST /api/auth/register` without `consent_accepted` → HTTP 400 with policy-referencing error message
+- `POST /api/auth/register` with `consent_accepted:true` → HTTP 200 + audit record persisted with IP, user agent, policy version, frozen consent text
+- Admin can query the log via `/api/admin/consent-log`, filter by email, and download a CSV via `/admin/consent-log/export`
+- Admin UI screenshot confirms new tab renders with the correct table, filter input, and export button
+
+
 ## Completed (Aug 26, 2026): YouTube Compliance — Legal & Branding (Policy III.A.1, III.A.2c, III.A.2i, III.F.2a/b)
 Response to Google Developer Policy compliance report addressing four items alongside the 30-day retention work.
 

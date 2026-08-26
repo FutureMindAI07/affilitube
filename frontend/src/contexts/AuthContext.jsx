@@ -35,9 +35,14 @@ export function AuthProvider({ children }) {
     return res.data;
   };
 
-  const register = async (email, password, trial = null) => {
+  const register = async (email, password, trial = null, consentContext = null) => {
     const payload = { email, password };
     if (trial) payload.trial = trial;
+    // Consent capture (backend requires consent_accepted === true).
+    if (consentContext) {
+      payload.consent_accepted = consentContext.accepted === true;
+      if (consentContext.text) payload.consent_text = consentContext.text;
+    }
     const res = await axios.post(`${API}/auth/register`, payload);
     sessionStorage.removeItem("affi_channels");
     sessionStorage.removeItem("affi_raw");

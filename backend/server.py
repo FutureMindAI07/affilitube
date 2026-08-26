@@ -173,6 +173,18 @@ logger = logging.getLogger(__name__)
 # Pacific timezone for quota reset
 PACIFIC_TZ = ZoneInfo("America/Los_Angeles")
 
+# ============================================================================
+# Consent / Policy version (Google Developer Policy III.A.1, III.A.2c audit trail)
+# ============================================================================
+# Bump the version string whenever Terms of Service / Privacy Policy / signup
+# consent copy changes. Historical consents keep pointing at the old version so
+# we can prove what a given user agreed to at signup time.
+POLICY_VERSION = "2026-08-26-v1"
+POLICY_TEXT_HASH_HINT = (
+    "affilitube_terms + youtube_terms + google_privacy — consent copy revised "
+    "in the 2026-08-26 Google compliance response."
+)
+
 # ==================== TIER SYSTEM ====================
 
 # User tiers
@@ -864,6 +876,12 @@ class AuthRegister(BaseModel):
     email: str
     password: str
     trial: Optional[str] = None
+    # Consent capture (Google Policy III.A.1 + III.A.2c compliance audit trail).
+    # False/None will be rejected — consent is required at signup.
+    consent_accepted: Optional[bool] = None
+    # Frozen copy of the checkbox label shown to the user, so the audit record
+    # matches exactly what they saw at click-time.
+    consent_text: Optional[str] = None
 
 class AuthLogin(BaseModel):
     email: str
@@ -1751,13 +1769,43 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 # ==================== AUTH ENDPOINTS ====================
 
+@api_router.get("/auth/policy-version")
+async def get_policy_version():
+    """Public endpoint — current policy version string used by the signup form.
+    Frontend echoes this back in the consent record."""
+    return {"policy_version": POLICY_VERSION}
+
+
 @api_router.post("/auth/register")
-async def register(data: AuthRegister):
+async def register(data: AuthRegister, request: Request):
+    if data.consent_accepted is not True:
+        raise HTTPException(
+            status_code=400,
+            detail="You must accept the Affilitube Terms of Service, the YouTube Terms of Service, and the Google Privacy Policy to create an account.",
+        )
     existing = await db.users.find_one({"email": data.email.lower()})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     user_id = str(uuid.uuid4())
     hashed_password = await _hash_password(data.password)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    # Capture IP + user agent for the consent audit trail. Behind Cloudflare /
+    # Kubernetes ingress the real client IP is in X-Forwarded-For.
+    forwarded = request.headers.get("x-forwarded-for", "")
+    client_ip = (forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else ""))
+    user_agent = request.headers.get("user-agent", "")[:400]
+    consent_record = {
+        "policy_version": POLICY_VERSION,
+        "accepted_at": now_iso,
+        "ip": client_ip,
+        "user_agent": user_agent,
+        "consent_text": (data.consent_text or "")[:1000],
+        "policies_accepted": [
+            "affilitube_terms_of_service",
+            "youtube_terms_of_service",
+            "google_privacy_policy",
+        ],
+    }
     user = {
         "id": user_id,
         "email": data.email.lower(),
@@ -1766,17 +1814,28 @@ async def register(data: AuthRegister):
         "tier": "free",
         "monthly_search_count": 0,
         "search_count_reset_date": datetime.now(timezone.utc).strftime("%Y-%m"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now_iso,
+        "latest_consent": consent_record,
     }
     
     # Handle 14-day trial signup
     if data.trial == "starter_14":
         user["tier"] = "starter"
         user["is_trial"] = True
-        user["trial_started_at"] = datetime.now(timezone.utc).isoformat()
+        user["trial_started_at"] = now_iso
         user["access_expires_at"] = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
     
     await db.users.insert_one(user)
+
+    # Immutable audit-log record (separate collection so it survives user edits/deletes).
+    await db.consent_audit.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "email": data.email.lower(),
+        "event": "signup",
+        **consent_record,
+    })
+
     token = create_token(user_id, data.email.lower())
     return {
         "token": token, 
@@ -5288,6 +5347,59 @@ async def admin_retention_status(admin=Depends(get_admin_user)):
         "search_reports_total": reports_total,
         "last_sweep": last_run,
     }
+
+
+@api_router.get("/admin/consent-log")
+async def admin_consent_log(
+    admin=Depends(get_admin_user),
+    limit: int = Query(default=100, le=500),
+    offset: int = Query(default=0, ge=0),
+    email: Optional[str] = Query(default=None),
+):
+    """Retrieve the immutable consent audit log — evidence that individual users
+    agreed to the YouTube Terms of Service and Google Privacy Policy at signup."""
+    q = {}
+    if email:
+        q["email"] = {"$regex": re.escape(email.strip().lower())}
+    total = await db.consent_audit.count_documents(q)
+    entries = await db.consent_audit.find(q, {"_id": 0}).sort("accepted_at", -1).skip(offset).limit(limit).to_list(limit)
+    return {
+        "current_policy_version": POLICY_VERSION,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "entries": entries,
+    }
+
+
+@api_router.get("/admin/consent-log/export")
+async def admin_consent_log_export(admin=Depends(get_admin_user)):
+    """Full CSV export of the consent audit log for regulator handoff."""
+    entries = await db.consent_audit.find({}, {"_id": 0}).sort("accepted_at", -1).to_list(50000)
+    output = io.StringIO()
+    fieldnames = ["accepted_at", "email", "user_id", "event", "policy_version", "ip",
+                  "user_agent", "policies_accepted", "consent_text"]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for e in entries:
+        writer.writerow({
+            "accepted_at": e.get("accepted_at", ""),
+            "email": e.get("email", ""),
+            "user_id": e.get("user_id", ""),
+            "event": e.get("event", ""),
+            "policy_version": e.get("policy_version", ""),
+            "ip": e.get("ip", ""),
+            "user_agent": e.get("user_agent", ""),
+            "policies_accepted": ", ".join(e.get("policies_accepted") or []),
+            "consent_text": e.get("consent_text", ""),
+        })
+    output.seek(0)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=consent-audit-{today}.csv"},
+    )
 
 
 @api_router.get("/admin/quota")

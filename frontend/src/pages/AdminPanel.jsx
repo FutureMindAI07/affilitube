@@ -25,7 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {Users, Search, DollarSign, Activity, Gauge, TrendingUp, Calendar, Mail, Trash2, Edit, Clock, BarChart3, RefreshCw, ChevronLeft, ChevronRight, Shield, ArrowLeft, Sparkles, UserPlus, CalendarClock, Handshake, Radar, UserCog, Link2, Copy} from "lucide-react";
+import {Users, Search, DollarSign, Activity, Gauge, TrendingUp, Calendar, Mail, Trash2, Edit, Clock, BarChart3, RefreshCw, ChevronLeft, ChevronRight, Shield, ArrowLeft, Sparkles, UserPlus, CalendarClock, Handshake, Radar, UserCog, Link2, Copy, ShieldCheck, Download} from "lucide-react";
 import SaaSRadarPanel from "@/components/SaaSRadarPanel";
 
 const API = `${import.meta.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_BACKEND_URL}/api`;
@@ -79,7 +79,12 @@ export default function AdminPanel() {
   });
   const [createLoading, setCreateLoading] = useState(false);
 
-  // Client Access tab
+  // Consent Log tab
+  const [consentEntries, setConsentEntries] = useState([]);
+  const [consentTotal, setConsentTotal] = useState(0);
+  const [consentEmailFilter, setConsentEmailFilter] = useState("");
+  const [consentPolicyVersion, setConsentPolicyVersion] = useState("");
+
   const [clientAccounts, setClientAccounts] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [adminProjects, setAdminProjects] = useState([]);
@@ -101,6 +106,7 @@ export default function AdminPanel() {
     else if (activeTab === "revenue") loadRevenue();
     else if (activeTab === "partner-applications") loadPartnerApplications();
     else if (activeTab === "client-access") loadClientAccess();
+    else if (activeTab === "consent-log") loadConsentLog();
   }, [activeTab, usersPage, userSearch, userTierFilter]);
 
   const loadOverview = async () => {
@@ -302,6 +308,41 @@ export default function AdminPanel() {
 
   const clientEmailForId = (id) => clientAccounts.find((c) => c.id === id)?.email || id;
 
+  // ============ CONSENT LOG TAB ============
+  const loadConsentLog = async (emailQuery = consentEmailFilter) => {
+    setLoading(true);
+    try {
+      const params = { limit: 100 };
+      if (emailQuery && emailQuery.trim()) params.email = emailQuery.trim();
+      const res = await api.get("/admin/consent-log", { params });
+      setConsentEntries(res.data.entries || []);
+      setConsentTotal(res.data.total || 0);
+      setConsentPolicyVersion(res.data.current_policy_version || "");
+    } catch (e) {
+      toast.error("Failed to load consent log");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportConsentLog = async () => {
+    try {
+      const res = await api.get("/admin/consent-log/export", { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      const today = new Date().toISOString().slice(0, 10);
+      link.download = `consent-audit-${today}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Consent log exported");
+    } catch (e) {
+      toast.error("Export failed");
+    }
+  };
+
   const updateUserTier = async () => {
     if (!editingUser || !newTier) return;
     try {
@@ -482,6 +523,7 @@ export default function AdminPanel() {
             { id: "revenue", label: "Revenue", icon: DollarSign },
             { id: "partner-applications", label: "Partner Apps", icon: Handshake },
             { id: "client-access", label: "Client Access", icon: UserCog },
+            { id: "consent-log", label: "Consent Log", icon: ShieldCheck },
             { id: "saas-radar", label: "SaaS Radar", icon: Radar },
           ].map((tab) => (
             <button
@@ -1473,6 +1515,92 @@ export default function AdminPanel() {
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Consent Log Tab */}
+        {activeTab === "consent-log" && (
+          <div className="space-y-6">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-2xl font-heading font-bold text-slate-900">Consent Log</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Immutable audit trail of user consent to Affilitube, YouTube, and Google Privacy policies at signup.
+                  Provides evidence for Google Developer Policy compliance (III.A.1, III.A.2c).
+                </p>
+                {consentPolicyVersion && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Current policy version: <span className="font-mono">{consentPolicyVersion}</span>
+                  </p>
+                )}
+              </div>
+              <Button variant="outline" size="sm" onClick={exportConsentLog} data-testid="consent-log-export">
+                <Download className="h-4 w-4 mr-1.5" /> Export CSV
+              </Button>
+            </div>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <CardTitle className="text-base">
+                    Signup consents ({consentTotal})
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Filter by email…"
+                      value={consentEmailFilter}
+                      onChange={(e) => setConsentEmailFilter(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") loadConsentLog(consentEmailFilter); }}
+                      className="h-9 w-56"
+                      data-testid="consent-log-email-filter"
+                    />
+                    <Button size="sm" variant="outline" onClick={() => loadConsentLog(consentEmailFilter)}>
+                      Search
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {consentEntries.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-4 text-center">
+                    No consent records yet. New signups will appear here.
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Accepted at (UTC)</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Policy version</TableHead>
+                        <TableHead>Policies</TableHead>
+                        <TableHead>IP</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody data-testid="consent-log-table">
+                      {consentEntries.map((e) => (
+                        <TableRow key={e.id || `${e.user_id}-${e.accepted_at}`} data-testid={`consent-row-${e.user_id}`}>
+                          <TableCell className="text-xs font-mono text-slate-600 whitespace-nowrap">
+                            {e.accepted_at ? e.accepted_at.replace("T", " ").slice(0, 19) : ""}
+                          </TableCell>
+                          <TableCell className="text-sm">{e.email}</TableCell>
+                          <TableCell className="text-xs font-mono">{e.policy_version}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {(e.policies_accepted || []).map((p) => (
+                                <Badge key={p} variant="outline" className="text-[10px] uppercase tracking-wide">
+                                  {p.replace(/_/g, " ").replace(/terms of service/, "ToS")}
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs font-mono text-slate-500">{e.ip || "—"}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
