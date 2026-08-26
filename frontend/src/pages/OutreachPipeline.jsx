@@ -984,6 +984,15 @@ export default function OutreachPipeline() {
                             {channel.channel_name}
                           </a>
                           <ExternalLink className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          {channel.retention_purged && (
+                            <span
+                              className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+                              title="YouTube API data older than 30 days was cleared. Re-search this channel to refresh."
+                              data-testid={`retention-chip-${channel.channel_id}`}
+                            >
+                              Data expired
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-4 text-xs text-slate-500">
                           <span>{channel.subscriber_count?.toLocaleString()} subscribers</span>

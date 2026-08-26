@@ -276,6 +276,20 @@ export function ChannelDetailSheet({
         </SheetHeader>
 
         <div className="space-y-6 mt-6">
+          {/* Retention-purged banner (admin only — hidden in client read-only mode) */}
+          {channel.retention_purged && !readOnly && (
+            <div
+              className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+              data-testid="retention-purged-banner"
+            >
+              <strong className="font-semibold">Data expired</strong> — YouTube API data
+              older than 30&nbsp;days was cleared to stay compliant with Google&apos;s
+              data-retention policy. Outreach history is preserved. Re-run a search
+              that surfaces this channel to refresh subscribers, video titles, and
+              Brand Intelligence.
+            </div>
+          )}
+
           {/* Score Summary */}
           <div>
             <h4 className="text-sm font-semibold mb-3">Score Breakdown</h4>

@@ -2842,7 +2842,8 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
 
                     await db.channels.update_one(
                         {"channel_id": ch_id, "user_id": user["id"]},
-                        {"$set": doc},
+                        {"$set": {**doc, RETENTION_FIELD: retention_expiry_from(),
+                                  "retention_purged": False}},
                         upsert=True
                     )
             
@@ -2890,7 +2891,9 @@ async def enrich_channels(req: EnrichRequest, user=Depends(get_current_user)):
                                 # Cache to DB
                                 await db.channels.update_many(
                                     {"channel_id": ch_id},
-                                    {"$set": {"sponsorship_data": sp_result, "last_sponsorship_check": datetime.now(timezone.utc)}}
+                                    {"$set": {"sponsorship_data": sp_result,
+                                              "last_sponsorship_check": datetime.now(timezone.utc),
+                                              RETENTION_FIELD: retention_expiry_from()}}
                                 )
                             else:
                                 ch["sponsorship_data"] = {"is_sponsored_active": False, "detected_brands": [],
@@ -3239,7 +3242,8 @@ Return this exact JSON structure:
                         try:
                             await db.channels.update_one(
                                 {"channel_id": ch.get("channel_id"), "user_id": user["id"]},
-                                {"$set": {"ai_assessment": assessment}},
+                                {"$set": {"ai_assessment": assessment,
+                                          RETENTION_FIELD: retention_expiry_from()}},
                             )
                         except Exception as cache_err:
                             logger.warning(f"Failed to cache ai_assessment for {ch.get('channel_name')}: {cache_err}")
@@ -3550,7 +3554,9 @@ async def get_sponsorship_data(channel_id: str, user=Depends(get_current_user)):
                            "confidence_score": 0, "videos_analyzed": 0, "videos_with_sponsorships": []}
             await db.channels.update_many(
                 {"channel_id": channel_id},
-                {"$set": {"sponsorship_data": empty_result, "last_sponsorship_check": datetime.now(timezone.utc)}}
+                {"$set": {"sponsorship_data": empty_result,
+                          "last_sponsorship_check": datetime.now(timezone.utc),
+                          RETENTION_FIELD: retention_expiry_from()}}
             )
             return empty_result
         
@@ -3574,7 +3580,9 @@ async def get_sponsorship_data(channel_id: str, user=Depends(get_current_user)):
         # Cache to DB (update all copies of this channel across users)
         await db.channels.update_many(
             {"channel_id": channel_id},
-            {"$set": {"sponsorship_data": result, "last_sponsorship_check": datetime.now(timezone.utc)}}
+            {"$set": {"sponsorship_data": result,
+                      "last_sponsorship_check": datetime.now(timezone.utc),
+                      RETENTION_FIELD: retention_expiry_from()}}
         )
         
         return result
@@ -3636,7 +3644,9 @@ async def _cache_sponsorship_data(channel_id: str, user: Optional[Dict[str, Any]
                            "confidence_score": 0, "videos_analyzed": 0, "videos_with_sponsorships": []}
             await db.channels.update_many(
                 {"channel_id": channel_id},
-                {"$set": {"sponsorship_data": empty_result, "last_sponsorship_check": datetime.now(timezone.utc)}}
+                {"$set": {"sponsorship_data": empty_result,
+                          "last_sponsorship_check": datetime.now(timezone.utc),
+                          RETENTION_FIELD: retention_expiry_from()}}
             )
             return
         videos_response = await _yt_execute(youtube.videos().list(part="snippet", id=",".join(video_ids)))
@@ -3645,7 +3655,9 @@ async def _cache_sponsorship_data(channel_id: str, user: Optional[Dict[str, Any]
         result = detect_sponsorships(videos)
         await db.channels.update_many(
             {"channel_id": channel_id},
-            {"$set": {"sponsorship_data": result, "last_sponsorship_check": datetime.now(timezone.utc)}}
+            {"$set": {"sponsorship_data": result,
+                      "last_sponsorship_check": datetime.now(timezone.utc),
+                      RETENTION_FIELD: retention_expiry_from()}}
         )
         logger.info(f"Background sponsorship cache complete for {channel_id}")
     except Exception as e:
@@ -4355,6 +4367,7 @@ async def autosave_search_results(input: AutoSaveInput, user=Depends(get_current
         "raw_search_results": input.raw_search_results,
         "search_metadata": input.search_metadata,
         "saved_at": datetime.now(timezone.utc).isoformat(),
+        RETENTION_FIELD: retention_expiry_from(),
         "is_autosave": True
     }
     await db.autosaved_results.update_one(
@@ -4443,6 +4456,7 @@ async def save_search_report(input: SaveReportInput, user=Depends(get_current_us
     )
     doc = report.model_dump()
     doc["user_id"] = user["id"]
+    doc[RETENTION_FIELD] = retention_expiry_from()
     await db.search_reports.insert_one(doc)
     return {"success": True, "id": report.id}
 
@@ -4484,12 +4498,13 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
         return JSONResponse(status_code=403, content={"error": "upgrade_required", "message": "Export is not available during your trial. Upgrade to a paid plan to export your data.", "upgrade_url": "/pricing"})
     
     channels = await db.channels.find(
-        {"channel_id": {"$in": channel_ids}, "user_id": user["id"]},
+        {"channel_id": {"$in": channel_ids}, "user_id": user["id"],
+         "retention_purged": {"$ne": True}},
         {"_id": 0}
     ).to_list(1000)
     
     if not channels:
-        raise HTTPException(status_code=404, detail="No channels found")
+        raise HTTPException(status_code=404, detail="No channels found (rows may be retention-expired — re-enrich to include them)")
     
     # Create CSV
     output = io.StringIO()
@@ -4752,7 +4767,8 @@ async def client_get_assignment_channels(assignment_id: str, client=Depends(get_
     if _is_assignment_expired(row):
         raise HTTPException(status_code=410, detail="This access has expired")
     channels = await db.channels.find(
-        {"user_id": row["owner_user_id"], "project_name": row["project_name"]}, {"_id": 0}
+        {"user_id": row["owner_user_id"], "project_name": row["project_name"],
+         "retention_purged": {"$ne": True}}, {"_id": 0}
     ).to_list(2000)
     return {
         "assignment": {"id": row["id"], "project_name": row["project_name"],
@@ -4775,7 +4791,8 @@ async def client_export_assignment_csv(assignment_id: str, client=Depends(get_cl
         raise HTTPException(status_code=403, detail="CSV export is not enabled for this project")
 
     channels = await db.channels.find(
-        {"user_id": row["owner_user_id"], "project_name": row["project_name"]}, {"_id": 0}
+        {"user_id": row["owner_user_id"], "project_name": row["project_name"],
+         "retention_purged": {"$ne": True}}, {"_id": 0}
     ).to_list(2000)
 
     output = io.StringIO()
@@ -4841,11 +4858,12 @@ async def _assert_no_assignment_orphan(owner_user_id: str, project_name: str, ac
 async def pipeline_export_csv(channel_ids: List[str], admin=Depends(get_admin_user)):
     """Admin-only pipeline export with Brand Intelligence + pipeline fields."""
     channels = await db.channels.find(
-        {"channel_id": {"$in": channel_ids}, "user_id": admin["id"]},
+        {"channel_id": {"$in": channel_ids}, "user_id": admin["id"],
+         "retention_purged": {"$ne": True}},
         {"_id": 0}
     ).to_list(2000)
     if not channels:
-        raise HTTPException(status_code=404, detail="No channels found")
+        raise HTTPException(status_code=404, detail="No channels found (rows may be retention-expired — re-enrich to include them)")
 
     output = io.StringIO()
     fieldnames = [
@@ -5210,21 +5228,65 @@ async def update_competitor_brands(data: CompetitorBrandsInput, admin=Depends(ge
 
 @api_router.post("/admin/clear-enrichment-cache")
 async def admin_clear_enrichment_cache(admin=Depends(get_admin_user)):
-    """Clear all cached enrichment and sponsorship data to force fresh re-scans"""
-    r1 = await db.channels.update_many(
-        {"enriched_at": {"$exists": True}},
-        {"$unset": {"enriched_at": ""}}
+    """Split-purge all channel docs (strip YouTube-sourced fields, keep pipeline shell)
+    and hard-delete autosaved_results + search_reports. This is now the same operation
+    the nightly retention cron runs, forced to fire immediately across the whole DB
+    regardless of the 30-day cutoff.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+    # Force expiry on every channel doc so the sweep treats them all as expired.
+    now = _dt.now(_tz.utc)
+    await db.channels.update_many(
+        {"retention_purged": {"$ne": True}},
+        {"$set": {RETENTION_FIELD: now}},
     )
-    r2 = await db.channels.update_many(
-        {"sponsorship_data": {"$exists": True}},
-        {"$unset": {"sponsorship_data": "", "last_sponsorship_check": ""}}
-    )
-    r3 = await db.autosaved_results.delete_many({})
+    # Also expire autosaved + reports so they hard-delete on the sweep.
+    await db.autosaved_results.update_many({}, {"$set": {RETENTION_FIELD: now}})
+    await db.search_reports.update_many({}, {"$set": {RETENTION_FIELD: now}})
+    result = await run_retention_sweep(db, source="admin_clear_cache")
+    return {"success": True, **result}
+
+
+@api_router.post("/admin/retention/sweep")
+async def admin_run_retention_sweep(admin=Depends(get_admin_user)):
+    """Manually trigger the 30-day retention sweep (same as nightly cron).
+    Split-purges expired channels (keep pipeline shell), hard-deletes expired
+    autosaved_results + search_reports. Returns counts for compliance audit."""
+    return await run_retention_sweep(db, source="admin_manual")
+
+
+@api_router.get("/admin/retention/status")
+async def admin_retention_status(admin=Depends(get_admin_user)):
+    """Report current retention state for compliance monitoring."""
+    from datetime import datetime as _dt, timezone as _tz
+    now = _dt.now(_tz.utc)
+    channels_total = await db.channels.count_documents({})
+    channels_fresh = await db.channels.count_documents({RETENTION_FIELD: {"$gt": now}})
+    channels_expired = await db.channels.count_documents({RETENTION_FIELD: {"$lte": now}})
+    channels_purged = await db.channels.count_documents({"retention_purged": True})
+    channels_zombie = await db.channels.count_documents({
+        RETENTION_FIELD: {"$exists": False},
+        "retention_purged": {"$ne": True},
+        "subscriber_count": {"$exists": True},
+    })
+    autosaved_total = await db.autosaved_results.count_documents({})
+    reports_total = await db.search_reports.count_documents({})
+    last_run = await db.retention_audit.find_one({}, sort=[("ran_at", -1)])
+    if last_run:
+        last_run.pop("_id", None)
     return {
-        "success": True,
-        "enrichment_cleared": r1.modified_count,
-        "sponsorship_cleared": r2.modified_count,
-        "autosave_cleared": r3.deleted_count,
+        "retention_days": RETENTION_DAYS,
+        "now_utc": now.isoformat(),
+        "channels": {
+            "total": channels_total,
+            "fresh_within_30d": channels_fresh,
+            "expired_awaiting_sweep": channels_expired,
+            "already_split_purged": channels_purged,
+            "zombie_untimestamped": channels_zombie,
+        },
+        "autosaved_results_total": autosaved_total,
+        "search_reports_total": reports_total,
+        "last_sweep": last_run,
     }
 
 
@@ -5690,6 +5752,14 @@ app.include_router(api_router)
 
 # SaaS Radar (admin-only ProductHunt prospecting module)
 from saas_radar import build_router as _build_saas_radar_router
+from retention import (
+    retention_expiry_from,
+    run_retention_sweep,
+    ensure_retention_indexes,
+    run_startup_backfill,
+    RETENTION_FIELD,
+    RETENTION_DAYS,
+)
 app.include_router(
     _build_saas_radar_router(db, get_admin_user),
     prefix="/api",
@@ -5835,6 +5905,59 @@ async def seed_admin():
     await db.users.insert_one(admin_user)
     logger.info(f"Admin reconciliation: seeded fresh admin {ADMIN_EMAIL}.")
 
+
+# ============================================================================
+# Retention: startup indexes + one-time backfill + nightly cron
+# ============================================================================
+_retention_scheduler = None
+
+
+@app.on_event("startup")
+async def _retention_startup():
+    """Ensure TTL indexes exist and run the one-time retroactive sweep on first
+    boot against a given DB. Idempotent — marker doc in `system_meta` prevents
+    re-running the backfill once complete."""
+    try:
+        await ensure_retention_indexes(db)
+    except Exception as e:
+        logger.exception("Retention indexes failed to create: %s", e)
+    try:
+        await run_startup_backfill(db)
+    except Exception as e:
+        logger.exception("Retention startup backfill failed: %s", e)
+
+
+@app.on_event("startup")
+async def _start_retention_cron():
+    """Nightly APScheduler cron at 03:00 UTC — split-purges expired channels,
+    hard-deletes expired autosaved_results + search_reports."""
+    global _retention_scheduler
+    if os.environ.get("DISABLE_RETENTION_CRON", "").lower() in ("1", "true", "yes"):
+        logger.info("Retention cron disabled via env DISABLE_RETENTION_CRON")
+        return
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from apscheduler.triggers.cron import CronTrigger
+
+        async def _nightly():
+            try:
+                await run_retention_sweep(db, source="nightly_cron")
+            except Exception as e:
+                logger.exception("Retention nightly cron failed: %s", e)
+
+        _retention_scheduler = AsyncIOScheduler(timezone="UTC")
+        _retention_scheduler.add_job(
+            _nightly,
+            CronTrigger(hour=3, minute=0, timezone="UTC"),
+            id="retention_daily",
+            max_instances=1,
+            coalesce=True,
+        )
+        _retention_scheduler.start()
+        logger.info("Retention cron scheduled for 03:00 UTC daily")
+    except Exception as e:
+        logger.exception("Failed to start retention scheduler: %s", e)
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     try:
@@ -5844,6 +5967,8 @@ async def shutdown_db_client():
         pass
     if _saas_radar_scheduler is not None:
         _saas_radar_scheduler.shutdown(wait=False)
+    if _retention_scheduler is not None:
+        _retention_scheduler.shutdown(wait=False)
     client.close()
 
 

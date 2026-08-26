@@ -71,7 +71,54 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - Batch _assert_no_assignment_orphan into single $in aggregation for large bulk-project requests (P3, perf)
 - Migrate react-helmet → react-helmet-async (P3, removes StrictMode warning)
 
-## Completed (Aug 10, 2026): Client-Facing Read-Only Project View
+## Completed (Aug 26, 2026): YouTube 30-Day Data Retention Compliance (Google Developer Policy)
+Google Developer Policy: API Client must not display or store statistics/metadata retrieved via the YouTube Data API for more than 30 days without refresh. Full implementation matching the policy requirement of "refresh-or-delete within 30 days".
+
+**Design:**
+- New BSON `datetime` field `retention_expires_at` (= `now + 30d`) stamped on every YouTube-sourced write across three collections: `channels`, `autosaved_results`, `search_reports`. Same field name across all three (reconciles the prior `enriched_at` / `saved_at` / `created_at` inconsistency).
+- New `retention_purged: bool` flag on channels. `True` means YT fields have been stripped while the pipeline shell is preserved. UI shows an amber "Data expired" chip on the pipeline row + a banner in `ChannelDetailSheet`.
+- **Split-purge policy on channels**: expired docs with pipeline shell (outreach_status ≠ not_contacted, or project_name set, or contact_log, or notes) get YT fields `$unset` but pipeline shell kept. Expired docs *without* pipeline shell are hard-deleted.
+- **Hard-delete policy on autosaved_results + search_reports**: safe to fully delete — these are pure YT snapshots.
+
+**Enforcement layers (defense-in-depth):**
+1. **Startup one-time backfill** — first boot on a new DB triggers a full retention sweep. Marker doc in `system_meta.retention_backfill_v1` prevents re-runs. Preview backfill result (2026-08-26 08:12:03 UTC): 12 channels split-purged, 389 channels hard-deleted, 4 autosaved_results hard-deleted, 3 search_reports hard-deleted.
+2. **Nightly APScheduler cron** at 03:00 UTC — same sweep, incremental. Job ID `retention_daily`. Disable via `DISABLE_RETENTION_CRON=1`.
+3. **TTL indexes** as automatic MongoDB-side backstop:
+   - `autosaved_results.retention_expires_at` — full TTL, hard-delete on expiry.
+   - `search_reports.retention_expires_at` — full TTL, hard-delete on expiry.
+   - `channels.retention_expires_at` — **partial TTL** with `partialFilterExpression={outreach_status:"not_contacted", retention_purged:false}`. Only fires on docs safe to hard-delete; pipeline-shell docs stay under cron control. MongoDB's partial-filter operator restrictions (`$not`, `$exists:false`, `$ne` not allowed) forced the positive-predicate form.
+4. **Admin manual triggers**:
+   - `POST /api/admin/retention/sweep` — force a sweep on demand.
+   - `GET /api/admin/retention/status` — compliance dashboard (fresh count, expired-awaiting-sweep count, purged count, zombies count, last sweep audit entry).
+   - `POST /api/admin/clear-enrichment-cache` — now forces expiry on all docs and runs the sweep (previously just `$unset enriched_at` while leaving all YT data behind).
+
+**Exfiltration guards (extra layer of paranoia):**
+- Admin pipeline CSV export (`POST /api/pipeline/export/csv`) filters `retention_purged: {$ne: true}` — expired rows can never be serialized to CSV.
+- User CSV export (`POST /api/export/csv`) same filter.
+- Client project view (`GET /api/client/assignments/{id}/channels`) same filter — expired rows never appear to a paid buyer as blank cards.
+- Client CSV export inherits the same filter.
+
+**Audit trail:**
+- Every sweep run persists a doc into `db.retention_audit` with `{ran_at, source, channels_split_purged, channels_hard_deleted, autosaved_hard_deleted, search_reports_hard_deleted}`. Surfaced via `/api/admin/retention/status.last_sweep`.
+
+**Files:**
+- `backend/retention.py` (new, 220 lines) — helpers, sweep logic, TTL setup, backfill runner.
+- `backend/server.py` — retention stamps on all channel writes (enrichment, Super Search AI grade, sponsorship-only refresh × 4), autosaved_results, search_reports; rewrote clear-enrichment-cache; new `/admin/retention/*` endpoints; startup + cron wiring; CSV/client filters.
+- `frontend/src/components/ChannelDetailSheet.jsx` — amber "Data expired" banner at top of sheet on `channel.retention_purged`.
+- `frontend/src/pages/OutreachPipeline.jsx` — amber "Data expired" chip beside the channel name.
+
+**Verified:**
+- Retroactive purge: 401 channels → 12 preserved (pipeline shell), 389 deleted. 4 autosaved, 3 search_reports gone.
+- Manual re-sweep: idempotent (all-zero counts).
+- Client view filter: 0 channels shown (correctly hides purged Stacia Loo from the assigned project).
+- TTL indexes: all 3 created cleanly on startup.
+- Cron scheduled: `Retention cron scheduled for 03:00 UTC daily` in logs.
+
+**Production rollout note:**
+- The startup backfill runs automatically on the next production deploy. It's idempotent + marker-guarded — safe to redeploy repeatedly.
+- Production Atlas will show a much larger retroactive purge count than preview (backlog of ~months of user searches). Admin can view results via `GET /api/admin/retention/status.last_sweep` immediately after deploy.
+
+
 Sell curated, vetted YouTube-affiliate lists to DTC brands and agencies. Client accounts have zero access to the admin dashboard, searches, or writes — they only see the projects assigned to them.
 
 **Data model:**
