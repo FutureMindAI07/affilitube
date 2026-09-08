@@ -1,0 +1,30 @@
+{
+  "summary": "State-verification pass on PREVIEW to confirm the 4 new niches (fashion, lifestyle, parenting, home_decor) + 10 new affiliate platforms (LTK, ShopMy, MagicLinks, Mavely, Howl, Collabs, Skimlinks, Sovrn VigLink, Partnerize, FlexOffers) are fully intact end-to-end, alongside the YouTube/Google compliance changes. All 7 review-request checks PASS on preview (https://trial-saas-hub.preview.emergentagent.com). The user's claim that production is running a stale build is corroborated — preview code and data are correct; the fix is a production redeploy.",
+  "verification_results": {
+    "1_niches_api": "PASS — GET /api/niches returns exactly 18 niches. Keys present: saas_software, fitness_health, finance_investing, ecommerce_amazon, online_courses, marketing_tools, beauty_skincare, travel, gaming, home_diy, pet_care, personal_development, food_cooking, tech_gadgets, fashion, lifestyle, parenting, home_decor. All 4 new niches confirmed.",
+    "2_affiliate_platforms_api": "PASS — GET /api/affiliate-platforms returns exactly 20 platforms. All 10 originals (AppSumo, Amazon Associates, Impact, PartnerStack, ShareASale, CJ Affiliate, Gumroad, ClickBank, Rakuten, Awin) AND all 10 new (LTK, ShopMy, MagicLinks, Mavely, Howl, Collabs, Skimlinks, Sovrn VigLink, Partnerize, FlexOffers) are present.",
+    "3_dashboard_grid_order": "PASS — /dashboard renders all 18 niche cards. Creator-first ordering confirmed: Fashion & Style → Lifestyle & Vlogs → Parenting & Family → Home & Decor are the first four visually (verified by DOM Y/X positions).",
+    "4_collapsible_template_bar": "PASS — 'Start from a template instead' renders as a collapsible above the niche grid with subtext '7 pre-configured shortcuts for common search patterns · optional'. Expands on click. Not the old always-open picker.",
+    "5_new_niche_placeholders": "PASS — Clicking each new niche loads the correct creator-specific keyword placeholders in the Keywords textarea, proving backend niche configs load, not just labels: \n  • fashion → 'capsule wardrobe basics / zara try on haul / nordstrom anniversary sale / fall outfit ideas'\n  • lifestyle → 'morning routine / day in my life / apartment tour / monthly favorites'\n  • parenting → 'baby registry must haves / pregnancy vlog / toddler morning routine / stroller review'\n  • home_decor → 'small apartment tour / amazon home finds / ikea kitchen hack / cozy bedroom refresh'",
+    "6_affiliate_platform_keys_exposed": "PASS — All 10 new platform keys are present in the AFFILIATE_PLATFORMS constant returned by /api/affiliate-platforms, so the affiliate-link detection code paths for LTK, ShopMy, MagicLinks, Mavely, Howl, Collabs, Skimlinks, Sovrn VigLink, Partnerize, FlexOffers exist on preview. (Live enrichment against real channels not exercised — key/constant presence is sufficient per the review request's 'at minimum' condition.)",
+    "7_compliance_intact": "PASS — /terms section 1a shows the YouTube ToS link (https://www.youtube.com/t/terms). /privacy section 3 shows the Google Privacy Policy link (http://www.google.com/policies/privacy — Google's canonical redirect) plus Google security settings link. /signup checkbox reads verbatim: 'I agree to the Affilitube Terms of Service and the YouTube Terms of Service. I acknowledge that Google's handling of my data is governed by the Google Privacy Policy.' Header on /dashboard shows the AT logo (purple square with 'AT' + 'Affilitube' wordmark); no YouTube icon anywhere in header markup."
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "action_items": [
+    "USER ACTION: Re-trigger the production deploy at https://creator-qualify-hub.emergent.host. Preview is confirmed correct — production is running a stale build. No code change needed.",
+    "OPTIONAL NIT (not blocking): /privacy Google Privacy Policy anchor href is 'http://www.google.com/policies/privacy' — works via Google's redirect but could be upgraded to 'https://policies.google.com/privacy' for a cleaner audit trail."
+  ],
+  "critical_code_review_comments": [
+    "State verification only — no code review requested. Nit above is optional cosmetics."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "adrian@affilitube.com / admin123! (Admin auto-redirects to /admin; manual nav to /dashboard works and search panel renders normally).",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Preview base URL is stable. Admin auto-redirects to /admin after login — to test the Prospect Finder dashboard, navigate manually to /dashboard post-login. NICHE_DISPLAY_ORDER in SearchPanel.jsx currently produces: Fashion & Style, Lifestyle & Vlogs, Parenting & Family, Home & Decor, Beauty & Skincare, Travel, Food & Cooking, Pet Care, Personal Development, Home & DIY, Gaming, Tech & Gadgets, Online Courses & Education, Ecommerce & Amazon, Fitness & Health, Finance & Investing, Marketing Tools, SaaS & Software. All 20 affiliate platform keys are exposed via /api/affiliate-platforms and match the AFFILIATE_PLATFORMS constant.",
+  "rca of the issue": "Not a code bug. RCA: production deployment at creator-qualify-hub.emergent.host is serving a stale build that predates the niche+affiliate expansion but postdates the compliance work — i.e. the two feature-batches were built on separate commits and only the compliance commit made it into the latest prod bundle. Reproduction: curl https://creator-qualify-hub.emergent.host/api/niches returns 14 items; curl https://trial-saas-hub.preview.emergentagent.com/api/niches returns 18 items. Mitigation: redeploy production from current main. No hotfix needed."
+}
