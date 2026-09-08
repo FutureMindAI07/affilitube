@@ -49,6 +49,8 @@ import {
 import { OUTREACH_STATUS_CONFIG } from "@/lib/outreachConfig";
 import { ENGAGEMENT_HEALTH_CONFIG } from "@/lib/healthIndicators";
 import { getScoreClass, getAffiliateScoreClass, formatNumber } from "@/lib/formatters";
+import { MetricInfo } from "@/components/MetricInfo";
+import { AttributionBanner } from "@/components/AttributionBanner";
 
 export default function ChannelDetailSheet({
   open,
@@ -104,7 +106,11 @@ export default function ChannelDetailSheet({
             <div className="space-y-6 mt-6">
               {/* Score Summary */}
               <div>
-                <h4 className="text-sm font-semibold mb-3">Score Breakdown</h4>
+                <h4 className="text-sm font-semibold mb-1 flex items-center gap-1.5">
+                  Score Breakdown
+                  <MetricInfo testId="score-breakdown-info" />
+                </h4>
+                <AttributionBanner className="mb-3" testId="score-breakdown-banner" />
                 <div className="flex items-center gap-3 mb-4">
                   <Badge className={`${getScoreClass(channel.score_total)} text-lg px-3 py-1`}>
                     {channel.score_total}/100
@@ -259,6 +265,7 @@ export default function ChannelDetailSheet({
                 <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-purple-500" />
                   Affiliate Potential
+                  <MetricInfo testId="affiliate-potential-info" />
                 </h4>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div className="p-3 rounded-md bg-purple-50 border border-purple-100">
@@ -459,6 +466,7 @@ export default function ChannelDetailSheet({
                 <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
                   <Activity className="h-4 w-4 text-emerald-500" />
                   Channel Health
+                  <MetricInfo testId="channel-health-info" />
                 </h4>
                 <div className="grid grid-cols-1 gap-2.5">
                   <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
@@ -603,7 +611,10 @@ export default function ChannelDetailSheet({
                 ) : sponsorshipData ? (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Sponsorship Confidence</span>
+                      <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                        Sponsorship Confidence
+                        <MetricInfo testId="sponsorship-confidence-info" />
+                      </span>
                       <Badge
                         className={`font-mono ${
                           sponsorshipData.confidence_score >= 60

@@ -84,7 +84,8 @@ Every AffiliTube-derived metric now carries a Google-compliant "not derived from
 
 **Surfaces labelled:**
 - `ResultsSection.jsx` — persistent banner above the search results table + ⓘ next to Score / Aff / Health / Grade (Super Search only) column headers.
-- `ChannelDetailSheet.jsx` — banner at Score Breakdown + ⓘ on Score Breakdown, Affiliate Potential, Channel Health, and Sponsorship Confidence headers. Icons stay visible in `readOnly=true` mode so client buyers see the disclosure too.
+- `ChannelDetailSheet.jsx` (shared — used by OutreachPipeline + ClientProjectView) — banner at Score Breakdown + ⓘ on Score Breakdown, Affiliate Potential, Channel Health, and Sponsorship Confidence headers. Icons stay visible in `readOnly=true` mode so client buyers see the disclosure too.
+- `pages/dashboard/ChannelDetailSheet.jsx` (dashboard search-result info card — Phase 4 refactor extraction, patched in iteration_35 after user reported the sheet was missing labels) — same 4 disclosures as the shared sheet.
 - `OutreachPipeline.jsx` — ⓘ next to "Affiliate Score: N" chip on every row.
 - `ClientProjectView.jsx` — banner above creator cards + ⓘ next to each "Score N" badge.
 

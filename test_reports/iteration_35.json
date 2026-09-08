@@ -1,0 +1,26 @@
+{
+  "summary": "Targeted follow-up verification for dashboard-scoped ChannelDetailSheet (frontend/src/pages/dashboard/ChannelDetailSheet.jsx). Ran live Prospect Finder search as admin (SaaS & Software niche, 'notion review', max=3), triggered Enrich All, clicked resulting channel row (SortnSolve) to open the dashboard detail sheet. All 5 Google-Developer-Policy III.E.4.f disclosures render correctly and align visually.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "verified_selectors": {
+    "score-breakdown-banner": "FOUND — banner text 'Scores and health indicators are independently calculated by AffiliTube and are not derived from the YouTube API.'",
+    "score-breakdown-info": "FOUND — hover tooltip: 'This metric is independently calculated by AffiliTube and is not derived from YouTube.'",
+    "affiliate-potential-info": "FOUND",
+    "channel-health-info": "FOUND",
+    "sponsorship-confidence-info": "FOUND (rendered because sponsorshipData present after backend enrichment; score 0/100 with 'No sponsorship signals detected in the last 10 videos.')"
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Dashboard ChannelDetailSheet now imports MetricInfo and AttributionBanner correctly (lines 52-53). All 4 header-level ⓘ icons plus the AttributionBanner above Score Breakdown match the pipeline sheet layout. No regressions observed in Outreach Tracking, Notes, contact log, sponsorship section, or footer actions.",
+    "Two ChannelDetailSheet implementations still exist (components/ vs pages/dashboard/). Consider unifying to a single component in a future refactor to avoid drift like the one this iteration fixed."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% (5/5 selectors + tooltip + banner text verified live)"},
+  "test_credentials": "adrian@affilitube.com / admin123!",
+  "seed_data_creation": "None — live search + enrich flow used (SortnSolve channel, UCoM_Ar98GqGBYsR2BbUf8mA).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Both ChannelDetailSheet variants (components/ used by pipeline+client, pages/dashboard/ used by search-results click) now render identical 4 MetricInfo tooltips + Score-Breakdown AttributionBanner. Verified in iterations 34 and 35 respectively. Sponsorship-confidence-info renders only when sponsorshipData is available (confirmed with live SaaS channel).",
+  "rca of the issue": "Root cause was two parallel ChannelDetailSheet implementations after Phase 4 Dashboard.jsx refactor. Iteration 34 patched only components/ChannelDetailSheet.jsx (pipeline/client). Main agent has now patched pages/dashboard/ChannelDetailSheet.jsx with the same disclosure primitives — this iteration confirms parity."
+}
