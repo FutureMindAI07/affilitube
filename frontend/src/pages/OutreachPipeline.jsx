@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MetricInfo } from "@/components/MetricInfo";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -961,7 +962,7 @@ export default function OutreachPipeline() {
                         </div>
                         <div className="flex items-center gap-4 text-xs text-slate-500">
                           <span>{channel.subscriber_count?.toLocaleString()} subscribers</span>
-                          <span>Affiliate Score: {channel.affiliate_score || 0}</span>
+                          <span className="inline-flex items-center gap-1">Affiliate Score: {channel.affiliate_score || 0}<MetricInfo testId={`pipeline-score-info-${channel.channel_id}`} /></span>
                           {channel.country && (
                             <span
                               className="inline-flex items-center gap-1"

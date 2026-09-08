@@ -4593,6 +4593,15 @@ async def export_csv(channel_ids: List[str], user=Depends(get_current_user)):
     ]
     
     writer = csv.DictWriter(output, fieldnames=fieldnames)
+    # Google Developer Policy III.E.4.f attribution note: clarify which columns are
+    # AffiliTube-derived (not YouTube-provided) so the downstream reader is not
+    # misled about the source of the metrics.
+    output.write(
+        "# Note: Columns score_total, affiliate_score, score_topic, score_tutorial, "
+        "score_activity, score_subscriber, score_engagement, score_contactability, "
+        "upload_consistency, engagement_health, engagement_rate, growth_indicator "
+        "are calculated by AffiliTube and are NOT derived from the YouTube API.\n"
+    )
     writer.writeheader()
     
     for ch in channels:
@@ -4863,6 +4872,11 @@ async def client_export_assignment_csv(assignment_id: str, client=Depends(get_cl
         "upload_consistency", "engagement_health",
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
+    output.write(
+        "# Note: Columns score_total, affiliate_score, upload_consistency, "
+        "engagement_health are calculated by AffiliTube and are NOT derived "
+        "from the YouTube API.\n"
+    )
     writer.writeheader()
     for ch in channels:
         links = ch.get("public_links") or {}
@@ -4955,6 +4969,12 @@ async def pipeline_export_csv(channel_ids: List[str], admin=Depends(get_admin_us
     ]
 
     writer = csv.DictWriter(output, fieldnames=fieldnames)
+    output.write(
+        "# Note: Columns score_total, affiliate_score, upload_consistency, "
+        "engagement_health, growth_indicator, sponsorship_confidence, "
+        "competitor_brand_overlap_score are calculated by AffiliTube and are "
+        "NOT derived from the YouTube API.\n"
+    )
     writer.writeheader()
 
     missing_bi = 0

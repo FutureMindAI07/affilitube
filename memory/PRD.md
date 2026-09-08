@@ -71,6 +71,36 @@ Backend (FastAPI + Motor/MongoDB + Stripe SDK)
 - Batch _assert_no_assignment_orphan into single $in aggregation for large bulk-project requests (P3, perf)
 - Migrate react-helmet → react-helmet-async (P3, removes StrictMode warning)
 
+## Completed (Sep 8, 2026): Metric Attribution Disclosures (Google Developer Policy III.E.4.f)
+Every AffiliTube-derived metric now carries a Google-compliant "not derived from YouTube" disclosure so viewers can never confuse our internal scoring with YouTube-provided data.
+
+**New reusable components:**
+- `components/MetricInfo.jsx` — small ⓘ icon + shadcn Tooltip, short-form disclaimer on hover/tap. `onClick={e.stopPropagation}` so clicking the icon inside a card doesn't fire the card's click handler.
+- `components/AttributionBanner.jsx` — persistent muted small-print line for panels with breathing room.
+
+**Copy (user-approved):**
+- Banner (long form): *"Scores and health indicators are independently calculated by AffiliTube and are not derived from the YouTube API."*
+- Tooltip (short form): *"This metric is independently calculated by AffiliTube and is not derived from YouTube."*
+
+**Surfaces labelled:**
+- `ResultsSection.jsx` — persistent banner above the search results table + ⓘ next to Score / Aff / Health / Grade (Super Search only) column headers.
+- `ChannelDetailSheet.jsx` — banner at Score Breakdown + ⓘ on Score Breakdown, Affiliate Potential, Channel Health, and Sponsorship Confidence headers. Icons stay visible in `readOnly=true` mode so client buyers see the disclosure too.
+- `OutreachPipeline.jsx` — ⓘ next to "Affiliate Score: N" chip on every row.
+- `ClientProjectView.jsx` — banner above creator cards + ⓘ next to each "Score N" badge.
+
+**CSV exports** — comment row prepended (before header row for Excel/Sheets compatibility) to all three endpoints:
+- `POST /api/export/csv` (user)
+- `POST /api/pipeline/export/csv` (admin)
+- `POST /api/client/assignments/{id}/export/csv` (client)
+- Consent-log CSV intentionally unchanged (not a metrics export).
+
+**Metrics considered AffiliTube-derived (labelled):** score_total, affiliate_score, all 6 Score Breakdown sub-scores, upload_consistency, engagement_health, engagement_rate, growth_indicator, sponsorship_confidence, prospect_grade, competitor_brand_overlap_score, affiliate signal counts.
+
+**Metrics kept unlabelled (raw YouTube data — allowed to display as-is):** subscriber_count, view_count, video_count, channel_name, description, country, video titles, published_at, thumbnails, business_email (extracted, not derived).
+
+**Verified (iteration_34):** Backend 5/5 pytest cases pass — all three CSV endpoints emit `# Note:` row before header. Frontend 100% of reachable surfaces pass — client attribution banner, all 4 ChannelDetailSheet selectors, OutreachPipeline row info, and client-card score info render with correct short-form tooltip text on hover. ResultsSection selectors verified via code inspection (banner + 4 column-header ⓘ icons present in source; identical component E2E-verified on 3 other surfaces). No regressions, no layout overlap, `readOnly` mode still shows disclosures as required.
+
+
 ## Completed (Aug 26, 2026): Consent Audit Trail (server-side evidence for Policy III.A.1 + III.A.2c)
 Persists proof-of-consent at signup so Google can be shown per-user evidence that each account holder agreed to the Affilitube Terms, YouTube Terms, and Google Privacy Policy.
 

@@ -54,6 +54,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import CountryFilter from "@/components/CountryFilter";
 import SaveReportDialog from "@/pages/dashboard/dialogs/SaveReportDialog";
 import DropLogPanel from "@/components/DropLogPanel";
+import { MetricInfo } from "@/components/MetricInfo";
+import { AttributionBanner } from "@/components/AttributionBanner";
 import { getScoreClass, getAffiliateScoreClass, formatNumber } from "@/lib/formatters";
 import { OUTREACH_STATUS_CONFIG } from "@/lib/outreachConfig";
 import { ENGAGEMENT_HEALTH_CONFIG, UPLOAD_CONSISTENCY_ICONS } from "@/lib/healthIndicators";
@@ -392,6 +394,9 @@ export default function ResultsSection(props) {
 
             {/* Results Table */}
             <CardContent className="p-0">
+              <div className="px-4 pt-4">
+                <AttributionBanner testId="results-attribution-banner" />
+              </div>
               {isSearching && channels.length === 0 ? (
                 <div className="p-6 space-y-3">
                   {[...Array(5)].map((_, i) => (
@@ -405,11 +410,13 @@ export default function ResultsSection(props) {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-12"></TableHead>
-                        <TableHead className="w-16">Score</TableHead>
+                        <TableHead className="w-16">
+                          <span className="inline-flex items-center gap-1">Score<MetricInfo testId="th-score-info" /></span>
+                        </TableHead>
                         <TableHead className="w-20">
                           <span className="flex items-center gap-1">
                             <Sparkles className="h-3.5 w-3.5 text-purple-500" />
-                            Aff
+                            Aff<MetricInfo testId="th-affiliate-info" />
                           </span>
                         </TableHead>
                         <TableHead>Channel</TableHead>
@@ -418,11 +425,15 @@ export default function ResultsSection(props) {
                         <TableHead className="text-right">Last Upload</TableHead>
                         <TableHead>Topics</TableHead>
                         <TableHead>Signals</TableHead>
-                        <TableHead className="w-20">Health</TableHead>
+                        <TableHead className="w-20">
+                          <span className="inline-flex items-center gap-1">Health<MetricInfo testId="th-health-info" /></span>
+                        </TableHead>
                         <TableHead className="w-28">Status</TableHead>
                         {superSearch && user?.role === "admin" && (
                           <>
-                            <TableHead className="w-16">Grade</TableHead>
+                            <TableHead className="w-16">
+                              <span className="inline-flex items-center gap-1">Grade<MetricInfo testId="th-grade-info" /></span>
+                            </TableHead>
                             <TableHead className="w-24">Sp. Ratio</TableHead>
                             <TableHead className="w-24">Last Aff</TableHead>
                           </>

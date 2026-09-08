@@ -11,6 +11,8 @@ import { selectVisiblePlatforms, platformLabelFor } from "@/lib/affiliatePlatfor
 import { flagEmoji, countryName } from "@/lib/countries";
 import { toast } from "sonner";
 import { ChannelDetailSheet } from "@/components/ChannelDetailSheet";
+import { MetricInfo } from "@/components/MetricInfo";
+import { AttributionBanner } from "@/components/AttributionBanner";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -110,6 +112,8 @@ export default function ClientProjectView() {
 
       <p className="text-xs text-slate-400 mb-3">Click any creator to see the full profile — scores, health signals, brand intelligence, and past sponsorship history.</p>
 
+      <AttributionBanner className="mb-3" testId="client-attribution-banner" />
+
       <div className="space-y-3">
         {channels.map((ch) => {
           const { visible, hiddenCount, hiddenLabels } = selectVisiblePlatforms(ch.affiliate_platforms_found, 2);
@@ -151,7 +155,7 @@ export default function ClientProjectView() {
                       {ch.score_total !== undefined && (
                         <>
                           <span>·</span>
-                          <Badge variant="outline" className="text-xs">Score {ch.score_total}</Badge>
+                          <Badge variant="outline" className="text-xs inline-flex items-center gap-1">Score {ch.score_total}<MetricInfo testId={`client-score-info-${ch.channel_id}`} /></Badge>
                         </>
                       )}
                       {ch.upload_consistency && (

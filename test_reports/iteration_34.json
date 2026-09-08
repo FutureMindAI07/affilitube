@@ -1,0 +1,26 @@
+{
+  "summary": "Verified Google-Developer-Policy III.E.4.f attribution disclosures (metric-info tooltips, attribution banners, and CSV comment rows). Backend: 5/5 pytest cases pass — all three CSV endpoints emit '# Note:' comment row BEFORE the header row. Frontend: client attribution banner, client-score-info, all 4 ChannelDetailSheet selectors (score-breakdown-banner, score-breakdown-info, affiliate-potential-info, channel-health-info), and OutreachPipeline pipeline-score-info verified with correct short-form tooltip text 'This metric is independently calculated by AffiliTube and is not derived from YouTube.'. Dashboard ResultsSection selectors verified via code inspection only (requires a live search run to render — component + testids present in source). No regressions observed; layout clean, no overlap; readOnly client view still shows metric-info icons as required.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_metric_attribution.py",
+    "/app/test_reports/pytest/metric_attr.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: run a live Prospect Finder search as admin to E2E-verify results-attribution-banner + th-score-info/th-affiliate-info/th-health-info/th-grade-info in ResultsSection. Code path is trivially conditional on results.length>0 and identical MetricInfo/AttributionBanner components are already E2E-verified in three other surfaces (client view, ChannelDetailSheet, OutreachPipeline).",
+    "OPTIONAL: seed a channel with sponsorship_data (bi_confidence_score) to verify the sponsorship-confidence-info icon renders — that icon is conditional on that data existing and wasn't triggered on the test channel."
+  ],
+  "critical_code_review_comments": [
+    "MetricInfo.jsx uses onClick={(e)=>e.stopPropagation()} on the button — correct: prevents opening ChannelDetailSheet when clicking the ⓘ icon on a card. Verified working in client view.",
+    "AttributionBanner and MetricInfo are pure/reusable and lint-clean.",
+    "Backend CSV note rows use plain output.write(...) BEFORE writer.writeheader() in all three endpoints (user ~line 4599, pipeline ~4972, client ~4875) — Excel/Sheets-safe order per spec."
+  ],
+  "updated_files": ["/app/backend/tests/test_metric_attribution.py (new)"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% of surfaces reachable in preview (client view, ChannelDetailSheet, OutreachPipeline)."},
+  "test_credentials": "adrian@affilitube.com / admin123! ; testclient@brand.com / clientpass123",
+  "seed_data_creation": "Un-purged 1 admin-owned channel (Stacia Loo, project 'Refactor smoke project') via direct Mongo update {retention_purged:false, score_total:75, affiliate_score:60} so CSV exports and pipeline row would render. Same channel drives the client CSV/view test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Metric-attribution work is verified end-to-end for client view, ChannelDetailSheet, OutreachPipeline, and all three CSV export endpoints. ResultsSection (dashboard search results) selectors were only verified in source. All new frontend components use shadcn Tooltip. All 3 CSV endpoints correctly place '# Note:' BEFORE writeheader.",
+  "rca of the issue": "N/A — no bugs found."
+}

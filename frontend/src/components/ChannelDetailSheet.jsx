@@ -3,6 +3,8 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MetricInfo } from "@/components/MetricInfo";
+import { AttributionBanner } from "@/components/AttributionBanner";
 import { Label } from "@/components/ui/label";
 import { flagEmoji, countryName } from "@/lib/countries";
 import { Separator } from "@/components/ui/separator";
@@ -273,7 +275,11 @@ export function ChannelDetailSheet({
 
           {/* Score Summary */}
           <div>
-            <h4 className="text-sm font-semibold mb-3">Score Breakdown</h4>
+            <h4 className="text-sm font-semibold mb-1 flex items-center gap-1.5">
+              Score Breakdown
+              <MetricInfo testId="score-breakdown-info" />
+            </h4>
+            <AttributionBanner className="mb-3" testId="score-breakdown-banner" />
             <div className="flex items-center gap-3 mb-4">
               <Badge className={`${getScoreClass(channel.score_total)} text-lg px-3 py-1`}>
                 {channel.score_total}/100
@@ -410,7 +416,10 @@ export function ChannelDetailSheet({
 
           {/* Affiliate Signals */}
           <div>
-            <h4 className="text-sm font-semibold mb-3">Affiliate Potential</h4>
+            <h4 className="text-sm font-semibold mb-3 flex items-center gap-1.5">
+              Affiliate Potential
+              <MetricInfo testId="affiliate-potential-info" />
+            </h4>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div className="p-3 rounded-md bg-purple-50 border border-purple-100">
                 <p className="text-xs text-purple-600">Affiliate Signals</p>
@@ -561,6 +570,7 @@ export function ChannelDetailSheet({
             <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
               <Activity className="h-4 w-4 text-emerald-500" />
               Channel Health
+              <MetricInfo testId="channel-health-info" />
             </h4>
             <div className="grid grid-cols-1 gap-2.5">
               <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50">
@@ -771,7 +781,10 @@ export function ChannelDetailSheet({
             ) : sponsorshipData ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Sponsorship Confidence</span>
+                  <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                    Sponsorship Confidence
+                    <MetricInfo testId="sponsorship-confidence-info" />
+                  </span>
                   <Badge
                     className={`font-mono ${
                       sponsorshipData.confidence_score >= 60
